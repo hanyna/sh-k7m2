@@ -1,0 +1,3137 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כרטסיית שידוכים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{
+  --ink:#16212e;
+  --ink-soft:#4a5a6b;
+  --ink-faint:#8b98a6;
+  --paper:#e9ecef;
+  --card:#ffffff;
+  --line:#d5dbe1;
+  --line-soft:#e7ebef;
+  --teal:#0f5f5c;
+  --teal-light:#e2efee;
+  --brass:#a97c34;
+  --brass-light:#f6efe2;
+  --rose:#8c3a4a;
+  --shadow:0 1px 2px rgba(22,33,46,.06), 0 8px 24px -12px rgba(22,33,46,.18);
+  --radius:10px;
+  --display:"Frank Ruhl Libre", Georgia, serif;
+  --body:"Assistant", "Segoe UI", Arial, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--body);
+  background:var(--paper);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:inherit}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+/* ---------- shell ---------- */
+.shell{display:flex;min-height:100vh}
+.rail{
+  width:196px;flex:none;background:var(--ink);color:#cdd6de;
+  display:flex;flex-direction:column;padding:20px 0;position:sticky;top:0;height:100vh;
+}
+.brand{padding:0 20px 22px;border-bottom:1px solid rgba(255,255,255,.09);margin-bottom:14px}
+.brand h1{font-family:var(--display);font-size:20px;font-weight:700;color:#fff;margin:0;letter-spacing:.01em}
+.brand span{display:block;font-size:11.5px;color:#7f8f9d;letter-spacing:.14em;margin-top:2px}
+.nav{display:flex;flex-direction:column;gap:2px;padding:0 10px}
+.nav button{
+  display:flex;align-items:center;gap:9px;background:none;border:0;color:#b3c0cb;
+  padding:9px 12px;border-radius:8px;text-align:right;width:100%;transition:.15s;
+}
+.nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav button.on{background:var(--teal);color:#fff}
+.nav .ic{font-size:15px;width:18px;text-align:center}
+.rail-foot{margin-top:auto;padding:14px 16px 0;border-top:1px solid rgba(255,255,255,.09);font-size:11.5px;color:#7f8f9d}
+.rail-foot b{display:block;color:#cdd6de;font-weight:600;font-size:12.5px}
+.save-state{margin-top:6px;font-size:11px;color:#6f8079}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{
+  background:var(--card);border-bottom:1px solid var(--line);padding:14px 26px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20;
+}
+.search{position:relative;flex:1;min-width:200px;max-width:420px}
+.search input{
+  width:100%;padding:9px 36px 9px 12px;border:1px solid var(--line);border-radius:8px;
+  background:#f7f9fa;
+}
+.search input:focus{background:#fff;border-color:var(--teal);outline:none}
+.search .mag{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--ink-faint);pointer-events:none}
+.btn{
+  border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:8px;
+  font-weight:600;transition:.15s;white-space:nowrap;
+}
+.btn:hover{border-color:var(--ink-faint);background:#f7f9fa}
+.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn.pri:hover{background:#0c4e4c}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft)}
+.btn.ghost:hover{background:#eef1f3}
+.btn.danger{color:var(--rose);border-color:#e3ccd1}
+.btn.danger:hover{background:#fbf1f3}
+.btn.sm{padding:5px 10px;font-size:13px;border-radius:7px}
+
+.page{padding:22px 26px 60px;flex:1}
+.page h2{font-family:var(--display);font-size:24px;margin:0 0 3px}
+.page .sub{color:var(--ink-soft);font-size:13.5px;margin-bottom:18px}
+
+/* ---------- stats ---------- */
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.stat{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:11px 16px;min-width:104px;
+}
+.stat b{display:block;font-family:var(--display);font-size:22px;line-height:1.2}
+.stat span{font-size:12px;color:var(--ink-soft)}
+
+/* ---------- filters ---------- */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.chip{
+  border:1px solid var(--line);background:#fff;color:var(--ink-soft);
+  padding:5px 13px;border-radius:99px;font-size:13px;transition:.15s;
+}
+.chip:hover{border-color:var(--ink-faint)}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.divider-v{width:1px;height:22px;background:var(--line);margin:0 4px}
+select.mini{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 9px;font-size:13px;color:var(--ink-soft)}
+.agebox{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink-soft)}
+input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px}
+
+/* ---------- card grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.pcard{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;text-align:right;transition:.16s;position:relative;overflow:hidden;
+  border-top:3px solid var(--line);
+}
+.pcard:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--ink-faint)}
+.pcard.g-m{border-top-color:#2f5d8a}
+.pcard.g-f{border-top-color:#8a5b7a}
+.pcard-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.mono{
+  width:38px;height:38px;flex:none;border-radius:9px;display:grid;place-items:center;
+  font-family:var(--display);font-size:17px;font-weight:700;background:#eef1f4;color:var(--ink-soft);
+}
+.pcard.g-m .mono{background:#e8eff6;color:#2f5d8a}
+.pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
+.pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3}
+.pcard .meta{font-size:12.5px;color:var(--ink-faint)}
+.pcard .rows{font-size:13px;color:var(--ink-soft);display:flex;flex-direction:column;gap:2px}
+.pcard .rows div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard .tagline{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap}
+.tag{background:#f0f3f5;border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft)}
+.badge{
+  position:absolute;top:10px;left:10px;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;
+}
+.st-free{background:var(--teal-light);color:var(--teal)}
+.st-busy{background:#fdf3e3;color:var(--brass)}
+.st-hold{background:#eef1f4;color:var(--ink-faint)}
+.st-done{background:var(--brass-light);color:var(--brass);border:1px solid #e6d4b3}
+
+.empty{
+  background:var(--card);border:1px dashed var(--line);border-radius:var(--radius);
+  padding:48px 24px;text-align:center;color:var(--ink-soft);
+}
+.empty h3{font-family:var(--display);font-size:19px;color:var(--ink);margin:0 0 6px}
+.empty p{margin:0 0 16px;font-size:14px}
+
+/* ---------- lock ---------- */
+.lock{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
+  background:linear-gradient(160deg,#16212e,#0f2a2a)}
+.lock-card{background:var(--card);border-radius:16px;padding:30px 30px 24px;width:min(420px,100%);
+  box-shadow:0 30px 70px -20px rgba(0,0,0,.5)}
+.ask{position:fixed;inset:0;background:rgba(22,33,46,.5);z-index:120;display:grid;place-items:center;padding:20px}
+.ask-card{background:#fff;border-radius:14px;padding:22px 24px;width:min(420px,100%);
+  box-shadow:0 30px 70px -20px rgba(22,33,46,.5)}
+.ask-card h3{font-family:var(--display);font-size:19px;margin:0 0 6px}
+.ask-note{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px;line-height:1.55}
+.ask-f{display:block;margin-bottom:11px}
+.ask-f span{display:block;font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-bottom:4px}
+.ask-f input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:15px}
+.ask-f input:focus{border-color:var(--teal);outline:none}
+.ask-btns{display:flex;gap:8px;margin-top:16px}
+
+.lock-card h1{font-family:var(--display);font-size:24px;margin:0 0 6px}
+.lock-card p{font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;line-height:1.6}
+.lock-card input[type=password]{width:100%;padding:11px 13px;border:1px solid var(--line);
+  border-radius:9px;margin-bottom:9px;font-size:15px}
+.lock-card input:focus{border-color:var(--teal);outline:none}
+.lock-card .btn{width:100%;margin-top:4px;padding:11px}
+.lock-warn{background:var(--brass-light);border:1px solid #ecdcbe;color:#7a5c26;border-radius:8px;
+  padding:9px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5}
+.lock-warn.danger{background:#f9ecee;border-color:#eed6da;color:#8c3a4a}
+.rec-code{
+  font-family:"Courier New",monospace;font-size:23px;letter-spacing:3px;text-align:center;
+  background:#f4f7f8;border:1px dashed var(--ink-faint);border-radius:9px;padding:14px 10px;
+  margin:12px 0;user-select:all;direction:ltr;font-weight:700;
+}
+.rec-ok{display:flex;gap:8px;align-items:center;font-size:13.5px;margin:10px 0;cursor:pointer}
+.rec-ok input{accent-color:var(--teal)}
+.lock-msg{font-size:13px;color:var(--rose);margin-top:10px;min-height:18px;line-height:1.5}
+.strength{font-size:11.5px;margin:-4px 0 8px;min-height:14px}
+.strength.s1{color:var(--rose)} .strength.s2{color:var(--brass)} .strength.s3{color:var(--teal)}
+#app.blurred{filter:blur(6px);pointer-events:none;user-select:none}
+.cloud-on{background:var(--teal-light);border:1px solid #cde3e1;border-radius:9px;padding:10px 13px;
+  font-size:13.5px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.cloud-on span{color:var(--ink-soft);font-size:12.5px}
+pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;font-size:11.5px;
+  overflow-x:auto;direction:ltr;text-align:left;line-height:1.5}
+
+/* ---------- window ---------- */
+.sheet{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-46%) scale(.97);
+  width:min(940px,94vw);height:min(88vh,900px);background:var(--card);border-radius:14px;
+  z-index:50;opacity:0;pointer-events:none;transition:opacity .18s, transform .18s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;box-shadow:0 30px 80px -20px rgba(22,33,46,.45);overflow:hidden;
+}
+.sheet.on{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.sheet-head{padding:16px 22px 0;border-bottom:1px solid var(--line);display:block}
+.win-title{display:flex;gap:12px;align-items:center;padding-bottom:12px}
+.win-title h3{margin:0;font-family:var(--display);font-size:21px}
+.win-title .meta{font-size:13px;color:var(--ink-faint)}
+.win-title .btn{margin-inline-start:auto}
+.win-tabs{display:flex;gap:2px}
+.win-tabs button{
+  background:none;border:0;border-bottom:2px solid transparent;padding:9px 15px;
+  color:var(--ink-soft);font-weight:600;font-size:14px;transition:.15s;
+}
+.win-tabs button:hover{color:var(--ink)}
+.win-tabs button.on{color:var(--teal);border-bottom-color:var(--teal)}
+.sheet-body{flex:1;overflow-y:auto;padding:20px 0 40px}
+.win-col{max-width:640px;margin:0 auto;padding:0 22px}
+.sheet-foot{padding:12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;background:#fafbfc}
+.x{margin-inline-start:0;background:none;border:0;font-size:22px;color:var(--ink-faint);line-height:1;padding:2px 6px;border-radius:6px}
+.x:hover{background:#eef1f3;color:var(--ink)}
+
+.draft{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:9px;background:#fff}
+.draft-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.draft-head input[type=checkbox]{accent-color:var(--teal)}
+.draft-head select,.draft-head input[type=date]{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:13px}
+.draft textarea{width:100%;min-height:88px;border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;font-size:13.5px}
+.draft-field{display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13.5px;cursor:pointer}
+.draft-field input{accent-color:var(--teal);margin-top:4px}
+.over{display:block;font-style:normal;font-size:12px;color:var(--brass)}
+
+.scrim{position:fixed;inset:0;background:rgba(22,33,46,.34);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+.scrim.on{opacity:1;pointer-events:auto}
+
+.fieldrow{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
+.fieldrow dt{width:118px;flex:none;color:var(--ink-faint);font-size:13px}
+.fieldrow dd{margin:0;flex:1;white-space:pre-wrap;word-break:break-word}
+.fieldrow dd.na{color:#b9c2ca}
+.sect{
+  font-size:11.5px;letter-spacing:.13em;color:var(--ink-faint);font-weight:600;
+  margin:22px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line);
+}
+.sect:first-child{margin-top:0}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field.wide{grid-column:1/-1}
+.field label{font-size:12.5px;color:var(--ink-soft);font-weight:600}
+.field input,.field select,.field textarea{
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;width:100%;
+}
+.field textarea{min-height:74px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal);outline:none}
+
+.mono.photo{padding:0;overflow:hidden;background:#eef1f4}
+.mono.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-block{display:flex;gap:16px;align-items:flex-start;background:#f6f8f9;border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px}
+.photo-ctl{flex:1;min-width:0}
+.photo-note{font-size:11.5px;color:var(--ink-faint);margin-top:7px;line-height:1.5}
+.doc-photo{text-align:center;margin-bottom:16px}
+.doc-photo img{max-width:140px;border-radius:8px;border:1px solid var(--line)}
+
+.refs{display:flex;flex-direction:column;gap:6px}
+.refrow{display:grid;grid-template-columns:1.1fr 1fr .9fr 30px;gap:5px}
+.refrow input{border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:13.5px;width:100%}
+.card-hint{background:var(--brass-light);border:1px solid #ecdcbe;border-radius:9px;padding:10px 13px;
+  font-size:13px;color:#7a5c26;margin-bottom:6px}
+.todo-mark{color:var(--rose);background:#f9ecee;border-radius:4px;padding:0 5px;font-size:.9em}
+
+/* ---------- printable card ---------- */
+.doc{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px 30px;font-size:14.5px}
+.doc h2{font-family:var(--display);font-size:23px;margin:0 0 18px;padding-bottom:11px;border-bottom:2px solid var(--ink);text-align:center}
+.doc h3{font-family:var(--display);font-size:16px;margin:20px 0 7px;color:var(--teal);
+  border-bottom:1px solid var(--line);padding-bottom:4px}
+.doc ul{margin:0;padding-inline-start:19px;line-height:1.85}
+.doc li b{font-weight:600}
+.doc p{margin:0;line-height:1.8;text-align:justify}
+
+/* ---------- dossier ---------- */
+.snap{background:#f6f8f9;border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px;margin-bottom:6px}
+.snap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
+.snap-grid b{display:block;font-family:var(--display);font-size:15px;line-height:1.35}
+.snap-grid span{font-size:11.5px;color:var(--ink-faint)}
+.snap-topics{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+.snap-actions{margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+.snap-actions>b{font-size:11.5px;letter-spacing:.1em;color:var(--ink-faint);display:block;margin-bottom:5px}
+.todo{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:3px 0;cursor:pointer}
+.todo input{accent-color:var(--teal)}
+.todo em{margin-inline-start:auto;font-style:normal;font-size:11.5px;color:var(--ink-faint)}
+
+.sess{border-inline-start:2px solid var(--line);padding:2px 13px 12px;margin-bottom:4px;position:relative}
+.sess::before{content:"";position:absolute;inset-inline-start:-5px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--teal)}
+.sess-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.sess-type{font-weight:600;font-size:14px}
+.sess-date{font-size:12px;color:var(--ink-faint)}
+.rating{font-size:9px;color:var(--brass);letter-spacing:1px}
+.sess-tags{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0}
+.sess-notes{font-size:13.5px;color:var(--ink-soft);white-space:pre-wrap;margin-top:4px}
+.sess-action{font-size:12.5px;color:var(--brass);background:var(--brass-light);border-radius:6px;padding:3px 9px;margin-top:7px;display:inline-block}
+.sess-action.done{color:var(--ink-faint);background:#eef1f4;text-decoration:line-through}
+
+.analysis{background:linear-gradient(#fbfcfc,#f4f8f8);border:1px solid #cfe0df;border-radius:var(--radius);padding:14px 16px}
+.an-date{font-size:11.5px;color:var(--ink-faint);margin-bottom:8px}
+.an-sum{font-family:var(--display);font-size:15.5px;line-height:1.6;margin:0 0 12px}
+.an-block{margin-bottom:11px}
+.an-block b{font-size:11.5px;letter-spacing:.09em;color:var(--teal);display:block;margin-bottom:3px}
+.an-block ul{margin:0;padding-inline-start:18px;font-size:13.5px;color:var(--ink-soft)}
+.an-block li{margin-bottom:3px}
+.an-load{font-size:13.5px;color:var(--ink-soft);padding:10px 0}
+.analysis pre{white-space:pre-wrap;font-size:12px;background:#fff;padding:9px;border-radius:7px;border:1px solid var(--line)}
+
+/* ---------- match desk (signature) ---------- */
+.desk{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.desk-top{
+  padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:linear-gradient(#fbfcfd,#f4f7f8);
+}
+.desk-top h3{margin:0;font-family:var(--display);font-size:19px}
+.pair{display:grid;grid-template-columns:1fr 62px 1fr;align-items:stretch}
+.pair-side{padding:18px 20px}
+.pair-seam{position:relative;display:grid;place-items:center}
+.pair-seam::before{
+  content:"";position:absolute;top:14px;bottom:14px;width:1px;
+  background:repeating-linear-gradient(var(--line) 0 5px,transparent 5px 10px);
+}
+.knot{
+  width:40px;height:40px;border-radius:50%;background:var(--brass-light);border:1.5px solid #e0c896;
+  display:grid;place-items:center;font-size:17px;position:relative;color:var(--brass);
+}
+.pair-name{font-family:var(--display);font-size:18px;margin:0 0 2px}
+.pair-sub{font-size:12.5px;color:var(--ink-faint);margin-bottom:12px}
+.cmp{border-top:1px solid var(--line)}
+.cmp-row{display:grid;grid-template-columns:1fr 130px 1fr;align-items:center;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+.cmp-row:last-child{border-bottom:0}
+.cmp-row>div{padding:9px 20px}
+.cmp-key{
+  text-align:center;color:var(--ink-faint);font-size:11.5px;letter-spacing:.08em;
+  background:#f8fafb;border-inline:1px solid var(--line-soft);padding:9px 6px !important;
+}
+.cmp-row.match{background:#f4faf9}
+.cmp-row.match .cmp-key{color:var(--teal);background:var(--teal-light);border-color:#cde3e1}
+.cmp-row.warn{background:#fdf6f7}
+.cmp-row.warn .cmp-key{color:var(--rose);background:#f9ecee;border-color:#eed6da}
+.cmp-note{font-size:10.5px;letter-spacing:0;opacity:.85;margin-top:2px}
+.warnflag{font-size:11px;color:var(--rose);background:#f9ecee;border-radius:99px;padding:1px 7px;font-weight:600}
+.multi{display:flex;gap:6px;flex-wrap:wrap}
+.multi label{
+  display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:99px;
+  padding:5px 12px;font-size:13.5px;cursor:pointer;background:#fff;
+}
+.multi label:hover{border-color:var(--ink-faint)}
+.multi input{accent-color:var(--teal);margin:0}
+
+.timeline{margin-top:0;padding:16px 20px;border-top:1px solid var(--line);background:#fafbfc}
+.tl-item{display:flex;gap:11px;padding:7px 0}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);margin-top:8px;flex:none}
+.tl-date{font-size:11.5px;color:var(--ink-faint)}
+.tl-text{font-size:13.5px}
+
+.mrow{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;
+  display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:.15s;text-align:right;width:100%;
+}
+.mrow:hover{border-color:var(--ink-faint);box-shadow:var(--shadow)}
+.mrow .names{font-family:var(--display);font-size:16px;flex:1}
+.mrow .names em{font-style:normal;color:var(--brass);margin:0 7px}
+
+/* ---------- import ---------- */
+.drop{
+  border:2px dashed var(--line);border-radius:14px;background:var(--card);padding:40px 24px;text-align:center;
+  transition:.15s;
+}
+.drop.over{border-color:var(--teal);background:var(--teal-light)}
+.drop h3{font-family:var(--display);font-size:19px;margin:0 0 6px}
+.drop p{color:var(--ink-soft);font-size:14px;margin:0 0 16px}
+.maptable{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:14px}
+.maptable th{background:#f4f7f8;text-align:right;padding:9px 14px;font-size:12.5px;color:var(--ink-soft);border-bottom:1px solid var(--line)}
+.maptable td{padding:8px 14px;border-bottom:1px solid var(--line-soft)}
+.maptable tr:last-child td{border-bottom:0}
+.maptable .sample{color:var(--ink-faint);font-size:12.5px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.maptable select{width:100%;border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:#fff}
+
+/* ---------- picker ---------- */
+.picker-item{
+  display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line-soft);
+  border-radius:9px;margin-bottom:6px;width:100%;background:#fff;text-align:right;transition:.14s;
+}
+.picker-item:hover{border-color:var(--teal);background:var(--teal-light)}
+.score{margin-inline-start:auto;font-size:12px;color:var(--teal);background:var(--teal-light);border-radius:99px;padding:2px 9px;font-weight:600}
+
+.toast{
+  position:fixed;bottom:22px;left:22px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:9px;
+  z-index:90;font-size:14px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;
+}
+.toast.on{opacity:1;transform:translateY(0)}
+
+.hidden{display:none !important}
+
+@media (max-width:820px){
+  .rail{position:fixed;bottom:0;top:auto;height:auto;width:100%;flex-direction:row;padding:0;z-index:30;border-top:1px solid #000}
+  .brand,.rail-foot{display:none}
+  .nav{flex-direction:row;padding:6px;width:100%}
+  .nav button{flex-direction:column;gap:2px;font-size:11px;padding:6px 4px}
+  .shell{flex-direction:column-reverse}
+  .main{padding-bottom:64px}
+  .page,.topbar{padding-inline:14px}
+  .form-grid{grid-template-columns:1fr}
+  .sheet{width:100vw;height:100vh;max-height:100vh;border-radius:0;top:0;left:0;transform:translate(0,3%) scale(1)}
+  .sheet.on{transform:translate(0,0) scale(1)}
+  .win-col{padding:0 14px}
+  .win-tabs{overflow-x:auto}
+  .win-tabs button{white-space:nowrap;padding:9px 11px;font-size:13px}
+  .pair{grid-template-columns:1fr;gap:0}
+  .pair-seam{padding:8px 0}
+  .pair-seam::before{display:none}
+  .cmp-row{grid-template-columns:1fr}
+  .cmp-key{border-inline:0;border-block:1px solid var(--line-soft)}
+}
+@media print{
+  .rail,.topbar,.sheet-foot,.scrim,.btn{display:none !important}
+  .sheet{position:static;transform:none;box-shadow:none;width:100%;height:auto;opacity:1;max-height:none}
+  .sheet-head,.win-tabs{display:none !important}
+  body{background:#fff}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+
+<div id="lock" class="lock hidden"></div>
+<div id="app"><div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <h1>כרטסיית שידוכים</h1>
+      <span>ניהול מועמדים והצעות</span>
+    </div>
+    <nav class="nav">
+      <button data-view="cards" class="on"><span class="ic">▤</span> כרטסייה</button>
+      <button data-view="matches"><span class="ic">◇</span> שידוכים</button>
+      <button data-view="followup"><span class="ic">◷</span> מעקב</button>
+      <button data-view="import"><span class="ic">↧</span> ייבוא קובץ</button>
+      <button data-view="backup"><span class="ic">⛭</span> גיבוי וניהול</button>
+    </nav>
+    <div class="rail-foot">
+      <b id="railCount">0 מועמדים</b>
+      <div class="save-state" id="saveState">נשמר ומוצפן</div>
+      <button class="btn ghost sm" id="btnLock" style="margin-top:8px;color:#b3c0cb;width:100%">נעילה</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="search">
+        <span class="mag">⌕</span>
+        <input id="q" type="search" placeholder="חיפוש לפי שם, עיר, ישיבה, הערות…">
+      </div>
+      <button class="btn" id="btnNew">+ מועמד חדש</button>
+      <button class="btn pri" id="btnImportTop">העלאת קובץ</button>
+    </div>
+
+    <!-- ===== CARDS ===== -->
+    <section class="page" id="view-cards">
+      <h2>הכרטסייה</h2>
+      <div class="sub">כל המועמדים במערכת. לחיצה על כרטיס פותחת את הפרטים המלאים.</div>
+      <div class="stats" id="stats"></div>
+      <div class="filters">
+        <button class="chip on" data-gender="">הכול</button>
+        <button class="chip" data-gender="בן">בנים</button>
+        <button class="chip" data-gender="בת">בנות</button>
+        <span class="divider-v"></span>
+        <button class="chip on" data-status="">כל הסטטוסים</button>
+        <button class="chip" data-status="פנוי">פנויים</button>
+        <button class="chip" data-status="בתהליך">בתהליך</button>
+        <button class="chip" data-status="מושהה">מושהים</button>
+        <button class="chip" data-status="נסגר">נסגרו</button>
+        <span class="divider-v"></span>
+        <select class="mini" id="fSector"><option value="">כל החוגים</option></select>
+        <select class="mini" id="fOpen"><option value="">פתוח/ה לכל חוג</option></select>
+        <span class="agebox">גיל
+          <input class="mini age" id="fAgeMin" type="number" min="15" max="99" placeholder="מ־">
+          <input class="mini age" id="fAgeMax" type="number" min="15" max="99" placeholder="עד">
+        </span>
+        <button class="btn ghost sm" id="btnClearFilters">ניקוי</button>
+        <span class="divider-v"></span>
+        <select class="mini" id="sortBy">
+          <option value="name">מיון: שם</option>
+          <option value="age">מיון: גיל</option>
+          <option value="updated">מיון: עודכן לאחרונה</option>
+          <option value="city">מיון: עיר</option>
+        </select>
+      </div>
+      <div id="cardsHost"></div>
+    </section>
+
+    <!-- ===== MATCHES ===== -->
+    <section class="page hidden" id="view-matches">
+      <h2>שידוכים</h2>
+      <div class="sub">הצעות פתוחות והיסטוריה. לחיצה על שורה פותחת את שולחן ההצעה.</div>
+      <div class="filters">
+        <button class="chip on" data-mstatus="">הכול</button>
+        <button class="chip" data-mstatus="הוצע">הוצע</button>
+        <button class="chip" data-mstatus="בבירור">בבירור</button>
+        <button class="chip" data-mstatus="נפגשו">נפגשו</button>
+        <button class="chip" data-mstatus="הופסק">הופסק</button>
+        <button class="chip" data-mstatus="התארסו">התארסו</button>
+      </div>
+      <div id="matchesHost"></div>
+    </section>
+
+    <!-- ===== FOLLOWUP ===== -->
+    <section class="page hidden" id="view-followup">
+      <h2>מעקב</h2>
+      <div class="sub">מה מחכה לטיפול: פגישות שנקבעו, משימות פתוחות, ומי שלא דיברתם איתו מזמן.</div>
+      <div id="followupHost"></div>
+    </section>
+
+    <!-- ===== IMPORT ===== -->
+    <section class="page hidden" id="view-import">
+      <h2>ייבוא קובץ</h2>
+      <div class="sub">אקסל, CSV, וורד (docx) או קובץ גיבוי JSON. בטבלה — השורה הראשונה היא הכותרות. במסמך וורד של מועמד בודד — המערכת קוראת את השורות ובונה כרטיס.</div>
+      <div class="drop" id="drop">
+        <h3>גררו לכאן את הקובץ</h3>
+        <p>או בחרו קובץ מהמחשב</p>
+        <button class="btn pri" id="btnPick">בחירת קובץ</button>
+        <input type="file" id="file" accept=".xlsx,.xls,.csv,.json,.docx" class="hidden">
+      </div>
+      <div id="mapHost" class="hidden" style="margin-top:22px"></div>
+
+      <div class="sect" style="margin-top:26px">הדבקת כרטיס</div>
+      <p style="font-size:13.5px;color:var(--ink-soft);margin-top:0">
+        אם הכרטיס מגיע בוואטסאפ או במייל — אפשר פשוט להעתיק ולהדביק כאן, והמערכת תפרק אותו לשדות.</p>
+      <textarea id="pasteBox" style="width:100%;min-height:130px;border:1px solid var(--line);border-radius:9px;padding:10px 12px"
+        placeholder="שם: ...&#10;גיל: ...&#10;ישיבה: ..."></textarea>
+      <button class="btn pri" id="btnPaste" style="margin-top:8px">יצירת כרטיס מהטקסט</button>
+    </section>
+
+    <!-- ===== BACKUP ===== -->
+    <section class="page hidden" id="view-backup">
+      <h2>גיבוי וניהול</h2>
+      <div class="sub">הנתונים נשמרים בדפדפן של המחשב הזה בלבד ואינם נשלחים לשום שרת. מומלץ לייצא גיבוי בסוף כל יום עבודה.</div>
+      <div class="stats" id="stats2"></div>
+      <div id="storageLine" style="font-size:13.5px;color:var(--ink-soft);margin-bottom:10px"></div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn pri" id="btnExportJson">ייצוא גיבוי מלא (JSON)</button>
+        <button class="btn" id="btnExportXlsx">ייצוא לאקסל</button>
+        <button class="btn danger" id="btnWipe">מחיקת כל הנתונים</button>
+      </div>
+      <div class="sect" style="margin-top:30px">גיבוי יומי לגוגל דרייב</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:12px">
+        מעלה לדרייב קובץ אקסל עם כל המועמדים, השידוכים והפגישות, פעם ביום.
+        <b>שימו לב:</b> דפדפן אינו יכול לפעול כשהמחשב כבוי — לכן אם בשעה שנבחרה המחשב היה סגור,
+        הגיבוי מתבצע אוטומטית בפתיחה הראשונה של הכלי אחריה. כך תמיד יש עותק יומי, גם בלי שרת.
+      </div>
+      <div id="driveHost"></div>
+
+      <div class="sect" style="margin-top:30px">גיבוי בענן</div>
+      <div id="cloudHost"></div>
+
+      <div class="sect" style="margin-top:30px">קוד כניסה</div>
+      <div style="font-size:14px;color:var(--ink-soft);max-width:640px">
+        <p id="cryptoState"></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" id="btnChangePass">החלפת קוד</button>
+          <button class="btn" id="btnReissue">הנפקת קוד שחזור חדש</button>
+          <label style="display:flex;gap:6px;align-items:center;font-size:13.5px">
+            נעילה אוטומטית אחרי
+            <select class="mini" id="idleMin">
+              ${[5,10,20,45,120].map(n=>`<option value="${n}">${n} דקות</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="sect" style="margin-top:30px">שירות הניתוח</div>
+      <div style="font-size:14px;color:var(--ink-soft);max-width:640px">
+        <p>כפתור "הפקת ניתוח" בכרטיס שולח את סיכומי הפגישות לשירות חיצוני ומקבל בחזרה תמצית.
+           <b>המידע יוצא מהמחשב ברגע הזה</b> — כדאי להחליט מראש מול הלקוחה אם היא רוצה בכך.
+           כל שאר המערכת, כולל יומן הפגישות עצמו, עובדת לגמרי מקומית.</p>
+        <div class="form-grid" style="max-width:560px">
+          <div class="field">
+            <label for="aiProvider">ספק השירות</label>
+            <select id="aiProvider">
+              <option value="anthropic">Anthropic — Claude</option>
+              <option value="gemini">Google — Gemini</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="aiModel">מודל (ריק = ברירת מחדל)</label>
+            <input id="aiModel" list="dlModels" placeholder="gemini-3.5-flash" autocomplete="off">
+            <datalist id="dlModels"></datalist>
+          </div>
+          <div class="field wide">
+            <label for="apiKey">מפתח API — נשמר במכשיר בלבד</label>
+            <input id="apiKey" type="password" placeholder="המפתח של הספק שנבחר" autocomplete="off">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn sm pri" id="btnSaveKey">שמירה</button>
+          <button class="btn sm" id="btnTestAI">בדיקת חיבור</button>
+          <button class="btn sm" id="btnListModels">טעינת המודלים הזמינים</button>
+          <button class="btn ghost sm" id="btnClearKey">מחיקת המפתח</button>
+        </div>
+        <div id="aiStatus" style="font-size:13px;margin-top:9px;min-height:20px"></div>
+        <p style="font-size:12.5px;color:var(--ink-faint)">שגיאה 401 פירושה כמעט תמיד שהמפתח שייך לספק אחר מזה שנבחר למעלה.</p>
+      </div>
+
+      <div class="sect" style="margin-top:30px">איך זה עובד</div>
+      <div style="font-size:14px;color:var(--ink-soft);max-width:640px">
+        <p><b>ייבוא:</b> כל עמודה בקובץ מקושרת לשדה במערכת. עמודות שאין להן שדה מתאים נשמרות ככל שהן בתוך הכרטיס, כך שאף פרט לא הולך לאיבוד.</p>
+        <p><b>שידוך:</b> מתוך כרטיס של מועמד לוחצים על "הצעת שידוך", בוחרים מועמד מהצד השני, והמערכת פותחת שולחן הצעה עם השוואה בין השניים ויומן מעקב.</p>
+        <p><b>פגישות:</b> כל שיחה עם מועמד נרשמת בכרטיס שלו — נושאים, סיכום, משימה להמשך ותאריך לפגישה הבאה. הרישומים מצטברים לתיק, ומהם מופק הניתוח. תחקיר אחרי פגישה בין השניים נרשם מתוך שולחן ההצעה ומופיע גם שם וגם בכרטיס האישי.</p>
+        <p><b>מעקב:</b> ריכוז של כל מה שממתין — פגישות שנקבעו, משימות פתוחות, ופנויים שלא דיברתם איתם מעל חודש.</p>
+        <p><b>גיבוי:</b> קובץ ה-JSON מכיל את הכול. אפשר לטעון אותו חזרה בעמוד הייבוא, גם במחשב אחר.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet">
+  <div class="sheet-head" id="sheetHead"></div>
+  <div class="sheet-body" id="sheetBody"></div>
+  <div class="sheet-foot" id="sheetFoot"></div>
+</aside>
+
+<div class="ask hidden" id="ask"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============ constants ============ */
+const STATUSES = ["פנוי","בתהליך","מושהה","נסגר"];
+const MSTATUSES = ["הוצע","בבירור","נפגשו","הופסק","התארסו"];
+/* סולם החוגים — מהקל למחמיר. המרחק בסולם משמש לחישוב ההתאמה. */
+const SECTORS = ["דתי לייט","דתי לאומי","חרדל״ני","חרדי"];
+const EDOT = ["ליטאי","חסידי","ספרדי","תימני","אנגלו / חו״ל","מעורב"];
+const SESSION_TYPES = ["פגישת היכרות","שיחת מעקב","תחקיר אחרי פגישה","שיחה עם ההורים","שיחת טלפון"];
+const TOPICS = ["ערכים והשקפה","לימודים ותורה","קריירה ופרנסה","מגורים","כספים",
+                "משפחה ורקע","אופי ואישיות","ציפיות מבן/בת הזוג","מוכנות לתהליך"];
+const CLARITY = {1:"ערפול מוחלט",2:"מתלבט/ת",3:"כיוון כללי",4:"בהיר",5:"ממוקד/ת מאוד"};
+
+const FIELDS = [
+  {k:"fullName", l:"שם מלא",           t:"text",     sec:"זיהוי"},
+  {k:"gender",   l:"מין",              t:"select",   sec:"זיהוי", opts:["בן","בת"]},
+  {k:"age",      l:"גיל",              t:"number",   sec:"זיהוי"},
+  {k:"status",   l:"סטטוס",            t:"select",   sec:"זיהוי", opts:STATUSES},
+  {k:"maritalStatus",l:"מצב משפחתי",   t:"select",   sec:"זיהוי", opts:["רווק/ה","גרוש/ה","אלמן/ה"]},
+  {k:"city",     l:"עיר",              t:"text",     sec:"רקע"},
+  {k:"community",l:"חוג",              t:"select",   sec:"רקע", opts:SECTORS},
+  {k:"edah",     l:"עדה / זרם",        t:"combo",    sec:"רקע", opts:EDOT},
+  {k:"openTo",   l:"חוגים מתאימים",    t:"multi",    sec:"בקשה", opts:SECTORS},
+  {k:"family",   l:"משפחה / הורים",    t:"text",     sec:"רקע"},
+  {k:"study",    l:"ישיבה / סמינר",    t:"text",     sec:"רקע"},
+  {k:"service",  l:"שירות צבאי / לאומי",t:"text",    sec:"רקע"},
+  {k:"parentsHome",l:"מגורי ההורים",   t:"text",     sec:"רקע"},
+  {k:"occupation",l:"עיסוק",           t:"text",     sec:"רקע"},
+  {k:"height",   l:"גובה",             t:"text",     sec:"רקע"},
+  {k:"phone",    l:"טלפון",            t:"tel",      sec:"קשר"},
+  {k:"contact",  l:"איש קשר",          t:"text",     sec:"קשר"},
+  {k:"contactPhone",l:"טלפון איש קשר", t:"tel",      sec:"קשר"},
+  {k:"refs",     l:"אנשי קשר לבירורים",t:"refs",     sec:"קשר"},
+  {k:"character",l:"קווים לדמות",      t:"textarea", sec:"בקשה"},
+  {k:"looking",  l:"מה מחפשים",        t:"textarea", sec:"בקשה"},
+  {k:"notes",    l:"הערות",            t:"textarea", sec:"בקשה"}
+];
+const SECTIONS = ["זיהוי","רקע","קשר","בקשה"];
+
+const SYN = {
+  fullName:["שם","שם מלא","שם המועמד","שם פרטי ומשפחה","שם מועמד","name","full name"],
+  gender:["מין","מגדר","בן/בת","סוג","gender"],
+  age:["גיל","age","שנת לידה","גיל המועמד"],
+  status:["סטטוס","מצב","status","מצב טיפול"],
+  city:["עיר","יישוב","ישוב","מקום מגורים","כתובת","city"],
+  community:["חוג","מגזר","רמה","השקפה","סוג","זרם דתי","רמה דתית","הגדרה"],
+  edah:["עדה","זרם","קהילה","חסידות","מוצא","נוסח"],
+  openTo:["חוגים מתאימים","פתוח ל","פתוחה ל","מוכן ל","מוכנה ל","טווח","חוגים מבוקשים"],
+  family:["משפחה","הורים","שם האב","שם המשפחה","רקע משפחתי","אב"],
+  study:["ישיבה","סמינר","מוסד","מקום לימודים","כולל","לימודים"],
+  occupation:["עיסוק","מקצוע","עבודה","תעסוקה","job"],
+  phone:["טלפון","נייד","פלאפון","טל","phone","מספר טלפון"],
+  contact:["איש קשר","ממליץ","מקור","הפניה","יצירת קשר"],
+  contactPhone:["טלפון איש קשר","טלפון ממליץ","טלפון הורים","טלפון נוסף"],
+  looking:["מה מחפש","מה מחפשת","דרישות","בקשות","מבוקש","העדפות"],
+  maritalStatus:["מצב משפחתי","סטטוס משפחתי"],
+  service:["שירות","שירות צבאי","שירות לאומי","צבא","שנת שירות","מכינה"],
+  parentsHome:["מגורי ההורים","מגורי הורים","כתובת ההורים","היכן גרים ההורים"],
+  character:["קווים לדמות","קווים לדמותו","קווים לדמותה","תכונות","אופי","תכונות אופי","בניין אישי"],
+  height:["גובה","height"],
+  notes:["הערות","הערה","פרטים","תיאור","מידע","notes","comments"]
+};
+
+/* ============ state ============ */
+let DB = {people:[], matches:[], sessions:[], seq:1};
+let ui = {view:"cards", q:"", gender:"", status:"", sector:"", openTo:"",
+          ageMin:null, ageMax:null, mstatus:"", sort:"name", openPerson:null};
+let canPersist = true;
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => "p" + (DB.seq++) + Date.now().toString(36).slice(-4);
+const today = () => new Date().toISOString().slice(0,10);
+const disp = v => Array.isArray(v)
+  ? v.map(x => (x && typeof x === "object")
+      ? [x.name, x.role?`(${x.role})`:"", x.phone||""].filter(Boolean).join(" ")
+      : x).join(Array.isArray(v) && v[0] && typeof v[0]==="object" ? "\n" : " · ")
+  : (v==null?"":v);
+
+/* מיקום החוג בסולם, ומרחק בין שני מועמדים */
+function sectorIdx(s){ return SECTORS.indexOf(String(s||"").trim()); }
+function sectorGap(a,b){
+  const i = sectorIdx(a.community), j = sectorIdx(b.community);
+  return (i<0||j<0) ? null : Math.abs(i-j);
+}
+/* התאמה הדדית: 2 = שני הצדדים פתוחים, 1 = צד אחד, 0 = אף אחד, null = לא הוגדר */
+function openness(a,b){
+  const la = a.openTo||[], lb = b.openTo||[];
+  if(!la.length && !lb.length) return null;
+  return (la.includes(b.community)?1:0) + (lb.includes(a.community)?1:0);
+}
+/* נרמול ערכי חוג מקובץ חיצוני לסולם הקבוע */
+function normSector(v){
+  const s = String(v||"").replace(/["'״׳]/g,"").replace(/\s+/g," ").trim();
+  if(!s) return "";
+  if(/^חרדל/.test(s) || /חרדי\s*לאומי/.test(s)) return SECTORS[2];
+  if(/לייט|לאיט|קליל|מסורתי|לאיית/.test(s)) return SECTORS[0];
+  if(/לאומי/.test(s)) return SECTORS[1];
+  if(/חרדי|ליטאי|חסידי|בני\s*ברק/.test(s)) return SECTORS[3];
+  if(/^(דתי|דל|תורני|סרוג)/.test(s)) return SECTORS[1];
+  return "";
+}
+
+/* ============ כספת: הצפנה בפועל, לא רק מסך חסימה ============ */
+const VAULT = "shidduchim_vault_v1";   /* הנתונים המוצפנים */
+const LEGACY = "shidduchim_db_v1";     /* נתונים גלויים מגרסאות קודמות */
+const CRY = {key:null, salt:null, locked:true, plain:false};
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = str => Uint8Array.from(atob(str), c=>c.charCodeAt(0));
+
+/* גזירת מפתח מסיסמה — 310,000 סיבובים, כדי שניחוש בכוח יהיה יקר */
+async function deriveKey(pass, salt){
+  const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2", salt, iterations:310000, hash:"SHA-256"},
+    base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+
+/* ---- מעטפת: מפתח הצפנה אקראי אחד, עטוף פעמיים — בקוד הכניסה ובקוד השחזור ----
+   כך שני הקודים פותחים את אותם נתונים, בלי שאף אחד מהם נשמר בשום מקום. */
+const rnd = n => crypto.getRandomValues(new Uint8Array(n));
+function normCode(c){ return String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+function randomCode(groups){
+  const abc = "ACDEFGHJKLMNPQRTUVWXY3467869";   /* בלי תווים שקל לבלבל ביניהם */
+  const pick = n => Array.from({length:n}, ()=>abc[Math.floor(Math.random()*abc.length)]).join("");
+  return Array.from({length:groups||4}, ()=>pick(4)).join("-");
+}
+async function importDEK(raw){
+  return crypto.subtle.importKey("raw", raw, {name:"AES-GCM"}, false, ["encrypt","decrypt"]);
+}
+async function wrapDEK(rawDEK, kek){
+  const iv = rnd(12);
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, kek, rawDEK);
+  return {iv:b64(iv), ct:b64(ct)};
+}
+async function unwrapDEK(w, kek){
+  return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(w.iv)}, kek, unb64(w.ct)));
+}
+
+/* יצירת מעטפת חדשה סביב מפתח נתונים — מחזירה את קוד השחזור להצגה חד-פעמית */
+async function buildEnvelope(pass, rawDEK){
+  CRY.rawDEK = rawDEK || rnd(32);
+  CRY.key    = await importDEK(CRY.rawDEK);
+  CRY.salt   = rnd(16);
+  CRY.rsalt  = rnd(16);
+  const rec  = randomCode(4);
+  CRY.wrapPass = await wrapDEK(CRY.rawDEK, await deriveKey(pass, CRY.salt));
+  CRY.wrapRec  = await wrapDEK(CRY.rawDEK, await deriveKey(normCode(rec), CRY.rsalt));
+  CRY.v = 2; CRY.locked = false; CRY.plain = false;
+  return rec;
+}
+
+async function sealDB(){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, CRY.key, enc.encode(JSON.stringify(DB)));
+  const at = new Date().toISOString();
+  if(CRY.v === 1)
+    return JSON.stringify({v:1, salt:b64(CRY.salt), iv:b64(iv), ct:b64(ct), at});
+  return JSON.stringify({v:2, salt:b64(CRY.salt), rsalt:b64(CRY.rsalt),
+    wrapPass:CRY.wrapPass, wrapRec:CRY.wrapRec || null, iv:b64(iv), ct:b64(ct), at});
+}
+
+/* פותח בעזרת קוד כניסה או קוד שחזור — מה שמתאים */
+async function openVault(raw, secret){
+  const box = JSON.parse(raw);
+
+  if(box.v === 2){
+    let rawDEK = null;
+    CRY.usedRec = false;
+    try{
+      rawDEK = await unwrapDEK(box.wrapPass, await deriveKey(secret, unb64(box.salt)));
+    }catch(e){}
+    if(!rawDEK && box.wrapRec && box.rsalt){
+      try{
+        rawDEK = await unwrapDEK(box.wrapRec, await deriveKey(normCode(secret), unb64(box.rsalt)));
+        CRY.usedRec = true;
+      }catch(e){}
+    }
+    if(!rawDEK) throw new Error("bad secret");
+    CRY.rawDEK = rawDEK;
+    CRY.key   = await importDEK(rawDEK);
+    CRY.salt  = unb64(box.salt);
+    CRY.rsalt = unb64(box.rsalt);
+    CRY.wrapPass = box.wrapPass; CRY.wrapRec = box.wrapRec;
+    CRY.v = 2;
+    const plain = await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(box.iv)}, CRY.key, unb64(box.ct));
+    return JSON.parse(dec.decode(plain));
+  }
+
+  /* פורמט ישן — מפתח נגזר ישירות מהקוד */
+  const salt = unb64(box.salt);
+  const key = await deriveKey(secret, salt);
+  const plain = await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(box.iv)}, key, unb64(box.ct));
+  CRY.key = key; CRY.salt = salt; CRY.v = 1; CRY.usedRec = false; CRY.rawDEK = null;
+  return JSON.parse(dec.decode(plain));
+}
+
+function adoptDB(d){
+  DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1};
+}
+
+/* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
+let saveTimer = null, saving = false, dirty = false;
+function save(){
+  dirty = true;
+  touchActivity();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persist, 250);
+}
+async function persist(){
+  if(saving || !dirty) return;
+  saving = true; dirty = false;
+  try{
+    const payload = CRY.plain ? JSON.stringify(DB) : await sealDB();
+    localStorage.setItem(CRY.plain ? LEGACY : VAULT, payload);
+    setSaveState(CRY.plain ? "נשמר ללא הצפנה" : "נשמר ומוצפן", CRY.plain ? "#d9a441" : "");
+    if(CLOUD.auto && CLOUD.user) cloudPush(true);
+  }catch(e){
+    canPersist = false;
+    const full = /quota|exceed/i.test(e.name + " " + e.message);
+    setSaveState(full ? "האחסון מלא — ייצאו גיבוי" : "השמירה נכשלה", "#d9a441");
+    if(full) toast("אחסון הדפדפן מלא. ייצאו גיבוי והסירו תמונות כבדות.");
+  }
+  saving = false;
+  if(dirty) persist();
+}
+function setSaveState(txt, color){
+  const el = $("#saveState"); if(!el) return;
+  el.textContent = txt; el.style.color = color || "";
+}
+
+/* ---- נעילה ---- */
+let lastActivity = Date.now();
+function touchActivity(){ lastActivity = Date.now(); }
+function idleLimit(){ return (parseInt(localStorage.getItem("idle_min")||"20",10) || 20) * 60000; }
+
+function lock(){
+  CRY.key = null; CRY.locked = true;
+  DB = {people:[], matches:[], sessions:[], seq:1};
+  ui.openPerson = null;
+  closeSheet();
+  $("#app").classList.add("blurred");
+  showLock("unlock");
+}
+
+function showLock(mode, msg){
+  const box = $("#lock");
+  box.classList.remove("hidden");
+  const legacy = localStorage.getItem(LEGACY);
+  if(mode === "setup"){
+    box.innerHTML = `<div class="lock-card">
+      <h1>הגדרת קוד כניסה</h1>
+      <p>הקוד מצפין את כל התיקים במחשב. בלעדיו אי אפשר לפתוח אותם — <b>גם לא על ידי מי שמעתיק את הקובץ</b>.</p>
+      ${legacy?`<div class="lock-warn">נמצאו נתונים קיימים לא מוצפנים. הם יוצפנו ויימחקו מהאחסון הגלוי.</div>`:""}
+      <input type="password" id="pass1" placeholder="קוד כניסה — לפחות 8 תווים" autocomplete="new-password">
+      <div id="strength" class="strength"></div>
+      <input type="password" id="pass2" placeholder="שוב, לאימות" autocomplete="new-password">
+      <div class="lock-warn">מיד לאחר ההפעלה יוצג <b>קוד שחזור</b> חד-פעמי, שיפתח את הכספת אם קוד הכניסה יישכח.
+        זהו העותק היחיד — אם גם הוא יאבד, אין דרך לפתוח את התיקים.</div>
+      <button class="btn pri" id="btnSetPass">הפעלת ההצפנה</button>
+      <button class="btn ghost" id="btnSkip">להמשיך בינתיים ללא קוד</button>
+      <div id="lockMsg" class="lock-msg"></div>
+    </div>`;
+    $("#pass1").addEventListener("input", e=>{
+      const v = e.target.value, s = $("#strength");
+      const score = (v.length>=8?1:0)+(v.length>=12?1:0)+(/[א-ת]/.test(v)||/[a-z]/i.test(v)?1:0)+(/\d/.test(v)?1:0)+(/[^\w\sא-ת]/.test(v)?1:0);
+      const lbl = ["חלש מאוד","חלש","סביר","טוב","חזק","חזק מאוד"][score];
+      s.textContent = v?`חוזק: ${lbl}`:"";
+      s.className = "strength " + (score<=1?"s1":score<=3?"s2":"s3");
+    });
+    $("#btnSetPass").addEventListener("click", setupPass);
+    $("#btnSkip").addEventListener("click", ()=>{
+      CRY.plain = true; CRY.locked = false;
+      try{ const raw = localStorage.getItem(LEGACY); if(raw) adoptDB(JSON.parse(raw)); }catch(e){}
+      $("#lock").classList.add("hidden"); $("#app").classList.remove("blurred");
+      setSaveState("נשמר ללא הצפנה", "#d9a441");
+      render(); setView("cards");
+    });
+    $("#pass2").addEventListener("keydown", e=>{ if(e.key==="Enter") setupPass(); });
+  }else{
+    box.innerHTML = `<div class="lock-card">
+      <h1>כרטסיית שידוכים</h1>
+      <p>הזינו את קוד הכניסה כדי לפתוח את התיקים.</p>
+      <input type="password" id="passIn" placeholder="קוד כניסה" autocomplete="current-password" autofocus>
+      <button class="btn pri" id="btnUnlock">פתיחה</button>
+      <div id="lockMsg" class="lock-msg">${msg?esc(msg):""}</div>
+      <button class="btn ghost sm" id="btnForgot">שכחתי את הקוד</button>
+    </div>`;
+    $("#btnUnlock").addEventListener("click", tryUnlock);
+    $("#passIn").addEventListener("keydown", e=>{ if(e.key==="Enter") tryUnlock(); });
+    $("#passIn").focus();
+    $("#btnForgot").addEventListener("click", ()=>{
+      $("#lockMsg").innerHTML = `הזינו את <b>קוד השחזור</b> בשדה למעלה — הוא פותח את הכספת במקום קוד הכניסה,
+        ומיד לאחריו תתבקשו לקבוע קוד חדש.<br>
+        אם גם קוד השחזור אבד, אין דרך לפתוח את הנתונים. אפשר להתחיל מחדש ולטעון קובץ גיבוי JSON.
+        <button class="btn danger sm" id="btnReset" style="margin-top:8px">מחיקת הכספת והתחלה מחדש</button>`;
+      $("#btnReset").addEventListener("click", ()=>{
+        if(!confirm("פעולה זו מוחקת לצמיתות את כל הנתונים המוצפנים במכשיר. להמשיך?")) return;
+        localStorage.removeItem(VAULT); location.reload();
+      });
+    });
+  }
+}
+
+async function setupPass(){
+  const p1 = $("#pass1").value, p2 = $("#pass2").value;
+  const msg = $("#lockMsg");
+  if(p1.length < 8){ msg.textContent = "הקוד חייב להיות באורך 8 תווים לפחות."; return; }
+  if(p1 !== p2){ msg.textContent = "שני הקודים אינם זהים."; return; }
+  msg.textContent = "מצפין…";
+  try{
+    const legacy = localStorage.getItem(LEGACY);
+    if(legacy){ try{ adoptDB(JSON.parse(legacy)); }catch(e){} }
+    const rec = await buildEnvelope(p1);
+    localStorage.setItem(VAULT, await sealDB());
+    localStorage.removeItem(LEGACY);
+    setSaveState("נשמר ומוצפן");
+    showRecovery(rec, true);
+  }catch(e){ msg.textContent = "שגיאה בהפעלת ההצפנה: " + e.message; }
+}
+
+/* מסך חד-פעמי: הקוד לא נשמר בשום מקום ולא ניתן להציגו שוב */
+function showRecovery(rec, firstTime){
+  const box = $("#lock");
+  box.classList.remove("hidden");
+  $("#app").classList.add("blurred");
+  box.innerHTML = `<div class="lock-card">
+    <h1>קוד השחזור</h1>
+    <p>זהו המפתח החלופי לכספת. הוא פותח את התיקים גם אם קוד הכניסה נשכח.</p>
+    <div class="rec-code">${esc(rec)}</div>
+    <div class="lock-warn danger">המסך הזה מוצג פעם אחת בלבד. הקוד אינו נשמר בשום מקום —
+      לא במחשב, לא אצלנו ולא בענן. צלמו אותו או כתבו אותו על נייר ושמרו במקום אחר מהמחשב.</div>
+    <button class="btn" id="btnCopyRec">העתקה</button>
+    <label class="rec-ok"><input type="checkbox" id="recSaved"> שמרתי את הקוד במקום בטוח</label>
+    <button class="btn pri" id="btnRecDone" disabled>${firstTime?"כניסה לכרטסייה":"סיום"}</button>
+  </div>`;
+  $("#btnCopyRec").addEventListener("click", ()=>{
+    navigator.clipboard.writeText(rec).then(()=>toast("הועתק")).catch(()=>toast(rec));
+  });
+  $("#recSaved").addEventListener("change", e=>{ $("#btnRecDone").disabled = !e.target.checked; });
+  $("#btnRecDone").addEventListener("click", ()=>{
+    box.classList.add("hidden"); $("#app").classList.remove("blurred");
+    touchActivity(); render(); setView(firstTime ? "cards" : "backup");
+    toast("ההצפנה פעילה");
+  });
+}
+
+let failCount = 0;
+async function tryUnlock(){
+  const pass = $("#passIn").value;
+  const msg = $("#lockMsg");
+  if(!pass) return;
+  msg.textContent = "פותח…";
+  await new Promise(r=>setTimeout(r, Math.min(failCount * 700, 4000)));  /* האטה אחרי כישלונות */
+  try{
+    const d = await openVault(localStorage.getItem(VAULT), pass);
+    adoptDB(d);
+    CRY.locked = false; failCount = 0;
+    $("#lock").classList.add("hidden"); $("#app").classList.remove("blurred");
+    setSaveState("נשמר ומוצפן");
+    touchActivity(); render(); setView("cards");
+    if(CRY.usedRec){
+      /* נכנסו עם קוד השחזור — הקוד נשרף ונדרש קוד כניסה חדש */
+      setTimeout(async ()=>{
+        alert("נכנסתם באמצעות קוד השחזור. כעת יש לקבוע קוד כניסה חדש, ויונפק קוד שחזור חדש במקומו.");
+        await reissue(true);
+      }, 400);
+    }
+  }catch(e){
+    failCount++;
+    msg.textContent = `קוד שגוי (ניסיון ${failCount}).`;
+    $("#passIn").value = ""; $("#passIn").focus();
+  }
+}
+
+/* דיאלוג פנימי במקום prompt של הדפדפן — prompt נחסם במסגרות מוטמעות
+   ומציג את קוד הכניסה כטקסט גלוי על המסך. */
+function ask(opts){
+  return new Promise(resolve=>{
+    const box = $("#ask");
+    box.innerHTML = `<div class="ask-card">
+      <h3>${esc(opts.title||"")}</h3>
+      ${opts.note ? `<p class="ask-note">${esc(opts.note)}</p>` : ""}
+      ${(opts.fields||[]).map((f,i)=>`<label class="ask-f">
+        <span>${esc(f.label)}</span>
+        <input id="ask_${i}" type="${f.type||"text"}" autocomplete="off" spellcheck="false"></label>`).join("")}
+      <div class="ask-btns">
+        <button class="btn pri" id="askOk">${esc(opts.ok||"אישור")}</button>
+        <button class="btn ghost" id="askCancel">ביטול</button>
+      </div></div>`;
+    box.classList.remove("hidden");
+    const done = val=>{ box.classList.add("hidden"); box.innerHTML=""; resolve(val); };
+    const submit = ()=>done((opts.fields||[]).map((f,i)=>box.querySelector("#ask_"+i).value));
+    box.querySelector("#askOk").onclick = submit;
+    box.querySelector("#askCancel").onclick = ()=>done(null);
+    box.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown", e=>{
+      if(e.key === "Enter"){ e.preventDefault(); submit(); }
+      if(e.key === "Escape") done(null);
+    }));
+    const first = box.querySelector("input");
+    if(first) setTimeout(()=>first.focus(), 60);
+  });
+}
+
+/* הנפקת קוד שחזור חדש. withNewPass — גם קביעת קוד כניסה חדש (אחרי שימוש בשחזור). */
+async function reissue(withNewPass){
+  if(CRY.plain || CRY.locked){ toast("זמין רק כשההצפנה פעילה והכספת פתוחה"); return; }
+  let pass = null;
+  if(withNewPass || CRY.v === 1){
+    const r = await ask({
+      title: "קביעת קוד כניסה חדש",
+      note: CRY.v === 1
+        ? "כדי להוסיף קוד שחזור יש לקבוע מחדש את קוד הכניסה."
+        : "בחרו קוד כניסה חדש. לאחר מכן יוצג קוד שחזור חדש.",
+      fields: [{label:"קוד כניסה חדש (8 תווים לפחות)", type:"password"},
+               {label:"שוב, לאימות", type:"password"}]
+    });
+    if(!r) return;
+    if(!r[0] || r[0].length < 8){ toast("קוד קצר מדי — לא בוצע שינוי"); return; }
+    if(r[0] !== r[1]){ toast("הקודים אינם זהים"); return; }
+    pass = r[0];
+  }else{
+    const r = await ask({title:"אימות", note:"הזינו את קוד הכניסה הנוכחי כדי להנפיק קוד שחזור חדש.",
+                         fields:[{label:"קוד הכניסה הנוכחי", type:"password"}]});
+    if(!r || !r[0]) return;
+    pass = r[0];
+    try{ await unwrapDEK(CRY.wrapPass, await deriveKey(pass, CRY.salt)); }
+    catch(e){ toast("קוד הכניסה שגוי"); return; }
+  }
+  try{
+    const rec = await buildEnvelope(pass, CRY.v === 1 ? null : CRY.rawDEK);
+    localStorage.setItem(VAULT, await sealDB());
+    showRecovery(rec, false);
+  }catch(e){ toast("שגיאה: " + e.message); }
+}
+
+function boot(){
+  /* הצפנה זמינה רק בהקשר מאובטח — https או localhost. פתיחת הקובץ בלחיצה כפולה לא נחשבת. */
+  if(!window.crypto || !crypto.subtle){
+    $("#app").classList.add("blurred");
+    $("#lock").classList.remove("hidden");
+    $("#lock").innerHTML = `<div class="lock-card">
+      <h1>ההצפנה אינה זמינה כאן</h1>
+      <p>הדפדפן מאפשר הצפנה רק כשהעמוד נטען מכתובת מאובטחת (https) או מ-localhost.
+         נראה שהקובץ נפתח ישירות מהמחשב.</p>
+      <div class="lock-warn">העלו את הקובץ לאתר (למשל GitHub Pages) והיכנסו דרך הכתובת שלו —
+         ההצפנה תופעל שם אוטומטית.</div>
+      <button class="btn ghost" id="btnNoCrypto">להמשיך ללא הצפנה לצורך בדיקה</button>
+      <div class="lock-msg">בלי הצפנה, כל מי שיש לו גישה למחשב יכול לקרוא את הנתונים.</div>
+    </div>`;
+    $("#btnNoCrypto").addEventListener("click", ()=>{
+      CRY.plain = true; CRY.locked = false;
+      try{ const raw = localStorage.getItem(LEGACY); if(raw) adoptDB(JSON.parse(raw)); }catch(e){}
+      $("#lock").classList.add("hidden"); $("#app").classList.remove("blurred");
+      setSaveState("נשמר ללא הצפנה", "#d9a441");
+      render(); setView("cards");
+    });
+    return;
+  }
+  const hasVault = localStorage.getItem(VAULT);
+  $("#app").classList.add("blurred");
+  showLock(hasVault ? "unlock" : "setup");
+  setInterval(()=>{
+    if(!CRY.locked && !CRY.plain && Date.now() - lastActivity > idleLimit()) lock();
+  }, 20000);
+  ["click","keydown","mousemove","touchstart"].forEach(ev=>
+    document.addEventListener(ev, touchActivity, {passive:true}));
+}
+
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 2600);
+}
+
+/* ============ helpers ============ */
+function personById(id){ return DB.people.find(p=>p.id===id); }
+function initial(name){ return (String(name||"?").trim()[0] || "?"); }
+
+/* דמות המועמד — תמונה אם הועלתה, אחרת אות פתיחה */
+function avatar(p, size){
+  const s = size || 38;
+  const box = `width:${s}px;height:${s}px;font-size:${Math.round(s*0.45)}px`;
+  if(p.photo) return `<div class="mono photo" style="${box}"><img src="${p.photo}" alt=""></div>`;
+  const bg  = p.gender==="בן" ? "#e8eff6" : p.gender==="בת" ? "#f3ebf1" : "#eef1f4";
+  const col = p.gender==="בן" ? "#2f5d8a" : p.gender==="בת" ? "#8a5b7a" : "#4a5a6b";
+  return `<div class="mono" style="${box};background:${bg};color:${col}">${esc(initial(p.fullName))}</div>`;
+}
+
+/* הקטנה לפני שמירה — תמונה מלאה מהטלפון תמלא את אחסון הדפדפן במהירות */
+function readImage(file, cb){
+  if(!/^image\//.test(file.type)){ toast("צריך קובץ תמונה"); return; }
+  const fr = new FileReader();
+  fr.onload = e=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 320;
+      let w = img.width, h = img.height;
+      if(w > h && w > max){ h = Math.round(h*max/w); w = max; }
+      else if(h > max){ w = Math.round(w*max/h); h = max; }
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      cb(cv.toDataURL("image/jpeg", 0.72));
+    };
+    img.onerror = ()=>toast("לא ניתן לקרוא את התמונה");
+    img.src = e.target.result;
+  };
+  fr.readAsDataURL(file);
+}
+
+function storageMB(){
+  try{ return (new Blob([JSON.stringify(DB)]).size / 1048576).toFixed(2); }
+  catch(e){ return "?"; }
+}
+function gclass(p){ return p.gender==="בן" ? "g-m" : p.gender==="בת" ? "g-f" : ""; }
+function statusClass(s){
+  return s==="פנוי" ? "st-free" : s==="בתהליך" ? "st-busy" : s==="נסגר" ? "st-done" : "st-hold";
+}
+function openMatchesOf(id){
+  return DB.matches.filter(m => (m.a===id||m.b===id) && !["הופסק"].includes(m.status));
+}
+
+/* ============ views ============ */
+function setView(v){
+  ui.view = v;
+  $$(".nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
+  ["cards","matches","followup","import","backup"].forEach(x=>{
+    $("#view-"+x).classList.toggle("hidden", x!==v);
+  });
+  render();
+}
+
+function render(){
+  $("#railCount").textContent = DB.people.length + " מועמדים";
+  renderStats();
+  if(ui.view==="cards") renderCards();
+  if(ui.view==="matches") renderMatches();
+  if(ui.view==="followup") renderFollowup();
+}
+
+function renderStats(){
+  const m = DB.people.filter(p=>p.gender==="בן").length;
+  const f = DB.people.filter(p=>p.gender==="בת").length;
+  const free = DB.people.filter(p=>p.status==="פנוי").length;
+  const open = DB.matches.filter(x=>["הוצע","בבירור","נפגשו"].includes(x.status)).length;
+  const eng = DB.matches.filter(x=>x.status==="התארסו").length;
+  const html = [
+    ["סה\u05F4כ מועמדים", DB.people.length],
+    ["בנים", m], ["בנות", f], ["פנויים", free],
+    ["הצעות פתוחות", open], ["התארסו", eng]
+  ].map(([l,v])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  $("#stats").innerHTML = html;
+  $("#stats2").innerHTML = html;
+  const cs = $("#cryptoState");
+  if(cs) cs.innerHTML = CRY.plain
+    ? `<b style="color:#b8860b">ההצפנה כבויה.</b> הנתונים שמורים גלויים בדפדפן. רעננו את העמוד כדי להגדיר קוד.`
+    : `הנתונים מוצפנים במכשיר בהצפנת AES-256, ומפתח ההצפנה נגזר מקוד הכניסה בלבד.`;
+  const photos = DB.people.filter(p=>p.photo).length;
+  $("#storageLine").innerHTML =
+    `נפח הנתונים כרגע: <b>${storageMB()} MB</b> · ${photos} תמונות · ${DB.sessions.length} פגישות מתועדות.
+     מגבלת הדפדפן היא כ-5 MB, ותמונות הן החלק הכבד.`;
+}
+
+function filtered(){
+  const q = ui.q.trim().toLowerCase();
+  let list = DB.people.filter(p=>{
+    if(ui.gender && p.gender!==ui.gender) return false;
+    if(ui.status && (p.status||"פנוי")!==ui.status) return false;
+    if(ui.sector && p.community!==ui.sector) return false;
+    if(ui.openTo && !(p.openTo||[]).includes(ui.openTo)) return false;
+    const age = parseFloat(p.age);
+    if(ui.ageMin && (!age || age < ui.ageMin)) return false;
+    if(ui.ageMax && (!age || age > ui.ageMax)) return false;
+    if(!q) return true;
+    const hay = [p.fullName,p.city,p.study,p.notes,p.community,p.edah,p.family,p.occupation,p.looking,
+                 (p.openTo||[]).join(" "), (p.tags||[]).join(" "),
+                 Object.values(p.extra||{}).join(" ")].join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+  const s = ui.sort;
+  list.sort((a,b)=>{
+    if(s==="age") return (parseFloat(a.age)||999)-(parseFloat(b.age)||999);
+    if(s==="updated") return (b.updated||"").localeCompare(a.updated||"");
+    if(s==="city") return String(a.city||"").localeCompare(String(b.city||""),"he");
+    return String(a.fullName||"").localeCompare(String(b.fullName||""),"he");
+  });
+  return list;
+}
+
+function renderCards(){
+  const list = filtered();
+  const host = $("#cardsHost");
+  if(!DB.people.length){
+    host.innerHTML = `<div class="empty"><h3>הכרטסייה עדיין ריקה</h3>
+      <p>העלו קובץ אקסל עם רשימת המועמדים, או הוסיפו מועמד ידנית.</p>
+      <button class="btn pri" onclick="setView('import')">העלאת קובץ</button></div>`;
+    return;
+  }
+  if(!list.length){
+    host.innerHTML = `<div class="empty"><h3>אין תוצאות</h3><p>נסו לשנות את החיפוש או את הסינון.</p></div>`;
+    return;
+  }
+  host.innerHTML = `<div class="grid">` + list.map(p=>{
+    const open = openMatchesOf(p.id).length;
+    const rows = [
+      p.city ? "⌂ " + esc(p.city) : "",
+      p.study ? "✦ " + esc(p.study) : (p.occupation ? "✦ " + esc(p.occupation) : ""),
+      p.phone ? "☏ " + esc(p.phone) : ""
+    ].filter(Boolean).map(x=>`<div>${x}</div>`).join("");
+    const st = p.status || "פנוי";
+    return `<button class="pcard ${gclass(p)}" onclick="openPerson('${p.id}')">
+      <span class="badge ${statusClass(st)}">${esc(st)}</span>
+      <div class="pcard-head">
+        ${avatar(p,38)}
+        <div style="min-width:0">
+          <h3>${esc(p.fullName||"ללא שם")}</h3>
+          <div class="meta">${p.age?esc(p.age)+" · ":""}${esc(p.gender||"")}${p.edah?" · "+esc(p.edah):""}</div>
+        </div>
+      </div>
+      <div class="rows">${rows||'<div style="color:#c3cad1">אין פרטים נוספים</div>'}</div>
+      ${(p.community||open)?`<div class="tagline">
+        ${p.community?`<span class="tag">${esc(p.community)}</span>`:""}
+        ${(p.openTo||[]).length?`<span class="tag">+${p.openTo.length} חוגים</span>`:""}
+        ${open?`<span class="tag">${open} הצעות פתוחות</span>`:""}
+      </div>`:""}
+    </button>`;
+  }).join("") + `</div>`;
+}
+
+function renderMatches(){
+  const host = $("#matchesHost");
+  let list = DB.matches.slice().sort((a,b)=>(b.updated||"").localeCompare(a.updated||""));
+  if(ui.mstatus) list = list.filter(m=>m.status===ui.mstatus);
+  if(!list.length){
+    host.innerHTML = `<div class="empty"><h3>אין הצעות להצגה</h3>
+      <p>פתחו כרטיס של מועמד ולחצו על "הצעת שידוך" כדי ליצור הצעה ראשונה.</p></div>`;
+    return;
+  }
+  host.innerHTML = list.map(m=>{
+    const a = personById(m.a), b = personById(m.b);
+    return `<button class="mrow" onclick="openMatch('${m.id}')">
+      <span class="badge ${statusClass(m.status==="התארסו"?"נסגר":m.status==="הופסק"?"מושהה":"בתהליך")}"
+            style="position:static">${esc(m.status)}</span>
+      <span class="names">${esc(a?a.fullName:"—")} <em>◇</em> ${esc(b?b.fullName:"—")}</span>
+      <span style="font-size:12px;color:var(--ink-faint)">${esc(m.updated||m.created||"")}</span>
+    </button>`;
+  }).join("");
+}
+
+/* ============ sheet ============ */
+function openSheet(){ $("#scrim").classList.add("on"); $("#sheet").classList.add("on"); }
+function closeSheet(){
+  $("#scrim").classList.remove("on"); $("#sheet").classList.remove("on");
+  $("#sheet").classList.remove("wide"); cardMode="edit"; ui.openPerson=null;
+}
+
+let winTab = "details";
+
+function openPerson(id, tab){
+  const p = personById(id); if(!p) return;
+  if(ui.openPerson !== id) winTab = "details";
+  if(tab) winTab = tab;
+  ui.openPerson = id;
+  const st = p.status || "פנוי";
+  const T = [["details","פרטים"],["file","התיק והפגישות"],["card","כרטיס שידוכים"]];
+
+  $("#sheetHead").innerHTML = `
+    <div class="win-title">
+      ${avatar(p,46)}
+      <div style="min-width:0">
+        <h3>${esc(p.fullName||"ללא שם")}</h3>
+        <div class="meta">${esc(st)}${p.age?" · "+esc(p.age):""}${p.city?" · "+esc(p.city):""}${p.community?" · "+esc(p.community):""}</div>
+      </div>
+      <button class="btn ghost sm" onclick="popOut('${id}')" title="פתיחה בחלון דפדפן נפרד — נוח להשוואה בין שניים">⧉ חלון נפרד</button>
+      <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>
+    </div>
+    <div class="win-tabs">${T.map(([k,l])=>
+      `<button class="${winTab===k?"on":""}" onclick="openPerson('${id}','${k}')">${l}</button>`).join("")}</div>`;
+
+  if(winTab === "card"){ renderCardTab(p); openSheet(); return; }
+  if(winTab === "file"){ renderFileTab(p); openSheet(); return; }
+
+  let body = "";
+  SECTIONS.forEach(sec=>{
+    const fs = FIELDS.filter(f=>f.sec===sec && f.k!=="fullName");
+    body += `<div class="sect">${sec}</div><dl style="margin:0">` + fs.map(f=>{
+      const v = disp(p[f.k]);
+      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}</dd></div>`;
+    }).join("") + `</dl>`;
+  });
+
+  const extraKeys = Object.keys(p.extra||{});
+  if(extraKeys.length){
+    body += `<div class="sect">שדות נוספים מהקובץ</div><dl style="margin:0">` +
+      extraKeys.map(k=>`<div class="fieldrow"><dt>${esc(k)}</dt><dd>${esc(p.extra[k])}</dd></div>`).join("") + `</dl>`;
+  }
+
+  const ms = DB.matches.filter(m=>m.a===id||m.b===id);
+  body += `<div class="sect">הצעות שידוך (${ms.length})</div>`;
+  body += ms.length ? ms.map(m=>{
+    const other = personById(m.a===id?m.b:m.a);
+    return `<button class="picker-item" onclick="openMatch('${m.id}')">
+      ${other?avatar(other,30):""}
+      <div><div style="font-weight:600">${esc(other?other.fullName:"—")}</div>
+      <div style="font-size:12px;color:var(--ink-faint)">${esc(m.status)} · ${esc(m.updated||m.created)}</div></div>
+    </button>`;
+  }).join("") : `<div style="color:var(--ink-faint);font-size:13.5px">עדיין לא הוצעו שידוכים למועמד זה.</div>`;
+
+  $("#sheetBody").innerHTML = `<div class="win-col">${body}</div>`;
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="editPerson('${id}')">עריכת הפרטים</button>
+    <button class="btn" onclick="openSuggest('${id}')">הצעת שידוך</button>
+    <button class="btn ghost" onclick="window.print()">הדפסה</button>
+    <button class="btn danger sm" style="margin-inline-start:auto" onclick="delPerson('${id}')">מחיקה</button>`;
+  openSheet();
+}
+
+function renderFileTab(p){
+  $("#sheetBody").innerHTML = `<div class="win-col">${renderDossier(p)}</div>`;
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="sessionForm('${p.id}')">רישום פגישה</button>
+    <button class="btn" onclick="document.getElementById('docFile').click()">העלאת מסמך</button>
+    <input type="file" id="docFile" accept=".docx,.txt,.md" class="hidden">
+    <button class="btn ghost" onclick="window.print()">הדפסה</button>`;
+  $("#docFile").addEventListener("change", e=>{
+    const f = e.target.files[0]; if(f) readDoc(f, p.id);
+  });
+}
+
+/* פתיחת עותק לקריאה בחלון דפדפן נפרד — להשוואה זו לצד זו */
+function popOut(id){
+  const p = personById(id);
+  const w = window.open("", "_blank", "width=760,height=900");
+  if(!w){ toast("הדפדפן חסם את החלון"); return; }
+  const rows = FIELDS.filter(f=>p[f.k] && f.k!=="fullName")
+    .map(f=>`<tr><th>${f.l}</th><td>${esc(disp(p[f.k])).replace(/\n/g,"<br>")}</td></tr>`).join("");
+  const ss = sessionsOf(id).map(x=>
+    `<div class="s"><b>${esc(x.date||"")} · ${esc(x.type||"")}</b><p>${esc(x.notes||"")}</p></div>`).join("");
+  w.document.write(`<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+    <title>${esc(p.fullName)}</title><style>
+    body{font-family:Arial,sans-serif;direction:rtl;padding:24px;color:#16212e;line-height:1.6;max-width:700px}
+    h1{font-size:21px;border-bottom:2px solid #16212e;padding-bottom:8px}
+    img{max-width:120px;border-radius:8px;float:left;margin:0 0 10px 14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    th{text-align:right;width:150px;color:#6b7887;font-weight:600;vertical-align:top;padding:5px 0}
+    td{padding:5px 0}
+    h2{font-size:15px;color:#0f5f5c;margin-top:22px}
+    .s{border-right:2px solid #d5dbe1;padding:0 12px;margin-bottom:12px}
+    .s p{margin:3px 0;white-space:pre-wrap}
+    </style></head><body>
+    ${p.photo?`<img src="${p.photo}" alt="">`:""}
+    <h1>${esc(p.fullName)}</h1><table>${rows}</table>
+    ${ss?`<h2>יומן פגישות</h2>${ss}`:""}</body></html>`);
+  w.document.close();
+}
+
+function editPerson(id){
+  const p = id ? personById(id) : {};
+  const isNew = !id;
+  $("#sheetHead").innerHTML = `<div style="flex:1">
+      <h3>${isNew?"מועמד חדש":"עריכת כרטיס"}</h3>
+      <div class="meta">${isNew?"מילוי הפרטים הבסיסיים מספיק להתחלה":esc(p.fullName||"")}</div>
+    </div><button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+
+  let html = `<div class="sect">תמונה</div>
+    <div class="photo-block">
+      <div id="photoPrev">${avatar(p.photo?p:{fullName:p.fullName||"?"},78)}</div>
+      <div class="photo-ctl">
+        <input type="file" id="photoFile" accept="image/*" class="hidden">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn sm" onclick="document.getElementById('photoFile').click()">
+            ${p.photo?"החלפת תמונה":"העלאת תמונה"}</button>
+          ${p.photo?`<button class="btn ghost sm" onclick="dropPhoto()">הסרה</button>`:""}
+        </div>
+        <label class="todo" style="margin-top:8px">
+          <input type="checkbox" id="photoInCard" ${p.photoInCard?"checked":""}>
+          <span>לצרף את התמונה לכרטיס השידוכים היוצא</span>
+        </label>
+        <div class="photo-note">התמונה נשמרת במחשב בלבד ומוקטנת אוטומטית. כברירת מחדל היא נשארת בתיק הפנימי ולא נכנסת לכרטיס שנשלח החוצה.</div>
+      </div>
+    </div>`;
+  SECTIONS.forEach(sec=>{
+    html += `<div class="sect">${sec}</div><div class="form-grid">`;
+    FIELDS.filter(f=>f.sec===sec).forEach(f=>{
+      const v = p[f.k]==null?"":p[f.k];
+      const wide = (f.t==="textarea"||f.t==="multi"||f.k==="fullName"||f.k==="family") ? " wide":"";
+      let input;
+      if(f.t==="select"){
+        input = `<select id="f_${f.k}"><option value=""></option>` +
+          f.opts.map(o=>`<option ${o===v?"selected":""}>${esc(o)}</option>`).join("") + `</select>`;
+      }else if(f.t==="combo"){
+        input = `<input id="f_${f.k}" list="dl_${f.k}" value="${esc(v)}" placeholder="בחירה או הקלדה חופשית">
+          <datalist id="dl_${f.k}">${f.opts.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
+      }else if(f.t==="multi"){
+        const arr = Array.isArray(v)?v:[];
+        input = `<div class="multi">` + f.opts.map(o=>
+          `<label><input type="checkbox" data-multi="${f.k}" value="${esc(o)}" ${arr.includes(o)?"checked":""}>${esc(o)}</label>`
+        ).join("") + `</div>`;
+      }else if(f.t==="refs"){
+        const arr = Array.isArray(v)?v:[];
+        input = `<div class="refs" id="refsBox">${arr.map(r=>refRow(r)).join("")}</div>
+          <button class="btn ghost sm" onclick="addRefRow()" style="margin-top:6px">+ הוספת ממליץ</button>
+          <datalist id="dlRoles">${["ר\u05F4מ בישיבה","רב הקהילה","ראש הכולל","מדריכה בסמינר","חברותא",
+            "חברה קרובה","מכיר משפחתי","שכן","מעסיק"].map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
+      }else if(f.t==="textarea"){
+        input = `<textarea id="f_${f.k}">${esc(v)}</textarea>`;
+      }else{
+        input = `<input id="f_${f.k}" type="${f.t}" value="${esc(v)}">`;
+      }
+      html += `<div class="field${wide}"><label for="f_${f.k}">${f.l}</label>${input}</div>`;
+    });
+    html += `</div>`;
+  });
+  const extraKeys = Object.keys(p.extra||{});
+  if(extraKeys.length){
+    html += `<div class="sect">שדות נוספים מהקובץ</div><div class="form-grid">` +
+      extraKeys.map((k,i)=>`<div class="field"><label>${esc(k)}</label>
+        <input id="x_${i}" data-xkey="${esc(k)}" value="${esc(p.extra[k])}"></div>`).join("") + `</div>`;
+  }
+  $("#sheetBody").innerHTML = `<div class="win-col">${html}</div>`;
+  photoBuf = null;
+  $("#photoFile").addEventListener("change", e=>{
+    const f = e.target.files[0]; if(!f) return;
+    readImage(f, data=>{
+      photoBuf = data;
+      $("#photoPrev").innerHTML = `<div class="mono photo" style="width:78px;height:78px"><img src="${data}" alt=""></div>`;
+      toast("התמונה תישמר עם הכרטיס");
+    });
+  });
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="savePerson('${id||""}')">שמירה</button>
+    <button class="btn ghost" onclick="${id?`openPerson('${id}')`:"closeSheet()"}">ביטול</button>`;
+  openSheet();
+}
+
+let photoBuf = null;
+function dropPhoto(){
+  photoBuf = "";
+  $("#photoPrev").innerHTML = avatar({fullName:"?"},78);
+  toast("התמונה תוסר בשמירה");
+}
+
+function refRow(r){
+  r = r || {};
+  return `<div class="refrow">
+    <input data-ref="name" value="${esc(r.name||"")}" placeholder="שם">
+    <input data-ref="role" list="dlRoles" value="${esc(r.role||"")}" placeholder="הקשר">
+    <input data-ref="phone" value="${esc(r.phone||"")}" placeholder="טלפון">
+    <button class="btn ghost sm" onclick="this.parentNode.remove()" title="הסרה">×</button>
+  </div>`;
+}
+function addRefRow(){ $("#refsBox").insertAdjacentHTML("beforeend", refRow()); }
+
+function savePerson(id){
+  const p = id ? personById(id) : {id:uid(), created:today(), extra:{}};
+  FIELDS.forEach(f=>{
+    if(f.t==="multi"){
+      const boxes = $$(`input[data-multi="${f.k}"]`);
+      if(boxes.length) p[f.k] = boxes.filter(b=>b.checked).map(b=>b.value);
+      return;
+    }
+    if(f.t==="refs"){
+      if($("#refsBox")){
+        p.refs = $$("#refsBox .refrow").map(row=>({
+          name:  row.querySelector('[data-ref="name"]').value.trim(),
+          role:  row.querySelector('[data-ref="role"]').value.trim(),
+          phone: row.querySelector('[data-ref="phone"]').value.trim()
+        })).filter(r=>r.name || r.phone);
+      }
+      return;
+    }
+    const el = $("#f_"+f.k);
+    if(el) p[f.k] = el.value.trim();
+  });
+  if(!p.fullName){ toast("צריך למלא שם מלא"); return; }
+  if(!p.status) p.status = "פנוי";
+  p.extra = p.extra || {};
+  $$("[data-xkey]").forEach(el=>{ p.extra[el.dataset.xkey] = el.value; });
+  if(photoBuf !== null){
+    if(photoBuf) p.photo = photoBuf; else delete p.photo;
+    photoBuf = null;
+  }
+  const pic = $("#photoInCard"); if(pic) p.photoInCard = pic.checked;
+  p.updated = today();
+  if(!id) DB.people.push(p);
+  save(); render(); openPerson(p.id);
+  toast(id?"הכרטיס עודכן":"המועמד נוסף לכרטסייה");
+}
+
+function delPerson(id){
+  const p = personById(id);
+  if(!confirm(`למחוק את הכרטיס של ${p.fullName}? גם ההצעות המשויכות אליו יימחקו.`)) return;
+  DB.people = DB.people.filter(x=>x.id!==id);
+  DB.matches = DB.matches.filter(m=>m.a!==id && m.b!==id);
+  save(); closeSheet(); render(); toast("הכרטיס נמחק");
+}
+
+/* ============ matching ============ */
+function suggestScore(a,b){
+  let s = 0;
+  const ageA = parseFloat(a.age), ageB = parseFloat(b.age);
+  if(ageA && ageB){ const d = Math.abs(ageA-ageB); s += d<=2?30:d<=4?21:d<=6?11:3; }
+
+  /* חוג: קודם כול לפי מה שהצדדים הצהירו שהם פתוחים אליו, ורק אחר כך לפי המרחק בסולם */
+  const op = openness(a,b), gap = sectorGap(a,b);
+  if(op===2) s += 40;
+  else if(op===1) s += 26;
+  else if(op===0) s -= 15;
+  else if(gap===0) s += 34;
+  else if(gap===1) s += 16;
+  else if(gap!==null && gap>=2) s -= 20;
+
+  if(a.city && b.city && a.city.trim()===b.city.trim()) s += 12;
+  if(a.edah && b.edah && a.edah.trim()===b.edah.trim()) s += 10;
+  if((b.status||"פנוי")==="פנוי") s += 8;
+  return Math.max(0, Math.min(99, s));
+}
+
+function openSuggest(id){
+  const p = personById(id);
+  const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
+  let pool = DB.people.filter(x=>x.id!==id && (!want || x.gender===want));
+  pool = pool.map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s);
+
+  $("#sheetHead").innerHTML = `<div style="flex:1">
+      <h3>הצעת שידוך</h3>
+      <div class="meta">עבור ${esc(p.fullName)} · מוצגים ${pool.length} מועמדים${want?` (${want})`:""}</div>
+    </div><button class="x" onclick="openPerson('${id}')" aria-label="חזרה">×</button>`;
+
+  const list = pool.map(({x,s})=>{
+    const exists = DB.matches.some(m=>(m.a===id&&m.b===x.id)||(m.b===id&&m.a===x.id));
+    const gap = sectorGap(p,x);
+    const warn = gap!==null && gap>=2 ? `<span class="warnflag" title="פער בסולם החוגים">⚠ ${gap} דרגות</span>` : "";
+    return `<button class="picker-item" ${exists?"disabled style='opacity:.45'":`onclick="createMatch('${id}','${x.id}')"`}>
+      ${avatar(x,32)}
+      <div style="min-width:0">
+        <div style="font-weight:600">${esc(x.fullName)} ${warn}</div>
+        <div style="font-size:12px;color:var(--ink-faint)">${[x.age,x.city,x.community].filter(Boolean).map(esc).join(" · ")||"—"}</div>
+      </div>
+      <span class="score">${exists?"קיים":"התאמה "+s+"%"}</span>
+    </button>`;
+  }).join("");
+
+  $("#sheetBody").innerHTML = `<div class="win-col"><input id="pickQ" placeholder="סינון לפי שם…"
+      style="width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:12px">
+    <div id="pickList">${list || '<div class="empty">אין מועמדים מתאימים בכרטסייה.</div>'}</div></div>`;
+  $("#sheetFoot").innerHTML = `<button class="btn ghost" onclick="openPerson('${id}')">חזרה לכרטיס</button>`;
+  $("#pickQ").addEventListener("input", e=>{
+    const q = e.target.value.trim();
+    $$("#pickList .picker-item").forEach(el=>{
+      el.style.display = !q || el.textContent.includes(q) ? "" : "none";
+    });
+  });
+  openSheet();
+}
+
+function createMatch(a,b){
+  const m = {id:"m"+(DB.seq++)+Date.now().toString(36).slice(-3), a, b, status:"הוצע",
+             created:today(), updated:today(), log:[{d:today(), t:"ההצעה נפתחה"}]};
+  DB.matches.push(m);
+  save(); render(); closeSheet(); setView("matches"); openMatch(m.id);
+  toast("ההצעה נוצרה");
+}
+
+function openMatch(mid){
+  const m = DB.matches.find(x=>x.id===mid); if(!m) return;
+  const a = personById(m.a), b = personById(m.b);
+  if(!a||!b){ toast("אחד המועמדים נמחק"); return; }
+  setView("matches");
+  closeSheet();
+
+  const rows = FIELDS.filter(f=>!["fullName","gender","status","notes","refs","character","maritalStatus"].includes(f.k)).map(f=>{
+    const va = disp(a[f.k]), vb = disp(b[f.k]);
+    let same = va && vb && String(va).trim()===String(vb).trim();
+    let warn = false, note = "";
+
+    if(f.k==="community"){
+      const g = sectorGap(a,b);
+      if(g===1) note = "דרגה אחת";
+      else if(g!==null && g>=2){ warn = true; note = "פער " + g + " דרגות"; }
+    }
+    if(f.k==="openTo"){
+      const op = openness(a,b);
+      if(op===2){ same = true; note = "פתיחות הדדית"; }
+      else if(op===1){ note = "חד־צדדי"; }
+      else if(op===0){ warn = true; note = "אין חפיפה"; }
+    }
+
+    return `<div class="cmp-row ${warn?"warn":same?"match":""}">
+      <div>${va?esc(va):'<span style="color:#c3cad1">—</span>'}</div>
+      <div class="cmp-key">${f.l}${note?`<div class="cmp-note">${note}</div>`:""}</div>
+      <div>${vb?esc(vb):'<span style="color:#c3cad1">—</span>'}</div>
+    </div>`;
+  }).join("");
+
+  const linked = DB.sessions.filter(s=>s.mid===mid)
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
+    .map(s=>{
+      const who = personById(s.pid);
+      return `<div class="tl-item"><div class="tl-dot" style="background:var(--brass)"></div>
+        <div style="flex:1"><div class="tl-date">${esc(s.date)} · ${esc(s.type)} · ${esc(who?who.fullName:"")}</div>
+        <div class="tl-text">${esc(s.notes||"—")}</div></div></div>`;
+    }).join("");
+
+  const log = (m.log||[]).slice().reverse().map(e=>`
+    <div class="tl-item"><div class="tl-dot"></div>
+      <div><div class="tl-date">${esc(e.d)}</div><div class="tl-text">${esc(e.t)}</div></div></div>`).join("");
+
+  $("#matchesHost").innerHTML = `
+    <button class="btn ghost sm" onclick="render()" style="margin-bottom:12px">→ חזרה לרשימת השידוכים</button>
+    <div class="desk">
+      <div class="desk-top">
+        <h3>${esc(a.fullName)} <span style="color:var(--brass)">◇</span> ${esc(b.fullName)}</h3>
+        <select class="mini" id="mStatus" style="margin-inline-start:auto">
+          ${MSTATUSES.map(s=>`<option ${s===m.status?"selected":""}>${s}</option>`).join("")}
+        </select>
+        <button class="btn danger sm" onclick="delMatch('${m.id}')">מחיקת ההצעה</button>
+      </div>
+      <div class="pair">
+        <div class="pair-side">
+          <div class="pair-name">${esc(a.fullName)}</div>
+          <div class="pair-sub">${[a.gender,a.age,a.city].filter(Boolean).map(esc).join(" · ")}</div>
+          <button class="btn sm" onclick="openPerson('${a.id}')">פתיחת הכרטיס</button>
+        </div>
+        <div class="pair-seam"><div class="knot">◇</div></div>
+        <div class="pair-side">
+          <div class="pair-name">${esc(b.fullName)}</div>
+          <div class="pair-sub">${[b.gender,b.age,b.city].filter(Boolean).map(esc).join(" · ")}</div>
+          <button class="btn sm" onclick="openPerson('${b.id}')">פתיחת הכרטיס</button>
+        </div>
+      </div>
+      <div class="cmp">${rows}</div>
+      <div class="timeline">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <input id="logText" placeholder="רישום ביומן ההצעה — שיחה, בירור, פגישה…"
+                 style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--line);border-radius:8px">
+          <button class="btn pri sm" onclick="addLog('${m.id}')">הוספה</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="btn sm" onclick="sessionForm('${a.id}','','${m.id}')">תחקיר עם ${esc(a.fullName.split(" ")[0])}</button>
+          <button class="btn sm" onclick="sessionForm('${b.id}','','${m.id}')">תחקיר עם ${esc(b.fullName.split(" ")[0])}</button>
+        </div>
+        ${linked}
+        ${log || (linked?"":'<div style="color:var(--ink-faint);font-size:13px">אין רישומים ביומן.</div>')}
+      </div>
+    </div>`;
+  $("#mStatus").addEventListener("change", e=>{
+    m.status = e.target.value; m.updated = today();
+    m.log.push({d:today(), t:"הסטטוס עודכן ל: "+m.status});
+    if(m.status==="התארסו"){
+      [a,b].forEach(p=>{ p.status="נסגר"; p.updated=today(); });
+    }
+    save(); openMatch(m.id); toast("הסטטוס עודכן");
+  });
+  $("#logText").addEventListener("keydown", e=>{ if(e.key==="Enter") addLog(m.id); });
+}
+
+function addLog(mid){
+  const m = DB.matches.find(x=>x.id===mid);
+  const t = $("#logText").value.trim();
+  if(!t) return;
+  m.log.push({d:today(), t}); m.updated = today();
+  save(); openMatch(mid);
+}
+function delMatch(mid){
+  if(!confirm("למחוק את ההצעה הזו לצמיתות?")) return;
+  DB.matches = DB.matches.filter(x=>x.id!==mid);
+  save(); render(); toast("ההצעה נמחקה");
+}
+
+/* ============ import ============ */
+const SECTION_TITLES = ["פרטים אישיים","רקע לימודי ותורני","רקע לימודי","רקע משפחתי",
+  "תכונות אופי ובניין אישי","תכונות אופי","מה מחפש","מה מחפשת","מה מחפש (הצעה מבוקשת)",
+  "אנשי קשר לבירורים","אנשי קשר","הצעה מבוקשת","כרטיס שידוכים"];
+
+/* מסמך וורד של מועמד בודד — שורות "כותרת: ערך" מזוהות לשדות */
+function parseProfileText(text){
+  const lines = text.split(/\r?\n/).map(l=>l.replace(/^[\s*•\-–—]+/,"").trim()).filter(Boolean);
+  const p = {id:uid(), created:today(), updated:today(), extra:{}, refs:[]};
+  const rest = [];
+  let inRefs = false;
+
+  lines.forEach(l=>{
+    const clean = l.replace(/[:：]\s*$/,"").trim();
+    if(SECTION_TITLES.some(t=>clean===t || clean.replace(/[*]/g,"")===t)){
+      inRefs = /אנשי קשר/.test(clean);
+      return;
+    }
+    const m = l.match(/^([^:：]{2,24})\s*[:：]\s*(.+)$/);
+    if(m){
+      const label = m[1].trim(), val = m[2].trim();
+      if(inRefs){
+        const ph = val.match(/0\d[\d\-\s]{6,}/);
+        p.refs.push({name: val.replace(/–.*$/,"").replace(/0\d[\d\-\s]{6,}/,"").replace(/[\[\]]/g,"").trim(),
+                     role: label, phone: ph?ph[0].trim():""});
+        return;
+      }
+      const k = guessField(label);
+      if(k !== "__extra" && !p[k]){ p[k] = val; return; }
+      p.extra[label] = val;
+      return;
+    }
+    if(inRefs && l.length>2){ p.refs.push({name:l.replace(/[\[\]]/g,"").trim(), role:"", phone:""}); return; }
+    rest.push(l);
+  });
+
+  if(rest.length) p.notes = [p.notes, rest.join("\n")].filter(Boolean).join("\n");
+  normalizeImported(p);
+  return p;
+}
+
+/* נרמול משותף לכל מסלולי הייבוא */
+function normalizeImported(p){
+  if(p.gender){
+    const g = String(p.gender).trim();
+    if(/^(ז|זכר|בן|גבר|m|male)$/i.test(g)) p.gender="בן";
+    else if(/^(נ|נקבה|בת|אישה|f|female)$/i.test(g)) p.gender="בת";
+  }
+  if(p.age){ const n = String(p.age).match(/\d+/); if(n) p.age = n[0]; }
+  if(p.community){
+    const n = normSector(p.community);
+    if(n !== p.community) p.extra["חוג (כפי שנרשם בקובץ)"] = p.community;
+    p.community = n;
+  }
+  if(p.openTo && !Array.isArray(p.openTo)){
+    const raw = String(p.openTo);
+    const arr = [...new Set(raw.split(/[,;|\/]+/).map(normSector).filter(Boolean))];
+    if(arr.length) p.openTo = arr;
+    else { p.extra["חוגים מתאימים (כפי שנרשם)"] = raw; p.openTo = []; }
+  }
+  if(!p.status || !STATUSES.includes(p.status)) p.status = "פנוי";
+  return p;
+}
+
+function importProfile(text){
+  const p = parseProfileText(text);
+  if(!p.fullName){
+    const guess = text.split(/\r?\n/).map(l=>l.trim()).find(l=>l && l.length<40 && !/[:：]/.test(l));
+    p.fullName = guess || "";
+  }
+  DB.people.push(p);
+  save(); render(); setView("cards"); editPerson(p.id);
+  toast("הכרטיס נקרא מהמסמך — עברו עליו ואשרו");
+}
+
+let pending = null;
+
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", inQ=false;
+  text = text.replace(/^\uFEFF/,"");
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else inQ=false; }
+      else cur+=c;
+    }else{
+      if(c==='"') inQ=true;
+      else if(c===","){ row.push(cur); cur=""; }
+      else if(c==="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; }
+      else if(c!=="\r") cur+=c;
+    }
+  }
+  if(cur||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(c=>String(c).trim()!==""));
+}
+
+function guessField(header){
+  const h = String(header||"").trim().toLowerCase();
+  for(const k in SYN){
+    if(SYN[k].some(s=>h===s.toLowerCase())) return k;
+  }
+  for(const k in SYN){
+    if(SYN[k].some(s=>h.includes(s.toLowerCase()))) return k;
+  }
+  return "__extra";
+}
+
+function handleFile(file){
+  const name = file.name.toLowerCase();
+  const reader = new FileReader();
+
+  if(name.endsWith(".docx")){
+    if(typeof mammoth === "undefined"){ toast("קורא קבצי וורד לא נטען — בדקו חיבור לאינטרנט"); return; }
+    reader.onload = e=>{
+      mammoth.convertToHtml({arrayBuffer:e.target.result}).then(res=>{
+        const doc = new DOMParser().parseFromString(res.value, "text/html");
+        const table = doc.querySelector("table");
+        if(table){
+          const rows = [...table.querySelectorAll("tr")]
+            .map(tr=>[...tr.querySelectorAll("th,td")].map(td=>td.textContent.trim()))
+            .filter(r=>r.some(c=>c));
+          if(rows.length < 2){ toast("הטבלה במסמך ריקה"); return; }
+          pending = {headers:rows[0], rows:rows.slice(1)};
+          showMapping();
+          toast("זוהתה טבלה במסמך");
+        }else{
+          importProfile(doc.body.textContent || "");
+        }
+      }).catch(err=>toast("שגיאה בקריאת מסמך הוורד: "+err.message));
+    };
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+
+  reader.onload = e=>{
+    try{
+      if(name.endsWith(".json")){ importJson(e.target.result); return; }
+      let rows;
+      if(name.endsWith(".csv")){
+        rows = parseCSV(e.target.result);
+      }else{
+        if(typeof XLSX==="undefined"){ toast("טעינת קורא האקסל נכשלה — נסו לשמור כ-CSV"); return; }
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:"", raw:false});
+        rows = rows.filter(r=>r.some(c=>String(c).trim()!==""));
+      }
+      if(rows.length<2){ toast("הקובץ ריק או חסר שורת כותרות"); return; }
+      pending = {headers:rows[0].map(h=>String(h).trim()), rows:rows.slice(1)};
+      showMapping();
+    }catch(err){ toast("שגיאה בקריאת הקובץ: "+err.message); }
+  };
+  if(name.endsWith(".csv")||name.endsWith(".json")) reader.readAsText(file,"UTF-8");
+  else reader.readAsArrayBuffer(file);
+}
+
+function importJson(text){
+  try{
+    const d = JSON.parse(text);
+    if(!d.people) throw new Error("קובץ גיבוי לא תקין");
+    if(DB.people.length && !confirm("לטעון את הגיבוי במקום הנתונים הקיימים?")) return;
+    DB = {people:d.people, matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1};
+    save(); setView("cards"); toast("הגיבוי נטען: "+DB.people.length+" מועמדים");
+  }catch(err){ toast("שגיאה: "+err.message); }
+}
+
+function showMapping(){
+  const opts = f => `<option value="__extra" ${f==="__extra"?"selected":""}>— שמירה כשדה נוסף —</option>
+    <option value="__skip">— לא לייבא —</option>` +
+    FIELDS.map(x=>`<option value="${x.k}" ${f===x.k?"selected":""}>${x.l}</option>`).join("");
+
+  const rowsHtml = pending.headers.map((h,i)=>{
+    const guess = guessField(h);
+    const sample = (pending.rows.find(r=>String(r[i]||"").trim()) || [])[i] || "";
+    return `<tr>
+      <td><b>${esc(h||"עמודה "+(i+1))}</b></td>
+      <td class="sample">${esc(String(sample).slice(0,40))}</td>
+      <td><select data-col="${i}">${opts(guess)}</select></td>
+    </tr>`;
+  }).join("");
+
+  $("#mapHost").classList.remove("hidden");
+  $("#mapHost").innerHTML = `
+    <div class="sect">קישור עמודות · ${pending.rows.length} שורות בקובץ</div>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin-top:0">
+      בדקו שכל עמודה מקושרת לשדה הנכון. עמודות שיישארו כ"שדה נוסף" יישמרו בתוך הכרטיס בשמן המקורי.</p>
+    <table class="maptable"><thead><tr><th>עמודה בקובץ</th><th>דוגמה</th><th>שדה במערכת</th></tr></thead>
+    <tbody>${rowsHtml}</tbody></table>
+    <div style="display:flex;gap:9px;margin-top:14px;align-items:center;flex-wrap:wrap">
+      <button class="btn pri" onclick="runImport()">ייבוא ${pending.rows.length} מועמדים</button>
+      <button class="btn ghost" onclick="cancelImport()">ביטול</button>
+      <label style="font-size:13.5px;color:var(--ink-soft);display:flex;gap:6px;align-items:center">
+        <input type="checkbox" id="skipDup" checked> דילוג על שמות שכבר קיימים
+      </label>
+    </div>`;
+}
+
+function cancelImport(){ pending=null; $("#mapHost").classList.add("hidden"); $("#file").value=""; }
+
+function runImport(){
+  const map = {};
+  $$("#mapHost select[data-col]").forEach(s=>{ map[s.dataset.col] = s.value; });
+  const skipDup = $("#skipDup").checked;
+  const existing = new Set(DB.people.map(p=>String(p.fullName||"").trim()));
+  let added=0, skipped=0;
+
+  pending.rows.forEach(r=>{
+    const p = {id:uid(), created:today(), updated:today(), extra:{}};
+    pending.headers.forEach((h,i)=>{
+      const target = map[i]; const val = String(r[i]==null?"":r[i]).trim();
+      if(!val || target==="__skip") return;
+      if(target==="__extra") p.extra[h||("עמודה "+(i+1))] = val;
+      else p[target] = val;
+    });
+    if(!p.fullName){ skipped++; return; }
+    if(skipDup && existing.has(p.fullName.trim())){ skipped++; return; }
+    normalizeImported(p);
+    existing.add(p.fullName.trim());
+    DB.people.push(p); added++;
+  });
+
+  save(); cancelImport(); setView("cards");
+  toast(`יובאו ${added} מועמדים${skipped?` · דולגו ${skipped}`:""}`);
+}
+
+/* ============ export ============ */
+function download(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+function exportJson(){
+  download(new Blob([JSON.stringify(DB,null,2)],{type:"application/json"}),
+           `גיבוי-שידוכים-${today()}.json`);
+  toast("הגיבוי הורד");
+}
+/* בניית חוברת העבודה — משותפת להורדה ידנית ולגיבוי לדרייב */
+function buildWorkbook(){
+  const extraKeys = [...new Set(DB.people.flatMap(p=>Object.keys(p.extra||{})))];
+  const head = FIELDS.map(f=>f.l).concat(extraKeys);
+  const body = DB.people.map(p=>FIELDS.map(f=>disp(p[f.k])).concat(extraKeys.map(k=>(p.extra||{})[k]||"")));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head,...body]), "מועמדים");
+
+  const mHead = ["צד א","צד ב","סטטוס","נפתח","עודכן","יומן"];
+  const mBody = DB.matches.map(m=>{
+    const a=personById(m.a), b=personById(m.b);
+    return [a?a.fullName:"", b?b.fullName:"", m.status, m.created, m.updated,
+            (m.log||[]).map(e=>e.d+": "+e.t).join(" | ")];
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([mHead,...mBody]), "שידוכים");
+
+  const sHead = ["מועמד","תאריך","סוג","נושאים","סיכום","משימה","בוצע","פגישה הבאה"];
+  const sBody = DB.sessions.map(x=>{
+    const who = personById(x.pid);
+    return [who?who.fullName:"", x.date, x.type, (x.topics||[]).join(", "),
+            x.notes||"", x.actions||"", x.done?"כן":"", x.next||""];
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([sHead,...sBody]), "פגישות");
+  return wb;
+}
+
+function exportXlsx(){
+  if(typeof XLSX==="undefined"){ toast("ספריית האקסל לא נטענה — ייצאו גיבוי JSON"); return; }
+  XLSX.writeFile(buildWorkbook(), `שידוכים-${today()}.xlsx`);
+  toast("הקובץ הורד");
+}
+
+/* ============ פגישות ותיק מקצועי ============ */
+function sessionsOf(pid){
+  return DB.sessions.filter(s=>s.pid===pid).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+}
+function daysSince(d){
+  if(!d) return null;
+  return Math.round((Date.now() - new Date(d).getTime()) / 86400000);
+}
+
+/* תמונת מצב מחושבת מקומית — עובדת תמיד, בלי שום שירות חיצוני */
+function snapshot(pid){
+  const ss = sessionsOf(pid);
+  const counts = {};
+  ss.forEach(s=>(s.topics||[]).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  const openActions = ss.filter(s=>s.actions && !s.done).map(s=>({d:s.date, t:s.actions, id:s.id}));
+  const clar = ss.filter(s=>s.clarity).map(s=>+s.clarity);
+  const next = ss.map(s=>s.next).filter(Boolean).sort()[0];
+  return {
+    count: ss.length,
+    last: ss[0] ? ss[0].date : null,
+    since: ss[0] ? daysSince(ss[0].date) : null,
+    top, openActions, next,
+    clarity: clar.length ? clar[0] : null,
+    trend: clar.length>1 ? clar[0]-clar[clar.length-1] : 0
+  };
+}
+
+function renderDossier(p){
+  const s = snapshot(p.id);
+  const ss = sessionsOf(p.id);
+
+  let box = `<div class="snap">
+    <div class="snap-grid">
+      <div><b>${s.count}</b><span>פגישות</span></div>
+      <div><b>${s.last?esc(s.last):"—"}</b><span>אחרונה${s.since!=null?` · לפני ${s.since} ימים`:""}</span></div>
+      <div><b>${s.clarity?esc(CLARITY[s.clarity]):"—"}</b><span>בהירות הבקשה${s.trend>0?" ↑":s.trend<0?" ↓":""}</span></div>
+      <div><b>${s.next?esc(s.next):"—"}</b><span>פגישה הבאה</span></div>
+    </div>
+    ${s.top.length?`<div class="snap-topics">${s.top.map(([t,n])=>`<span class="tag">${esc(t)} ×${n}</span>`).join("")}</div>`:""}
+    ${s.openActions.length?`<div class="snap-actions"><b>משימות פתוחות</b>${
+      s.openActions.map(a=>`<label class="todo"><input type="checkbox" onchange="markDone('${a.id}')">
+        <span>${esc(a.t)}</span><em>${esc(a.d)}</em></label>`).join("")}</div>`:""}
+  </div>`;
+
+  /* ניתוח מצטבר */
+  const an = p.analysis;
+  box += `<div class="sect" style="display:flex;align-items:center;gap:8px">
+      ניתוח התיק
+      <button class="btn sm" style="margin-inline-start:auto" onclick="runAnalysis('${p.id}')">
+        ${an?"רענון הניתוח":"הפקת ניתוח"}</button>
+    </div>
+    <div id="analysisBox">${an?analysisHtml(an):`
+      <div style="font-size:13.5px;color:var(--ink-faint)">
+        מפיק תמצית מקצועית מכל סיכומי הפגישות: מה עולה בעקביות, מה עדיין לא ברור, ומה כדאי לשאול בפגישה הבאה.
+        ${ss.length?"":"<br><b>צריך לפחות פגישה אחת מתועדת.</b>"}</div>`}</div>`;
+
+  /* יומן הפגישות */
+  box += `<div class="sect" style="display:flex;align-items:center;gap:8px">
+      יומן פגישות (${ss.length})
+      <button class="btn sm pri" style="margin-inline-start:auto" onclick="sessionForm('${p.id}')">+ רישום פגישה</button>
+    </div>`;
+  box += ss.length ? ss.map(x=>`
+    <div class="sess">
+      <div class="sess-head">
+        <span class="sess-type">${esc(x.type||"פגישה")}</span>
+        <span class="sess-date">${esc(x.date||"")}</span>
+        ${x.clarity?`<span class="rating" title="בהירות הבקשה">${"●".repeat(+x.clarity)}${"○".repeat(5-x.clarity)}</span>`:""}
+        <button class="btn ghost sm" style="margin-inline-start:auto" onclick="sessionForm('${p.id}','${x.id}')">עריכה</button>
+      </div>
+      ${(x.topics||[]).length?`<div class="sess-tags">${x.topics.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`:""}
+      ${x.notes?`<div class="sess-notes">${esc(x.notes)}</div>`:""}
+      ${x.actions?`<div class="sess-action ${x.done?"done":""}">◷ ${esc(x.actions)}</div>`:""}
+    </div>`).join("")
+    : `<div style="font-size:13.5px;color:var(--ink-faint)">עדיין לא תועדה פגישה. כל שיחה שנרשמת כאן נכנסת לניתוח.</div>`;
+
+  return box;
+}
+
+function analysisHtml(an){
+  const block = (title, arr) => (arr && arr.length)
+    ? `<div class="an-block"><b>${title}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  return `<div class="analysis">
+    <div class="an-date">הופק ב-${esc(an.date)} · מבוסס על ${an.basedOn||"?"} פגישות</div>
+    ${an.summary?`<p class="an-sum">${esc(an.summary)}</p>`:""}
+    ${block("מה עולה בעקביות", an.wants)}
+    ${block("עדיין לא ברור — לשאול בפגישה הבאה", an.clarify)}
+    ${block("קווים מנחים לחיפוש", an.criteria)}
+    ${block("לשים לב", an.flags)}
+    ${an.raw?`<details><summary>הטקסט המלא</summary><pre>${esc(an.raw)}</pre></details>`:""}
+  </div>`;
+}
+
+function markDone(sid){
+  const s = DB.sessions.find(x=>x.id===sid); if(!s) return;
+  s.done = true; save();
+  if(ui.openPerson) openPerson(ui.openPerson);
+}
+
+function sessionForm(pid, sid, matchId){
+  const p = personById(pid);
+  const s = sid ? DB.sessions.find(x=>x.id===sid) : {date:today(), type:SESSION_TYPES[0], topics:[], clarity:""};
+  $("#sheetHead").innerHTML = `<div style="flex:1">
+      <h3>${sid?"עריכת פגישה":"רישום פגישה"}</h3>
+      <div class="meta">${esc(p.fullName)}</div>
+    </div><button class="x" onclick="openPerson('${pid}','file')" aria-label="חזרה">×</button>`;
+
+  const linkedMatches = DB.matches.filter(m=>m.a===pid||m.b===pid);
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    <div class="form-grid">
+      <div class="field"><label for="s_date">תאריך</label><input id="s_date" type="date" value="${esc(s.date||today())}"></div>
+      <div class="field"><label for="s_type">סוג הפגישה</label>
+        <select id="s_type">${SESSION_TYPES.map(t=>`<option ${t===s.type?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
+      <div class="field wide"><label>נושאים שעלו</label>
+        <div class="multi">${TOPICS.map(t=>
+          `<label><input type="checkbox" data-topic value="${esc(t)}" ${(s.topics||[]).includes(t)?"checked":""}>${esc(t)}</label>`).join("")}</div></div>
+      <div class="field wide"><label for="s_notes">סיכום הפגישה</label>
+        <textarea id="s_notes" style="min-height:150px" placeholder="מה נאמר, מה השתנה מאז הפעם הקודמת, ציטוטים ששווה לזכור…">${esc(s.notes||"")}</textarea></div>
+      <div class="field wide"><label for="s_clarity">עד כמה הבקשה ברורה בשלב הזה</label>
+        <select id="s_clarity"><option value="">לא נקבע</option>
+          ${[1,2,3,4,5].map(n=>`<option value="${n}" ${String(s.clarity)===String(n)?"selected":""}>${n} — ${CLARITY[n]}</option>`).join("")}</select></div>
+      <div class="field wide"><label for="s_actions">משימה להמשך</label>
+        <input id="s_actions" value="${esc(s.actions||"")}" placeholder="לברר אצל ראש הישיבה, לחזור לאמא, להציע את…"></div>
+      <div class="field"><label for="s_next">פגישה הבאה</label><input id="s_next" type="date" value="${esc(s.next||"")}"></div>
+      ${linkedMatches.length?`<div class="field"><label for="s_match">קשור להצעה</label>
+        <select id="s_match"><option value="">— ללא —</option>${linkedMatches.map(m=>{
+          const o = personById(m.a===pid?m.b:m.a);
+          return `<option value="${m.id}" ${(matchId||s.mid)===m.id?"selected":""}>${esc(o?o.fullName:"—")}</option>`;
+        }).join("")}</select></div>`:""}
+    </div></div>`;
+
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="saveSession('${pid}','${sid||""}')">שמירת הפגישה</button>
+    <button class="btn ghost" onclick="openPerson('${pid}')">ביטול</button>
+    ${sid?`<button class="btn danger sm" style="margin-inline-start:auto" onclick="delSession('${sid}','${pid}')">מחיקה</button>`:""}`;
+  openSheet();
+}
+
+function saveSession(pid, sid){
+  const s = sid ? DB.sessions.find(x=>x.id===sid) : {id:"s"+(DB.seq++)+Date.now().toString(36).slice(-3), pid};
+  s.date = $("#s_date").value || today();
+  s.type = $("#s_type").value;
+  s.topics = $$("[data-topic]").filter(b=>b.checked).map(b=>b.value);
+  s.notes = $("#s_notes").value.trim();
+  s.clarity = $("#s_clarity").value;
+  s.actions = $("#s_actions").value.trim();
+  s.next = $("#s_next").value;
+  const mSel = $("#s_match"); if(mSel) s.mid = mSel.value;
+  if(!sid) DB.sessions.push(s);
+  const p = personById(pid); p.updated = today();
+  save(); openPerson(pid); toast(sid?"הפגישה עודכנה":"הפגישה נרשמה");
+}
+
+function delSession(sid, pid){
+  if(!confirm("למחוק את סיכום הפגישה?")) return;
+  DB.sessions = DB.sessions.filter(x=>x.id!==sid);
+  save(); openPerson(pid); toast("הפגישה נמחקה");
+}
+
+/* ---- ניתוח מבוסס מודל ---- */
+/* ---- שכבת הפנייה לשירות הניתוח — תומכת בשני ספקים ---- */
+const GEMINI_DEFAULT = "gemini-3.5-flash";
+
+function aiCfg(){
+  const legacy = localStorage.getItem("anthropic_key");
+  if(legacy && !localStorage.getItem("ai_key")){
+    localStorage.setItem("ai_key", legacy);
+    localStorage.setItem("ai_provider", "anthropic");
+    localStorage.removeItem("anthropic_key");
+  }
+  return {
+    provider: localStorage.getItem("ai_provider") || "anthropic",
+    key: (localStorage.getItem("ai_key") || "").trim(),
+    model: localStorage.getItem("ai_model") || ""
+  };
+}
+
+function aiError(status, provider){
+  if(status === 401 || status === 403)
+    return provider === "gemini"
+      ? "המפתח נדחה (" + status + "). ודאו שזה מפתח Gemini תקף מ-Google AI Studio ושהוא לא הוגבל לדומיין אחר."
+      : "המפתח נדחה (" + status + "). אם הזנתם מפתח של Gemini — יש לבחור בספק Google למעלה.";
+  if(status === 404) return "המודל לא נמצא (404). לחצו על 'טעינת המודלים הזמינים' ובחרו מהרשימה.";
+  if(status === 429) return "חריגה ממכסת השימוש (429). נסו שוב מאוחר יותר.";
+  if(status >= 500) return "תקלה זמנית אצל הספק (" + status + "). נסו שוב.";
+  return "השירות החזיר שגיאה " + status + ".";
+}
+
+async function callAI(prompt){
+  const cfg = aiCfg();
+
+  if(cfg.provider === "gemini"){
+    if(!cfg.key) throw new Error("לא הוזן מפתח Gemini בהגדרות.");
+    const model = cfg.model || GEMINI_DEFAULT;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json", "x-goog-api-key":cfg.key},
+      body: JSON.stringify({
+        contents:[{role:"user", parts:[{text:prompt}]}],
+        generationConfig:{temperature:0.4, maxOutputTokens:2000}
+      })
+    });
+    if(!res.ok) throw new Error(aiError(res.status, "gemini"));
+    const d = await res.json();
+    if(!d.candidates || !d.candidates.length){
+      const why = (d.promptFeedback && d.promptFeedback.blockReason) || "";
+      throw new Error("לא התקבלה תשובה" + (why ? " (" + why + ")" : "") + ".");
+    }
+    return (d.candidates[0].content.parts || []).map(x=>x.text).filter(Boolean).join("\n");
+  }
+
+  const headers = {"Content-Type":"application/json"};
+  if(cfg.key){
+    headers["x-api-key"] = cfg.key;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  const res = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST", headers,
+    body: JSON.stringify({model: cfg.model || "claude-sonnet-4-6", max_tokens:2000,
+                          messages:[{role:"user", content:prompt}]})
+  });
+  if(!res.ok) throw new Error(aiError(res.status, "anthropic"));
+  const data = await res.json();
+  return data.content.filter(x=>x.type==="text").map(x=>x.text).join("\n");
+}
+
+/* שליפת המודלים שהמפתח באמת מורשה להם — כדי שהרשימה לא תתיישן */
+async function listModels(){
+  const cfg = aiCfg();
+  const st = $("#aiStatus");
+  if(cfg.provider !== "gemini"){
+    st.innerHTML = `<span style="color:var(--ink-soft)">רשימת מודלים אוטומטית זמינה כרגע ל-Gemini בלבד. עבור Claude אפשר להשאיר ריק לברירת המחדל.</span>`;
+    return;
+  }
+  if(!cfg.key){ st.innerHTML = `<span style="color:var(--rose)">קודם שמרו מפתח.</span>`; return; }
+  st.textContent = "טוען…";
+  try{
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models",
+      {headers:{"x-goog-api-key":cfg.key}});
+    if(!res.ok) throw new Error(aiError(res.status, "gemini"));
+    const d = await res.json();
+    const names = (d.models||[])
+      .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+      .map(m=>String(m.name).replace(/^models\//,""))
+      .filter(n=>/gemini/i.test(n));
+    if(!names.length) throw new Error("לא נמצאו מודלים זמינים למפתח הזה.");
+    $("#dlModels").innerHTML = names.map(n=>`<option value="${esc(n)}">`).join("");
+    if(!$("#aiModel").value) $("#aiModel").value = names.find(n=>/flash/.test(n)) || names[0];
+    st.innerHTML = `<span style="color:var(--teal)">נמצאו ${names.length} מודלים. פתחו את השדה ובחרו.</span>`;
+  }catch(err){ st.innerHTML = `<span style="color:var(--rose)">${esc(err.message)}</span>`; }
+}
+
+async function testAI(){
+  const st = $("#aiStatus");
+  st.textContent = "בודק…";
+  try{
+    const out = await callAI("ענה במילה אחת בלבד: תקין");
+    st.innerHTML = `<span style="color:var(--teal)">החיבור עובד. תשובת הבדיקה: ${esc(out.trim().slice(0,40))}</span>`;
+  }catch(err){ st.innerHTML = `<span style="color:var(--rose)">${esc(err.message)}</span>`; }
+}
+
+function buildPrompt(p){
+  const ss = sessionsOf(p.id).slice().reverse();
+  const prof = FIELDS.filter(f=>p[f.k] && f.k!=="notes")
+    .map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
+  const log = ss.map((s,i)=>
+    `--- פגישה ${i+1} · ${s.date} · ${s.type}${s.clarity?` · בהירות ${s.clarity}/5`:""}
+נושאים: ${(s.topics||[]).join(", ")||"לא סומנו"}
+סיכום: ${s.notes||"(ללא)"}
+${s.actions?"משימה: "+s.actions:""}`).join("\n");
+
+  return `אתה עוזר לשדכן/ית מקצועי/ת בשירות שידוכים אישי. לפניך תיק של מועמד/ת: פרטי רקע וסיכומי הפגישות האישיות שנערכו איתו/ה.
+
+המשימה: להפיק תמצית מקצועית שתעזור לשדכן/ית להתכונן לפגישה הבאה ולכוון את החיפוש.
+
+כללים מחייבים:
+- הסתמך אך ורק על מה שכתוב בסיכומים. אל תמציא ואל תשלים פרטים חסרים.
+- אל תאבחן, אל תתייג באבחנות פסיכולוגיות ואל תשפוט את המועמד/ת. תאר מה נאמר, לא מה "מסתתר מאחורי".
+- כשמשהו לא ברור או סותר בין פגישות — נסח אותו כשאלה לבירור ולא כמסקנה.
+- כתוב בעברית, ענייני, קצר. כל פריט משפט אחד.
+
+פרטי רקע:
+${prof}
+
+סיכומי הפגישות (מהישן לחדש):
+${log}
+
+החזר JSON בלבד, בלי טקסט לפני או אחרי ובלי סימוני קוד, במבנה:
+{"summary":"פסקה אחת של 2-3 משפטים","wants":["מה עולה בעקביות כבקשה"],"clarify":["מה עדיין לא ברור ושווה לשאול"],"criteria":["קווים מנחים מעשיים לחיפוש"],"flags":["נקודות שדורשות תשומת לב, אם יש"]}`;
+}
+
+async function runAnalysis(pid){
+  const p = personById(pid);
+  const ss = sessionsOf(pid);
+  if(!ss.length){ toast("צריך לפחות פגישה אחת מתועדת"); return; }
+  const box = $("#analysisBox");
+  if(box) box.innerHTML = `<div class="an-load">מנתח ${ss.length} פגישות…</div>`;
+  try{
+    const raw = await callAI(buildPrompt(p));
+    let parsed = null;
+    try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
+    p.analysis = parsed
+      ? Object.assign({date:today(), basedOn:ss.length}, parsed)
+      : {date:today(), basedOn:ss.length, summary:"", raw};
+    p.updated = today();
+    save(); openPerson(pid); toast("הניתוח הופק");
+  }catch(err){
+    if(box) box.innerHTML = `<div class="an-load" style="color:var(--rose)">${esc(err.message)}</div>`;
+  }
+}
+
+/* ============ העלאת מסמך לתיק ============ */
+let docDraft = null;
+
+function readDoc(file, pid){
+  const name = file.name.toLowerCase();
+  const fr = new FileReader();
+  if(name.endsWith(".docx")){
+    if(typeof mammoth === "undefined"){ toast("קורא הוורד לא נטען"); return; }
+    fr.onload = e=>mammoth.extractRawText({arrayBuffer:e.target.result})
+      .then(r=>organizeDoc(pid, r.value))
+      .catch(err=>toast("שגיאה בקריאת המסמך: "+err.message));
+    fr.readAsArrayBuffer(file);
+  }else{
+    fr.onload = e=>organizeDoc(pid, e.target.result);
+    fr.readAsText(file, "UTF-8");
+  }
+}
+
+async function organizeDoc(pid, text){
+  text = (text||"").trim();
+  if(text.length < 20){ toast("המסמך ריק או קצר מדי"); return; }
+  const p = personById(pid);
+  $("#sheetBody").innerHTML = `<div class="win-col"><div class="an-load">קורא את המסמך ומסדר אותו…</div></div>`;
+
+  const prompt = `לפניך טקסט גולמי ממסמך שהשדכנית ניהלה על מועמד/ת בשם ${p.fullName}. סדר אותו לרישומים מובנים.
+
+כללים מחייבים:
+- אל תמציא כלום. אם אין תאריך לפגישה — החזר מחרוזת ריקה בשדה date. אל תנחש תאריכים.
+- אל תשכתב את התוכן ואל תייפה אותו. אתה מסדר, לא כותב מחדש. שמור על הניסוח המקורי ככל האפשר.
+- אם הטקסט הוא רצף אחד בלי הפרדה לפגישות — החזר פגישה אחת עם כל התוכן.
+- שדה type חייב להיות אחד מ: ${SESSION_TYPES.join(" / ")}
+- שדה topics מתוך הרשימה בלבד: ${TOPICS.join(" / ")}
+- ב-profile החזר אך ורק פרטים עובדתיים שכתובים במפורש בטקסט. מפתחות אפשריים: ${FIELDS.filter(f=>!["refs","openTo"].includes(f.k)).map(f=>f.k).join(", ")}
+- כל מה שלא הצלחת לשייך — לשדה leftover.
+
+הטקסט:
+${text.slice(0,12000)}
+
+החזר JSON בלבד, בלי סימוני קוד:
+{"sessions":[{"date":"YYYY-MM-DD או ריק","type":"","topics":[],"notes":"","actions":""}],"profile":{},"leftover":""}`;
+
+  try{
+    const raw = await callAI(prompt);
+    let parsed = null;
+    try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
+    if(!parsed || !parsed.sessions) throw new Error("bad");
+    docDraft = {pid, ...parsed};
+  }catch(err){
+    /* בלי שירות ניתוח — המסמך נכנס כרישום אחד, בלי לאבד כלום */
+    docDraft = {pid, sessions:[{date:"", type:SESSION_TYPES[1], topics:[], notes:text, actions:""}],
+                profile:{}, leftover:"", offline:true};
+  }
+  reviewDoc(pid);
+}
+
+function reviewDoc(pid){
+  const p = personById(pid);
+  const d = docDraft;
+
+  const sess = (d.sessions||[]).map((s,i)=>`
+    <div class="draft">
+      <label class="draft-head">
+        <input type="checkbox" data-ds="${i}" checked>
+        <select data-dtype="${i}">${SESSION_TYPES.map(t=>`<option ${t===s.type?"selected":""}>${esc(t)}</option>`).join("")}</select>
+        <input type="date" data-ddate="${i}" value="${esc(s.date||"")}">
+        ${s.date?"":`<span class="warnflag">ללא תאריך</span>`}
+      </label>
+      ${(s.topics||[]).length?`<div class="sess-tags">${s.topics.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`:""}
+      <textarea data-dnotes="${i}">${esc(s.notes||"")}</textarea>
+      ${s.actions?`<div class="sess-action">◷ ${esc(s.actions)}</div>`:""}
+    </div>`).join("");
+
+  const prof = Object.entries(d.profile||{})
+    .filter(([k,v])=>v && FIELDS.some(f=>f.k===k))
+    .map(([k,v])=>{
+      const f = FIELDS.find(x=>x.k===k), cur = disp(p[k]);
+      return `<label class="draft-field">
+        <input type="checkbox" data-dp="${esc(k)}" ${cur?"":"checked"}>
+        <span><b>${f.l}:</b> ${esc(v)}
+        ${cur?`<em class="over">מחליף את: ${esc(cur)}</em>`:""}</span></label>`;
+    }).join("");
+
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    <div class="card-hint">${d.offline
+      ? "המסמך נקלט כרישום אחד ללא סידור אוטומטי (אין חיבור לשירות הניתוח). אפשר לערוך אותו כאן ולפצל ידנית אחר כך."
+      : "עברו על מה שזוהה, תקנו מה שצריך, וסמנו מה להכניס לתיק. שום דבר לא נשמר עד אישור."}</div>
+
+    <div class="sect">פגישות שזוהו (${(d.sessions||[]).length})</div>
+    ${sess || `<div style="color:var(--ink-faint);font-size:13.5px">לא זוהו פגישות.</div>`}
+
+    ${prof?`<div class="sect">פרטים להשלמה בכרטיס</div>${prof}`:""}
+
+    ${d.leftover?`<div class="sect">טקסט שלא שויך</div>
+      <label class="draft-field"><input type="checkbox" data-dleft checked>
+      <span>לצרף להערות הכרטיס</span></label>
+      <div class="sess-notes" style="margin-top:6px">${esc(d.leftover)}</div>`:""}
+  </div>`;
+
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="applyDoc()">הוספה לתיק</button>
+    <button class="btn ghost" onclick="docDraft=null;openPerson('${pid}','file')">ביטול</button>`;
+}
+
+function applyDoc(){
+  const d = docDraft; if(!d) return;
+  const p = personById(d.pid);
+  let added = 0;
+
+  (d.sessions||[]).forEach((s,i)=>{
+    const box = document.querySelector(`[data-ds="${i}"]`);
+    if(!box || !box.checked) return;
+    DB.sessions.push({
+      id: "s"+(DB.seq++)+Date.now().toString(36).slice(-3)+i,
+      pid: d.pid,
+      date: document.querySelector(`[data-ddate="${i}"]`).value || today(),
+      type: document.querySelector(`[data-dtype="${i}"]`).value,
+      topics: s.topics || [],
+      notes: document.querySelector(`[data-dnotes="${i}"]`).value.trim(),
+      actions: s.actions || "",
+      next: "", fromDoc: true
+    });
+    added++;
+  });
+
+  $$("[data-dp]").forEach(box=>{
+    if(box.checked) p[box.dataset.dp] = d.profile[box.dataset.dp];
+  });
+
+  const left = document.querySelector("[data-dleft]");
+  if(left && left.checked && d.leftover){
+    p.notes = [p.notes, d.leftover].filter(Boolean).join("\n");
+  }
+
+  p.updated = today();
+  docDraft = null;
+  save(); render(); openPerson(p.id, "file");
+  toast(added ? `נוספו ${added} רישומים לתיק` : "התיק עודכן");
+}
+
+/* ============ כרטיס שידוכים ============ */
+const CARD_SECTIONS = [
+  {k:"family",    l:"רקע משפחתי"},
+  {k:"character", l:"תכונות אופי ובניין אישי"},
+  {k:"looking",   l:"מה מחפש/ת"}
+];
+
+function cardOf(p){
+  const c = p.card || {};
+  return {
+    family:    c.family    != null ? c.family    : (p.family    || ""),
+    character: c.character != null ? c.character : (p.character || ""),
+    looking:   c.looking   != null ? c.looking   : (p.looking   || ""),
+    date: c.date || ""
+  };
+}
+
+function cardRows(p){
+  const isF = p.gender === "בת";
+  return {
+    "פרטים אישיים": [
+      ["שם", p.fullName], ["גיל", p.age], ["גובה", p.height],
+      ["מקום מגורים", p.city], ["מצב משפחתי", p.maritalStatus || "רווק/ה"],
+      ["חוג", p.community], ["עדה", p.edah]
+    ],
+    "רקע לימודי ותורני": [
+      [isF ? "סמינר / מדרשה" : "ישיבה", p.study],
+      [isF ? "שירות לאומי" : "שירות צבאי", p.service],
+      ["עיסוק נוכחי", p.occupation]
+    ],
+    "רקע משפחתי": [
+      ["מגורי ההורים", p.parentsHome]
+    ]
+  };
+}
+
+function cardText(p){
+  const c = cardOf(p), rows = cardRows(p);
+  const fill = v => (v && String(v).trim()) ? String(v).trim() : "[להשלים]";
+  let out = `*כרטיס שידוכים — ${p.fullName || "[להשלים]"}*\n`;
+  Object.entries(rows).forEach(([title, list])=>{
+    const lines = list.filter(([,v])=>v || title==="פרטים אישיים");
+    if(title==="רקע משפחתי"){
+      out += `\n*${title}*\n` + lines.map(([l,v])=>`${l}: ${fill(v)}`).join("\n");
+      out += `\n${fill(c.family)}\n`;
+    }else{
+      out += `\n*${title}*\n` + lines.map(([l,v])=>`${l}: ${fill(v)}`).join("\n") + "\n";
+    }
+  });
+  out += `\n*תכונות אופי ובניין אישי*\n${fill(c.character)}\n`;
+  out += `\n*מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)*\n${fill(c.looking)}\n`;
+  const refs = (p.refs||[]).filter(r=>r.name||r.phone);
+  out += `\n*אנשי קשר לבירורים*\n` + (refs.length
+    ? refs.map(r=>`${r.role?r.role+": ":""}${r.name||""}${r.phone?" – "+r.phone:" – [טלפון]"}`).join("\n")
+    : "[להשלים]");
+  return out;
+}
+
+let cardMode = "edit";
+
+function cardView(pid){ openPerson(pid, "card"); }
+
+function renderCardTab(p){
+  const pid = p.id;
+  const c = cardOf(p);
+  if(cardMode === "view"){
+    $("#sheetBody").innerHTML = `<div class="win-col">${renderCardDoc(p)}</div>`;
+  }else{
+    const rows = cardRows(p);
+    let html = `<div class="card-hint">השדות העליונים נלקחים מהכרטיס עצמו — לתיקון שלהם יש לערוך את הכרטיס.
+      שלושת הקטעים למטה ניתנים לכתיבה חופשית, ונשמרים בנפרד מהנתונים הגולמיים.</div>`;
+    Object.entries(rows).forEach(([title,list])=>{
+      html += `<div class="sect">${title}</div><dl style="margin:0">` + list.map(([l,v])=>
+        `<div class="fieldrow"><dt>${l}</dt><dd class="${v?"":"na"}">${v?esc(v):"[להשלים]"}</dd></div>`).join("") + `</dl>`;
+    });
+    html += CARD_SECTIONS.map(s=>`
+      <div class="sect">${s.l}</div>
+      <textarea id="c_${s.k}" style="width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:9px 11px"
+        placeholder="נוסח חופשי — או הפקה אוטומטית מהתיק">${esc(c[s.k])}</textarea>`).join("");
+    html += `<div class="sect">אנשי קשר לבירורים</div>` +
+      ((p.refs||[]).length
+        ? `<dl style="margin:0">` + p.refs.map(r=>
+            `<div class="fieldrow"><dt>${esc(r.role||"ממליץ")}</dt><dd>${esc(r.name||"")}${r.phone?" – "+esc(r.phone):" – [טלפון]"}</dd></div>`).join("") + `</dl>`
+        : `<div style="font-size:13.5px;color:var(--ink-faint)">אין ממליצים בכרטיס. אפשר להוסיף דרך עריכת הכרטיס.</div>`);
+    $("#sheetBody").innerHTML = `<div class="win-col">${html}</div>`;
+  }
+
+  $("#sheetFoot").innerHTML = `
+    <button class="btn sm" onclick="cardMode='${cardMode==="edit"?"view":"edit"}';openPerson('${pid}','card')">
+      ${cardMode==="edit"?"תצוגה מקדימה":"חזרה לעריכה"}</button>
+    ${cardMode==="edit"?`<button class="btn pri" onclick="saveCard('${pid}')">שמירה</button>`:""}
+    <button class="btn" onclick="composeCard('${pid}')">הפקה מהתיק</button>
+    <button class="btn" onclick="copyCard('${pid}')">העתקה לוואטסאפ</button>
+    <button class="btn" onclick="exportCardWord('${pid}')">שמירה כוורד</button>
+    <button class="btn ghost" onclick="window.print()">הדפסה</button>`;
+}
+
+function renderCardDoc(p){
+  const c = cardOf(p), rows = cardRows(p);
+  const val = v => (v && String(v).trim()) ? esc(v) : `<span class="todo-mark">[להשלים]</span>`;
+  let h = `<div class="doc"><h2>כרטיס שידוכים</h2>`;
+  if(p.photo && p.photoInCard) h += `<div class="doc-photo"><img src="${p.photo}" alt=""></div>`;
+  Object.entries(rows).forEach(([title,list])=>{
+    h += `<h3>${title}</h3><ul>` + list.map(([l,v])=>`<li><b>${l}:</b> ${val(v)}</li>`).join("") + `</ul>`;
+    if(title==="רקע משפחתי") h += `<p>${val(c.family)}</p>`;
+  });
+  h += `<h3>תכונות אופי ובניין אישי</h3><p>${val(c.character)}</p>`;
+  h += `<h3>מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)</h3><p>${val(c.looking)}</p>`;
+  const refs = (p.refs||[]).filter(r=>r.name||r.phone);
+  h += `<h3>אנשי קשר לבירורים</h3>` + (refs.length
+    ? `<ul>` + refs.map(r=>`<li><b>${esc(r.role||"ממליץ")}:</b> ${esc(r.name||"")} – ${r.phone?esc(r.phone):`<span class="todo-mark">[טלפון]</span>`}</li>`).join("") + `</ul>`
+    : `<p>${val("")}</p>`);
+  return h + `</div>`;
+}
+
+/* ייצוא הכרטיס כמסמך וורד — HTML עם עטיפת Word, נפתח ישירות בוורד ושומר RTL */
+function exportCardWord(pid){
+  const p = personById(pid);
+  const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" dir="rtl" lang="he">
+<head><meta charset="utf-8"><title>כרטיס שידוכים — ${esc(p.fullName||"")}</title>
+<style>
+@page{margin:2cm}
+body{font-family:"David","Times New Roman",serif;font-size:12pt;direction:rtl;text-align:right;line-height:1.6}
+h2{font-size:18pt;text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:18px}
+h3{font-size:13pt;color:#0f5f5c;border-bottom:1px solid #999;padding-bottom:3px;margin:18px 0 6px}
+ul{margin:0;padding-right:20px}
+p{margin:0;text-align:justify}
+.doc-photo{text-align:center;margin-bottom:14px}
+.doc-photo img{max-width:150px;border:1px solid #999}
+.todo-mark{color:#8c3a4a}
+</style></head>
+<body dir="rtl">${renderCardDoc(p)}</body></html>`;
+  download(new Blob(["\ufeff"+html],{type:"application/msword"}), `כרטיס-שידוכים-${(p.fullName||"מועמד").replace(/\s+/g,"-")}.doc`);
+  toast("הקובץ נשמר — ייפתח בוורד");
+}
+
+function saveCard(pid){
+  const p = personById(pid);
+  p.card = p.card || {};
+  CARD_SECTIONS.forEach(s=>{ const el=$("#c_"+s.k); if(el) p.card[s.k]=el.value.trim(); });
+  p.card.date = today(); p.updated = today();
+  save(); openPerson(pid,"card"); toast("הכרטיס נשמר");
+}
+
+function copyCard(pid){
+  const txt = cardText(personById(pid));
+  navigator.clipboard.writeText(txt).then(()=>toast("הכרטיס הועתק")).catch(()=>{
+    const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove(); toast("הכרטיס הועתק");
+  });
+}
+
+/* ניסוח שלושת הקטעים מתוך כל מה שנצבר בתיק */
+const CARD_STYLE = {
+  "חרדי": "סגנון ישיבתי־חרדי: דגש על עמל התורה, שקידה, יראת שמים ומידות. בלי אזכור שירות צבאי או אקדמיה אלא אם כתוב במפורש.",
+  "חרדל״ני": "סגנון תורני־לאומי: תורת ארץ ישראל, ישיבת הסדר, שילוב של תורה ועשייה, אהבת הארץ והכלל.",
+  "דתי לאומי": "סגנון דתי־לאומי תורני: ערכיות, מחויבות, עשייה ציבורית, שילוב בין תורה ללימודים או קריירה.",
+  "דתי לייט": "סגנון דתי פתוח: ערכי בית, אמינות, שילוב מסורת עם חיים מודרניים. לשון פשוטה ולא עמוסה."
+};
+
+async function composeCard(pid){
+  const p = personById(pid);
+  const ss = sessionsOf(pid);
+  const an = p.analysis;
+  const facts = FIELDS.filter(f=>p[f.k] && !["refs"].includes(f.k)).map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
+  const log = ss.map(s=>`[${s.date} · ${s.type}] ${s.notes||""}`).join("\n");
+  const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
+  const g = p.gender==="בת" ? "בחורה" : "בחור";
+
+  const prompt = `נסח שלושה קטעים לכרטיס שידוכים עבור ${g}, מתוך החומר שנאסף בתיק אצל השדכנית.
+
+${style}
+
+כללים מחייבים:
+- אך ורק על סמך החומר שלמטה. אם אין מספיק מידע לקטע מסוים — החזר בו בדיוק "[להשלים]".
+- בלי הגזמות, בלי סופרלטיבים ריקים ובלי המצאת עובדות (ישיבות, תפקידים, עיסוקים שלא נכתבו).
+- לשון נקייה ומכובדת, 2-4 משפטים לכל קטע.
+- כתוב בגוף שלישי.
+
+נתוני הכרטיס:
+${facts}
+
+${log?`סיכומי הפגישות עם השדכנית:\n${log}`:""}
+${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
+
+החזר JSON בלבד, בלי סימוני קוד:
+{"family":"רקע משפחתי","character":"תכונות אופי ובניין אישי","looking":"מה ${p.gender==="בת"?"מחפשת":"מחפש"} בהצעה"}`;
+
+  const foot = $("#sheetFoot");
+  const old = foot.innerHTML;
+  foot.innerHTML = `<div class="an-load">מנסח מתוך התיק…</div>`;
+  try{
+    const raw = await callAI(prompt);
+    let parsed = null;
+    try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
+    if(!parsed) throw new Error("לא התקבל נוסח תקין — נסו שוב");
+    p.card = Object.assign({}, p.card, parsed, {date:today()});
+    p.updated = today();
+    save(); cardMode="edit"; openPerson(pid,"card");
+    toast("נוסח הופק — עברו עליו לפני שליחה");
+  }catch(err){
+    foot.innerHTML = old;
+    toast(err.message);
+  }
+}
+
+/* ============ גיבוי אוטומטי לגוגל דרייב ============ */
+const DRIVE = {token:null, exp:0, tc:null, busy:false};
+const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const FOLDER_NAME = "גיבויי שידוכים";
+
+function driveCfg(){
+  try{ return JSON.parse(localStorage.getItem("drive_cfg") || "null") ||
+       {clientId:"", enabled:false, hour:1, folderId:"", last:"", keep:14}; }
+  catch(e){ return {clientId:"", enabled:false, hour:1, folderId:"", last:"", keep:14}; }
+}
+function driveSave(cfg){
+  try{ localStorage.setItem("drive_cfg", JSON.stringify(cfg)); }catch(e){}
+}
+function driveStatus(txt, color){
+  const el = $("#driveStatus"); if(!el) return;
+  el.innerHTML = `<span style="color:${color||"var(--ink-soft)"}">${esc(txt)}</span>`;
+}
+
+/* קבלת אסימון גישה. silent=true מנסה בלי להטריד את המשתמשת —
+   עובד כל עוד היא מחוברת לחשבון גוגל בדפדפן. */
+function driveToken(silent){
+  const cfg = driveCfg();
+  return new Promise((resolve, reject)=>{
+    if(!cfg.clientId) return reject(new Error("לא הוגדר Client ID"));
+    if(DRIVE.token && Date.now() < DRIVE.exp - 60000) return resolve(DRIVE.token);
+    if(typeof google === "undefined" || !google.accounts || !google.accounts.oauth2)
+      return reject(new Error("שירות ההרשאות של גוגל לא נטען — בדקו חיבור לאינטרנט"));
+
+    if(!DRIVE.tc){
+      DRIVE.tc = google.accounts.oauth2.initTokenClient({
+        client_id: cfg.clientId,
+        scope: "https://www.googleapis.com/auth/drive.file",
+        callback: resp=>{
+          if(resp.error){ DRIVE._rej && DRIVE._rej(new Error("ההרשאה נדחתה: " + resp.error)); return; }
+          DRIVE.token = resp.access_token;
+          DRIVE.exp = Date.now() + (resp.expires_in || 3600) * 1000;
+          DRIVE._res && DRIVE._res(DRIVE.token);
+        }
+      });
+    }
+    DRIVE._res = resolve; DRIVE._rej = reject;
+    try{ DRIVE.tc.requestAccessToken({prompt: silent ? "" : "consent"}); }
+    catch(e){ reject(e); }
+    setTimeout(()=>reject(new Error("לא התקבלה הרשאה")), silent ? 8000 : 120000);
+  });
+}
+
+async function driveApi(url, token, opts){
+  const res = await fetch(url, Object.assign({}, opts, {
+    headers: Object.assign({Authorization: "Bearer " + token}, (opts&&opts.headers)||{})
+  }));
+  if(!res.ok){
+    const t = await res.text().catch(()=>"");
+    throw new Error("דרייב החזיר " + res.status + (res.status===403 ? " — ודאו ש-Drive API מופעל בפרויקט" : "") +
+                    (t ? " · " + t.slice(0,120) : ""));
+  }
+  return res.json();
+}
+
+async function driveFolder(token){
+  const cfg = driveCfg();
+  if(cfg.folderId){
+    try{ await driveApi(`https://www.googleapis.com/drive/v3/files/${cfg.folderId}?fields=id,trashed`, token);
+         return cfg.folderId; }catch(e){ /* נמחקה — ניצור מחדש */ }
+  }
+  const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found = await driveApi(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, token);
+  let id = found.files && found.files[0] && found.files[0].id;
+  if(!id){
+    const made = await driveApi("https://www.googleapis.com/drive/v3/files", token, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name:FOLDER_NAME, mimeType:"application/vnd.google-apps.folder"})
+    });
+    id = made.id;
+  }
+  cfg.folderId = id; driveSave(cfg);
+  return id;
+}
+
+async function driveBackup(silent){
+  if(DRIVE.busy) return;
+  if(typeof XLSX === "undefined"){ if(!silent) toast("ספריית האקסל לא נטענה"); return; }
+  DRIVE.busy = true;
+  driveStatus("מגבה לדרייב…");
+  try{
+    const token = await driveToken(silent);
+    const folder = await driveFolder(token);
+    const buf = XLSX.write(buildWorkbook(), {bookType:"xlsx", type:"array"});
+    const name = `שידוכים-${today()}.xlsx`;
+    const meta = {name, parents:[folder], mimeType:DRIVE_MIME};
+    const boundary = "sh" + Date.now();
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`,
+      `--${boundary}\r\nContent-Type: ${DRIVE_MIME}\r\n\r\n`,
+      buf,
+      `\r\n--${boundary}--`
+    ], {type:`multipart/related; boundary=${boundary}`});
+
+    await driveApi("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", token,
+                   {method:"POST", body});
+
+    const cfg = driveCfg();
+    cfg.last = new Date().toISOString();
+    driveSave(cfg);
+    driveStatus("הגיבוי האחרון: " + cfg.last.slice(0,16).replace("T"," ") + " · " + name, "var(--teal)");
+    if(!silent) toast("הקובץ הועלה לדרייב");
+    drivePrune().catch(()=>{});
+  }catch(err){
+    driveStatus(err.message, "var(--rose)");
+    if(!silent) toast(err.message);
+  }
+  DRIVE.busy = false;
+}
+
+/* שמירת מספר קבוע של גיבויים אחרונים, כדי שהתיקייה לא תתפוצץ */
+async function drivePrune(){
+  const cfg = driveCfg();
+  const keep = parseInt(cfg.keep,10) || 14;
+  if(!cfg.folderId || !DRIVE.token) return;
+  const q = encodeURIComponent(`'${cfg.folderId}' in parents and trashed=false`);
+  const list = await driveApi(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,createdTime)&pageSize=100`,
+    DRIVE.token);
+  const extra = (list.files||[]).slice(keep);
+  for(const f of extra){
+    await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`,
+      {method:"DELETE", headers:{Authorization:"Bearer " + DRIVE.token}}).catch(()=>{});
+  }
+}
+
+/* המתזמן: דפדפן אינו יכול לפעול כשהמחשב כבוי, ולכן הכלל הוא —
+   אם הגיע מועד הגיבוי היומי ולא בוצע גיבוי מאז, לגבות בהזדמנות הראשונה. */
+function driveDue(){
+  const cfg = driveCfg();
+  if(!cfg.enabled || !cfg.clientId) return false;
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(cfg.hour,10)||1, 0, 0);
+  if(now < target) return false;
+  if(!cfg.last) return true;
+  return new Date(cfg.last) < target;
+}
+function driveTick(){ if(driveDue()) driveBackup(true); }
+
+function renderDrive(){
+  const cfg = driveCfg();
+  const host = $("#driveHost"); if(!host) return;
+  host.innerHTML = `
+    <div class="form-grid" style="max-width:600px">
+      <div class="field wide">
+        <label for="drvId">Client ID של גוגל</label>
+        <input id="drvId" value="${esc(cfg.clientId)}" placeholder="…apps.googleusercontent.com" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="drvHour">שעת הגיבוי היומי</label>
+        <select id="drvHour">${Array.from({length:24},(_,h)=>
+          `<option value="${h}" ${String(cfg.hour)===String(h)?"selected":""}>${String(h).padStart(2,"0")}:00</option>`).join("")}</select>
+      </div>
+      <div class="field">
+        <label for="drvKeep">כמה גיבויים לשמור</label>
+        <input id="drvKeep" type="number" min="3" max="90" value="${esc(cfg.keep||14)}">
+      </div>
+      <div class="field wide">
+        <label class="todo"><input type="checkbox" id="drvOn" ${cfg.enabled?"checked":""}>
+          <span>גיבוי יומי אוטומטי מופעל</span></label>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn sm pri" id="btnDrvSave">שמירת ההגדרות</button>
+      <button class="btn sm" id="btnDrvNow">גיבוי עכשיו</button>
+    </div>
+    <div id="driveStatus" style="font-size:13px;margin-top:9px;min-height:20px">${
+      cfg.last ? "הגיבוי האחרון: " + esc(cfg.last.slice(0,16).replace("T"," "))
+               : "טרם בוצע גיבוי לדרייב."}</div>`;
+
+  $("#btnDrvSave").addEventListener("click",()=>{
+    const c = driveCfg();
+    c.clientId = $("#drvId").value.trim();
+    c.hour = parseInt($("#drvHour").value,10);
+    c.keep = parseInt($("#drvKeep").value,10) || 14;
+    c.enabled = $("#drvOn").checked;
+    driveSave(c);
+    driveStatus("ההגדרות נשמרו.", "var(--teal)");
+    if(c.enabled && !c.last) driveStatus("ההגדרות נשמרו. לחצו על \u05F4גיבוי עכשיו\u05F4 כדי לאשר את ההרשאה פעם אחת.", "var(--teal)");
+  });
+  $("#btnDrvNow").addEventListener("click",()=>driveBackup(false));
+}
+
+/* ============ מעקב ============ */
+function renderFollowup(){
+  const host = $("#followupHost");
+  const upcoming = DB.sessions.filter(s=>s.next && s.next>=today())
+    .sort((a,b)=>a.next.localeCompare(b.next));
+  const tasks = DB.sessions.filter(s=>s.actions && !s.done)
+    .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const stale = DB.people.filter(p=>{
+    if((p.status||"פנוי")!=="פנוי") return false;
+    const ss = sessionsOf(p.id);
+    if(!ss.length) return true;
+    return daysSince(ss[0].date) > 30;
+  });
+
+  const line = (pid, main, side) => {
+    const p = personById(pid); if(!p) return "";
+    return `<button class="mrow" onclick="openPerson('${pid}')">
+      ${avatar(p,32)}
+      <span class="names" style="font-size:15px">${esc(p.fullName)}
+        <div style="font-family:var(--body);font-size:13px;color:var(--ink-soft)">${esc(main)}</div></span>
+      <span style="font-size:12px;color:var(--ink-faint)">${esc(side)}</span>
+    </button>`;
+  };
+
+  host.innerHTML = `
+    <div class="sect">פגישות שנקבעו (${upcoming.length})</div>
+    ${upcoming.length ? upcoming.map(s=>line(s.pid, s.type, s.next)).join("")
+      : `<div style="color:var(--ink-faint);font-size:13.5px">לא נקבעו פגישות עתידיות.</div>`}
+
+    <div class="sect">משימות פתוחות (${tasks.length})</div>
+    ${tasks.length ? tasks.map(s=>line(s.pid, s.actions, "מפגישת " + s.date)).join("")
+      : `<div style="color:var(--ink-faint);font-size:13.5px">אין משימות פתוחות.</div>`}
+
+    <div class="sect">פנויים ללא קשר מעל חודש (${stale.length})</div>
+    ${stale.length ? stale.map(p=>{
+        const ss = sessionsOf(p.id);
+        return line(p.id, ss.length?("פגישה אחרונה: "+ss[0].date):"טרם נערכה פגישה",
+                    ss.length?`לפני ${daysSince(ss[0].date)} ימים`:"חדש");
+      }).join("")
+      : `<div style="color:var(--ink-faint);font-size:13.5px">כולם מעודכנים.</div>`}`;
+}
+
+/* ============ גיבוי בענן — רק הבלוב המוצפן עולה ============ */
+const CLOUD = {cfg:null, app:null, auth:null, fs:null, user:null, auto:false, busy:false};
+
+function cloudCfg(){
+  try{ return JSON.parse(localStorage.getItem("fb_cfg")||"null"); }catch(e){ return null; }
+}
+
+async function cloudInit(){
+  const cfg = cloudCfg();
+  if(!cfg) throw new Error("לא הוגדר חיבור לענן");
+  if(CLOUD.app) return;
+  const [{initializeApp}, auth, fs] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js")
+  ]);
+  CLOUD.app = initializeApp(cfg);
+  CLOUD.auth = auth; CLOUD.fs = fs;
+  CLOUD._auth = auth.getAuth(CLOUD.app);
+  CLOUD._db = fs.getFirestore(CLOUD.app);
+  auth.onAuthStateChanged(CLOUD._auth, u=>{ CLOUD.user = u; renderCloud(); });
+}
+
+async function cloudLogin(){
+  const email = $("#fbEmail").value.trim(), pass = $("#fbPass").value;
+  if(!email || !pass){ toast("צריך אימייל וסיסמה"); return; }
+  try{
+    await cloudInit();
+    await CLOUD.auth.signInWithEmailAndPassword(CLOUD._auth, email, pass);
+    toast("מחוברת לענן");
+  }catch(e){ toast("התחברות נכשלה: " + (e.code||e.message)); }
+}
+
+async function cloudLogout(){
+  if(CLOUD._auth) await CLOUD.auth.signOut(CLOUD._auth);
+  CLOUD.user = null; renderCloud(); toast("נותקת מהענן");
+}
+
+async function cloudPush(silent){
+  if(CRY.plain){ if(!silent) toast("צריך להפעיל קוד כניסה לפני גיבוי לענן"); return; }
+  if(!CLOUD.user || CLOUD.busy) return;
+  CLOUD.busy = true;
+  try{
+    const blob = await sealDB();
+    await CLOUD.fs.setDoc(CLOUD.fs.doc(CLOUD._db, "vaults", CLOUD.user.uid), {
+      blob, updated: new Date().toISOString(),
+      people: DB.people.length, sessions: DB.sessions.length
+    });
+    localStorage.setItem("cloud_last", new Date().toISOString());
+    if(!silent) toast("הגיבוי עלה לענן");
+    renderCloud();
+  }catch(e){ if(!silent) toast("העלאה נכשלה: " + (e.code||e.message)); }
+  CLOUD.busy = false;
+}
+
+async function cloudPull(){
+  if(!CLOUD.user){ toast("צריך להתחבר קודם"); return; }
+  try{
+    const snap = await CLOUD.fs.getDoc(CLOUD.fs.doc(CLOUD._db, "vaults", CLOUD.user.uid));
+    if(!snap.exists()){ toast("אין גיבוי בענן"); return; }
+    const data = snap.data();
+    if(!confirm(`הגיבוי בענן מ-${(data.updated||"").slice(0,16).replace("T"," ")} מכיל ${data.people} מועמדים ו-${data.sessions} פגישות.\\nהוא יחליף את מה שנמצא כרגע במחשב. להמשיך?`)) return;
+    const r = await ask({title:"שחזור מהענן",
+      note:"הגיבוי מוצפן. הזינו את קוד הכניסה שאיתו הוא נוצר (או קוד שחזור).",
+      fields:[{label:"קוד כניסה", type:"password"}]});
+    if(!r || !r[0]) return;
+    const pass = r[0];
+    const d = await openVault(data.blob, pass);
+    adoptDB(d);
+    save(); render(); setView("cards");
+    toast("הגיבוי שוחזר מהענן");
+  }catch(e){ toast("שחזור נכשל — ייתכן שהקוד שגוי"); }
+}
+
+function renderCloud(){
+  const host = $("#cloudHost"); if(!host) return;
+  const cfg = cloudCfg();
+  const last = localStorage.getItem("cloud_last");
+  host.innerHTML = `
+    ${!cfg ? `
+      <p style="font-size:13.5px;color:var(--ink-soft)">
+        הגיבוי בענן דורש פרויקט Firebase. הדביקו כאן את אובייקט ההגדרות מהפרויקט
+        (Project settings ← Your apps ← Config). הוא אינו סודי.</p>
+      <textarea id="fbCfg" style="width:100%;min-height:110px;border:1px solid var(--line);border-radius:9px;padding:9px;font-family:monospace;font-size:12px"
+        placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'></textarea>
+      <button class="btn pri" id="btnSaveCfg" style="margin-top:8px">שמירת ההגדרות</button>
+    ` : !CLOUD.user ? `
+      <div class="form-grid" style="max-width:460px">
+        <div class="field"><label for="fbEmail">אימייל</label><input id="fbEmail" type="email" autocomplete="username"></div>
+        <div class="field"><label for="fbPass">סיסמה</label><input id="fbPass" type="password" autocomplete="current-password"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn pri" id="btnCloudLogin">התחברות</button>
+        <button class="btn ghost sm" id="btnForgetCfg">החלפת פרויקט</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin-top:8px">
+        המשתמש נוצר פעם אחת ב-Firebase Console ← Authentication ← Users.</p>
+    ` : `
+      <div class="cloud-on">
+        <b>מחוברת</b> · ${esc(CLOUD.user.email||"")}
+        ${last?`<span>גיבוי אחרון: ${esc(last.slice(0,16).replace("T"," "))}</span>`:`<span>עדיין לא הועלה גיבוי</span>`}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn pri" id="btnPush">העלאת גיבוי עכשיו</button>
+        <button class="btn" id="btnPull">שחזור מהענן</button>
+        <button class="btn ghost sm" id="btnCloudOut">ניתוק</button>
+      </div>
+      <label class="todo" style="margin-top:10px">
+        <input type="checkbox" id="autoSync" ${CLOUD.auto?"checked":""}>
+        <span>גיבוי אוטומטי אחרי כל שינוי</span></label>
+    `}
+    <details style="margin-top:14px">
+      <summary style="font-size:13px;color:var(--ink-soft);cursor:pointer">כללי האבטחה שצריך להגדיר ב-Firestore</summary>
+      <pre class="rules">rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    match /vaults/{uid} {
+      allow read, write: if request.auth != null
+                         &amp;&amp; request.auth.uid == uid;
+    }
+  }
+}</pre>
+      <p style="font-size:12.5px;color:var(--ink-faint)">בלי הכללים האלה כל אחד יוכל לקרוא את המסמך.
+        גם אז הוא יקבל טקסט מוצפן בלבד, אבל אין סיבה לוותר על שכבה הזו.</p>
+    </details>`;
+
+  const on = (id, fn) => { const el = $("#"+id); if(el) el.addEventListener("click", fn); };
+  on("btnSaveCfg", ()=>{
+    try{
+      const cfg = JSON.parse($("#fbCfg").value.trim());
+      if(!cfg.apiKey || !cfg.projectId) throw new Error("חסרים שדות");
+      localStorage.setItem("fb_cfg", JSON.stringify(cfg));
+      renderCloud(); toast("ההגדרות נשמרו");
+    }catch(e){ toast("ההגדרות אינן תקינות: " + e.message); }
+  });
+  on("btnForgetCfg", ()=>{ localStorage.removeItem("fb_cfg"); renderCloud(); });
+  on("btnCloudLogin", cloudLogin);
+  on("btnCloudOut", cloudLogout);
+  on("btnPush", ()=>cloudPush(false));
+  on("btnPull", cloudPull);
+  const auto = $("#autoSync");
+  if(auto) auto.addEventListener("change", e=>{
+    CLOUD.auto = e.target.checked;
+    localStorage.setItem("cloud_auto", CLOUD.auto ? "1" : "");
+    if(CLOUD.auto) cloudPush(false);
+  });
+}
+
+async function changePass(){
+  if(CRY.plain){ toast("אין קוד מוגדר — רעננו את העמוד כדי להגדיר"); return; }
+  const r = await ask({
+    title: "החלפת קוד הכניסה",
+    note: "קוד השחזור הקיים ימשיך לעבוד גם אחרי ההחלפה.",
+    fields: [{label:"הקוד הנוכחי", type:"password"},
+             {label:"קוד חדש (8 תווים לפחות)", type:"password"},
+             {label:"שוב, לאימות", type:"password"}]
+  });
+  if(!r) return;
+  const [cur, n1, n2] = r;
+  if(!cur) return;
+  try{ await openVault(localStorage.getItem(VAULT), cur); }
+  catch(e){ toast("הקוד הנוכחי שגוי"); return; }
+  if(!n1 || n1.length < 8){ toast("קוד קצר מדי"); return; }
+  if(n1 !== n2){ toast("הקודים אינם זהים"); return; }
+  if(CRY.v === 2 && CRY.rawDEK){
+    CRY.salt = rnd(16);
+    CRY.wrapPass = await wrapDEK(CRY.rawDEK, await deriveKey(n1, CRY.salt));
+  }else{
+    CRY.salt = rnd(16);
+    CRY.key = await deriveKey(n1, CRY.salt);
+  }
+  save();
+  toast("הקוד הוחלף. קוד השחזור הקיים ממשיך לעבוד.");
+}
+
+/* ============ wiring ============ */
+$$(".nav button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
+$("#q").addEventListener("input", e=>{ ui.q=e.target.value; renderCards(); });
+$("#sortBy").addEventListener("change", e=>{ ui.sort=e.target.value; renderCards(); });
+$$("[data-gender]").forEach(b=>b.addEventListener("click",()=>{
+  ui.gender=b.dataset.gender;
+  $$("[data-gender]").forEach(x=>x.classList.toggle("on",x===b));
+  renderCards();
+}));
+$$("[data-status]").forEach(b=>b.addEventListener("click",()=>{
+  ui.status=b.dataset.status;
+  $$("[data-status]").forEach(x=>x.classList.toggle("on",x===b));
+  renderCards();
+}));
+$$("[data-mstatus]").forEach(b=>b.addEventListener("click",()=>{
+  ui.mstatus=b.dataset.mstatus;
+  $$("[data-mstatus]").forEach(x=>x.classList.toggle("on",x===b));
+  renderMatches();
+}));
+SECTORS.forEach(s=>{
+  $("#fSector").insertAdjacentHTML("beforeend", `<option value="${esc(s)}">${esc(s)}</option>`);
+  $("#fOpen").insertAdjacentHTML("beforeend", `<option value="${esc(s)}">פתוח/ה ל: ${esc(s)}</option>`);
+});
+$("#fSector").addEventListener("change", e=>{ ui.sector=e.target.value; renderCards(); });
+$("#fOpen").addEventListener("change", e=>{ ui.openTo=e.target.value; renderCards(); });
+$("#fAgeMin").addEventListener("input", e=>{ ui.ageMin=parseFloat(e.target.value)||null; renderCards(); });
+$("#fAgeMax").addEventListener("input", e=>{ ui.ageMax=parseFloat(e.target.value)||null; renderCards(); });
+$("#btnClearFilters").addEventListener("click",()=>{
+  ui.sector=ui.openTo=""; ui.ageMin=ui.ageMax=null; ui.gender=ui.status="";
+  $("#fSector").value=""; $("#fOpen").value=""; $("#fAgeMin").value=""; $("#fAgeMax").value="";
+  $$("[data-gender]").forEach(x=>x.classList.toggle("on", x.dataset.gender===""));
+  $$("[data-status]").forEach(x=>x.classList.toggle("on", x.dataset.status===""));
+  renderCards();
+});
+$("#btnNew").addEventListener("click",()=>editPerson(""));
+$("#btnImportTop").addEventListener("click",()=>setView("import"));
+$("#scrim").addEventListener("click", closeSheet);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeSheet(); });
+$("#btnPick").addEventListener("click",()=>$("#file").click());
+$("#file").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop", e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+$("#btnLock").addEventListener("click",()=>{
+  if(CRY.plain){ toast("לא הוגדר קוד כניסה"); return; }
+  lock();
+});
+$("#idleMin").value = localStorage.getItem("idle_min") || "20";
+$("#idleMin").addEventListener("change", e=>{
+  localStorage.setItem("idle_min", e.target.value); toast("עודכן");
+});
+$("#btnChangePass").addEventListener("click", changePass);
+$("#btnReissue").addEventListener("click", ()=>reissue(false));
+CLOUD.auto = !!localStorage.getItem("cloud_auto");
+if(cloudCfg()) cloudInit().then(renderCloud).catch(()=>renderCloud()); else renderCloud();
+$("#btnPaste").addEventListener("click",()=>{
+  const t = $("#pasteBox").value.trim();
+  if(!t){ toast("אין טקסט להדבקה"); return; }
+  importProfile(t); $("#pasteBox").value = "";
+});
+(function initAI(){
+  const cfg = aiCfg();
+  $("#aiProvider").value = cfg.provider;
+  $("#apiKey").value = cfg.key;
+  $("#aiModel").value = cfg.model;
+})();
+$("#btnSaveKey").addEventListener("click",()=>{
+  try{
+    localStorage.setItem("ai_provider", $("#aiProvider").value);
+    localStorage.setItem("ai_key", $("#apiKey").value.trim());
+    localStorage.setItem("ai_model", $("#aiModel").value.trim());
+    $("#aiStatus").innerHTML = `<span style="color:var(--teal)">נשמר. מומלץ ללחוץ על "בדיקת חיבור".</span>`;
+  }catch(e){ toast("לא ניתן לשמור במכשיר הזה"); }
+});
+$("#btnTestAI").addEventListener("click", testAI);
+$("#btnListModels").addEventListener("click", listModels);
+$("#aiProvider").addEventListener("change", e=>{
+  $("#aiModel").placeholder = e.target.value==="gemini" ? "gemini-3.5-flash" : "claude-sonnet-4-6";
+  $("#aiStatus").textContent = "";
+});
+$("#btnClearKey").addEventListener("click",()=>{
+  try{ ["ai_key","ai_model","anthropic_key"].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  $("#apiKey").value=""; $("#aiModel").value=""; toast("המפתח נמחק");
+});
+$("#btnExportJson").addEventListener("click", exportJson);
+$("#btnExportXlsx").addEventListener("click", exportXlsx);
+$("#btnWipe").addEventListener("click",()=>{
+  if(!confirm("פעולה זו מוחקת את כל המועמדים וההצעות מהמכשיר. לוודא שקיים גיבוי. להמשיך?")) return;
+  DB = {people:[], matches:[], sessions:[], seq:1}; save(); setView("cards"); toast("כל הנתונים נמחקו");
+});
+
+boot();
+renderDrive();
+driveTick();
+setInterval(driveTick, 5 * 60 * 1000);
+</script>
+</body>
+</html>
