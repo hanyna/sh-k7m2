@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
@@ -270,13 +271,46 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .todo-mark{color:var(--rose);background:#f9ecee;border-radius:4px;padding:0 5px;font-size:.9em}
 
 /* ---------- printable card ---------- */
-.doc{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px 30px;font-size:14.5px}
-.doc h2{font-family:var(--display);font-size:23px;margin:0 0 18px;padding-bottom:11px;border-bottom:2px solid var(--ink);text-align:center}
-.doc h3{font-family:var(--display);font-size:16px;margin:20px 0 7px;color:var(--teal);
-  border-bottom:1px solid var(--line);padding-bottom:4px}
+.doc{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:30px 32px;font-size:14.5px;position:relative;overflow:hidden}
+.doc-band{position:absolute;top:0;inset-inline:0;height:6px;background:var(--tint,var(--accent))}
+.doc h2{font-family:var(--headfont,"Frank Ruhl Libre",serif);font-size:24px;text-align:center;color:var(--accent);margin:6px 0 20px;padding-bottom:12px}
+.doc h3{font-family:var(--headfont,"Frank Ruhl Libre",serif);font-size:16px;margin:20px 0 7px;color:var(--accent)}
 .doc ul{margin:0;padding-inline-start:19px;line-height:1.85}
 .doc li b{font-weight:600}
 .doc p{margin:0;line-height:1.8;text-align:justify}
+/* קלאסי — מסגרת כפולה ומכובדת */
+.doc-classic{border:1px solid var(--accent);box-shadow:inset 0 0 0 4px #fff, inset 0 0 0 5px var(--tint)}
+.doc-classic h2{border-bottom:3px double var(--accent)}
+.doc-classic h3{border-bottom:1px solid #e2d9c4;padding-bottom:3px}
+/* מודרני — קווי ונקי */
+.doc-modern h2{border-bottom:2px solid var(--accent);letter-spacing:.02em}
+.doc-modern h3{padding-inline-start:10px;border-inline-start:3px solid var(--tint)}
+/* חם — פינות רכות וגוונים */
+.doc-warm{border-radius:16px}
+.doc-warm h2{border-bottom:1px dashed var(--accent)}
+.doc-warm h3::before{content:"◆ ";color:var(--tint);font-size:.7em;vertical-align:middle}
+.card-shot{width:600px}
+.card-shot .doc{border-radius:0}
+.theme-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.theme-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font-size:13.5px;cursor:pointer;transition:.15s}
+.theme-chip:hover{border-color:var(--ink-faint)}
+.theme-chip.on{border-color:var(--teal);background:var(--teal-light);font-weight:600}
+.theme-dot{width:13px;height:13px;border-radius:50%;flex:none}
+.tag-edit{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ptag{display:inline-flex;align-items:center;gap:4px;background:var(--teal-light);color:var(--teal);border-radius:99px;padding:3px 6px 3px 11px;font-size:12.5px}
+.ptag button{border:0;background:none;color:var(--teal);font-size:15px;line-height:1;cursor:pointer;padding:0 2px}
+.ptag-add{border:1px dashed var(--line);background:none;color:var(--ink-soft);border-radius:99px;padding:4px 11px;font-size:12.5px;cursor:pointer}
+.ptag-add:hover{border-color:var(--teal);color:var(--teal)}
+.pcard-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}
+.pcard-tag{background:#eef1f4;border-radius:5px;padding:1px 7px;font-size:11px;color:var(--ink-soft)}
+.dash-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.dash-stat{flex:1;min-width:110px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;text-align:center}
+.dash-stat b{display:block;font-family:var(--display);font-size:26px;line-height:1.1;color:var(--ink)}
+.dash-stat span{font-size:12px;color:var(--ink-soft)}
+.dash-stat.hot{border-color:var(--teal);background:var(--teal-light)}
+.dash-stat.hot b{color:var(--teal)}
+.dash-stat.warn{border-color:#e3ccd1;background:#fbf1f3}
+.dash-stat.warn b{color:var(--rose)}
 
 /* ---------- dossier ---------- */
 .snap{background:#f6f8f9;border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px;margin-bottom:6px}
@@ -439,7 +473,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
     <nav class="nav">
       <button data-view="cards" class="on"><span class="ic">▤</span> כרטסייה</button>
       <button data-view="matches"><span class="ic">◇</span> שידוכים</button>
-      <button data-view="followup"><span class="ic">◷</span> מעקב</button>
+      <button data-view="followup"><span class="ic">◷</span> מעקב ולוח בקרה</button>
       <button data-view="import"><span class="ic">↧</span> ייבוא קובץ</button>
       <button data-view="backup"><span class="ic">⛭</span> גיבוי וניהול</button>
     </nav>
@@ -512,8 +546,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 
     <!-- ===== FOLLOWUP ===== -->
     <section class="page hidden" id="view-followup">
-      <h2>מעקב</h2>
-      <div class="sub">מה מחכה לטיפול: פגישות שנקבעו, משימות פתוחות, ומי שלא דיברתם איתו מזמן.</div>
+      <h2>מעקב ולוח בקרה</h2>
+      <div class="sub">תמונת מצב במבט אחד, ומה מחכה לטיפול: פגישות היום, משימות פתוחות, ומי שלא דיברתם איתו מזמן.</div>
       <div id="followupHost"></div>
     </section>
 
@@ -1330,8 +1364,9 @@ function renderCards(){
         </div>
       </div>
       <div class="rows">${rows||'<div style="color:#c3cad1">אין פרטים נוספים</div>'}</div>
-      ${(p.community||open)?`<div class="tagline">
+      ${(p.community||open||(p.tags||[]).length)?`<div class="tagline">
         ${p.community?`<span class="tag">${esc(p.community)}</span>`:""}
+        ${(p.tags||[]).map(t=>`<span class="tag" style="background:var(--teal-light);color:var(--teal)">${esc(t)}</span>`).join("")}
         ${(p.openTo||[]).length?`<span class="tag">+${p.openTo.length} חוגים</span>`:""}
         ${open?`<span class="tag">${open} הצעות פתוחות</span>`:""}
       </div>`:""}
@@ -1408,13 +1443,22 @@ function openPerson(id, tab){
   }
 
   const ms = DB.matches.filter(m=>m.a===id||m.b===id);
+
+  /* תוויות אישיות — סינון וזיהוי מהיר */
+  body += `<div class="sect">תוויות</div>
+    <div class="tag-edit" id="tagEdit">
+      ${(p.tags||[]).map(t=>`<span class="ptag">${esc(t)}<button onclick="removeTag('${id}','${esc(t).replace(/'/g,"")}')">×</button></span>`).join("")}
+      <button class="ptag-add" onclick="addTag('${id}')">+ תווית</button>
+    </div>`;
+
   body += `<div class="sect">הצעות שידוך (${ms.length})</div>`;
   body += ms.length ? ms.map(m=>{
     const other = personById(m.a===id?m.b:m.a);
+    const reason = m.status==="הופסק" && m.reason ? ` · ${esc(m.reason)}` : "";
     return `<button class="picker-item" onclick="openMatch('${m.id}')">
       ${other?avatar(other,30):""}
-      <div><div style="font-weight:600">${esc(other?other.fullName:"—")}</div>
-      <div style="font-size:12px;color:var(--ink-faint)">${esc(m.status)} · ${esc(m.updated||m.created)}</div></div>
+      <div style="min-width:0"><div style="font-weight:600">${esc(other?other.fullName:"—")}</div>
+      <div style="font-size:12px;color:var(--ink-faint)">${esc(m.status)} · ${esc(m.updated||m.created)}${reason}</div></div>
     </button>`;
   }).join("") : `<div style="color:var(--ink-faint);font-size:13.5px">עדיין לא הוצעו שידוכים למועמד זה.</div>`;
 
@@ -1756,9 +1800,16 @@ function openMatch(mid){
         ${log || (linked?"":'<div style="color:var(--ink-faint);font-size:13px">אין רישומים ביומן.</div>')}
       </div>
     </div>`;
-  $("#mStatus").addEventListener("change", e=>{
+  $("#mStatus").addEventListener("change", async e=>{
     m.status = e.target.value; m.updated = today();
     m.log.push({d:today(), t:"הסטטוס עודכן ל: "+m.status});
+    if(m.status==="הופסק"){
+      const r = await ask({title:"מה עצר את ההצעה?",
+        note:"נשמר בהיסטוריית ההצעות של שני הצדדים, כדי לזכור למה זה לא התקדם.",
+        fields:[{label:"סיבה (למשל: פער גיל, מרחק, לא התאים)", type:"text"}]});
+      m.reason = (r && r[0]) ? r[0].trim() : "";
+      if(m.reason) m.log.push({d:today(), t:"סיבת ההפסקה: "+m.reason});
+    }
     if(m.status==="התארסו"){
       [a,b].forEach(p=>{ p.status="נסגר"; p.updated=today(); });
     }
@@ -1774,6 +1825,25 @@ function addLog(mid){
   m.log.push({d:today(), t}); m.updated = today();
   save(); openMatch(mid);
 }
+async function addTag(id){
+  const p = personById(id);
+  const existing = [...new Set(DB.people.flatMap(x=>x.tags||[]))];
+  const r = await ask({title:"הוספת תווית", note: existing.length?"תוויות קיימות: "+existing.join(", "):"",
+                       fields:[{label:"תווית", type:"text"}]});
+  if(!r || !r[0]) return;
+  const t = r[0].trim();
+  p.tags = p.tags || [];
+  if(!p.tags.includes(t)) p.tags.push(t);
+  save(); openPerson(id, "details");
+}
+function removeTag(id, tag){
+  const p = personById(id);
+  p.tags = (p.tags||[]).filter(t=>t!==tag);
+  save(); openPerson(id, "details");
+}
+
+async function addTagFn(id){ return addTag(id); }
+
 function delMatch(mid){
   if(!confirm("למחוק את ההצעה הזו לצמיתות?")) return;
   DB.matches = DB.matches.filter(x=>x.id!==mid);
@@ -2251,27 +2321,45 @@ async function callAI(prompt){
   if(cfg.provider === "gemini"){
     if(!cfg.key) throw new Error("לא הוזן מפתח Gemini בהגדרות.");
     const model = cfg.model || GEMINI_DEFAULT;
-    const ctl = new AbortController();
-    const timer = setTimeout(()=>ctl.abort(), 45000);
-    let res;
-    try{
-      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json", "x-goog-api-key":cfg.key},
-        signal: ctl.signal,
-        body: JSON.stringify({
-          contents:[{role:"user", parts:[{text:prompt}]}],
-          /* thinkingBudget:0 מכבה את שלב ה"חשיבה" הכבד — הרבה יותר מהיר למשימות סידור */
-          generationConfig:{temperature:0.4, maxOutputTokens:2000, thinkingConfig:{thinkingBudget:0}}
-        })
-      });
-    }catch(e){
-      clearTimeout(timer);
-      throw new Error(e.name === "AbortError"
-        ? "השירות לא הגיב בזמן. נסו מודל מהיר יותר (gemini-3.5-flash-lite) או נסו שוב."
-        : "בעיית תקשורת מול Gemini: " + e.message);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+    /* שולח בקשה. thinkOff=true מוסיף thinkingBudget:0 (מהיר), אבל חלק מהמודלים
+       לא מכירים את הפרמטר ומחזירים 400 — לכן ננסה שוב אוטומטית בלעדיו. */
+    async function send(thinkOff){
+      const gen = {temperature:0.4, maxOutputTokens:2000};
+      if(thinkOff) gen.thinkingConfig = {thinkingBudget:0};
+      const ctl = new AbortController();
+      const timer = setTimeout(()=>ctl.abort(), 45000);
+      try{
+        const r = await fetch(url,{
+          method:"POST",
+          headers:{"Content-Type":"application/json", "x-goog-api-key":cfg.key},
+          signal: ctl.signal,
+          body: JSON.stringify({contents:[{role:"user", parts:[{text:prompt}]}], generationConfig:gen})
+        });
+        clearTimeout(timer);
+        return r;
+      }catch(e){
+        clearTimeout(timer);
+        throw new Error(e.name === "AbortError"
+          ? "השירות לא הגיב בזמן. נסו מודל מהיר יותר (gemini-3.5-flash-lite) או נסו שוב."
+          : "בעיית תקשורת מול Gemini: " + e.message);
+      }
     }
-    clearTimeout(timer);
+
+    let res = await send(true);
+    if(res.status === 400){
+      /* ייתכן שהפרמטר לא נתמך במודל — ננסה שוב בלי thinkingConfig */
+      const retry = await send(false);
+      if(retry.ok) res = retry;
+      else{
+        /* עדיין 400 — נשלוף את ההודעה האמיתית של גוגל כדי לדעת מה באמת חסר */
+        let detail = "";
+        try{ const j = await retry.json(); detail = j.error && j.error.message ? " · " + j.error.message.slice(0,140) : ""; }catch(e){}
+        throw new Error("Gemini דחתה את הבקשה (400)" + detail +
+          (detail ? "" : " — ייתכן ששם המודל שגוי. לחצו 'טעינת המודלים הזמינים' ובחרו מהרשימה."));
+      }
+    }
     if(!res.ok) throw new Error(aiError(res.status, "gemini"));
     const d = await res.json();
     if(!d.candidates || !d.candidates.length){
@@ -2592,6 +2680,19 @@ function renderCardTab(p){
     const rows = cardRows(p);
     let html = `<div class="card-hint">השדות העליונים נלקחים מהכרטיס עצמו — לתיקון שלהם יש לערוך את הכרטיס.
       שלושת הקטעים למטה ניתנים לכתיבה חופשית, ונשמרים בנפרד מהנתונים הגולמיים.</div>`;
+
+    html += `<div class="sect">עיצוב הכרטיס</div>
+      <div class="theme-row">
+        ${Object.entries(CARD_THEMES).map(([k,t])=>{
+          const on = ((p.card&&p.card.theme)||"classic")===k;
+          return `<button class="theme-chip ${on?"on":""}" onclick="setCardTheme('${pid}','${k}')">
+            <span class="theme-dot" style="background:${t.accent}"></span>${t.name}</button>`;
+        }).join("")}
+      </div>
+      <label class="todo" style="margin:6px 0 4px">
+        <input type="checkbox" ${(p.card&&p.card.hideEmpty)?"checked":""} onchange="toggleHideEmpty('${pid}',this.checked)">
+        <span>להסתיר שדות ריקים בכרטיס (במקום להציג [להשלים])</span>
+      </label>`;
     Object.entries(rows).forEach(([title,list])=>{
       html += `<div class="sect">${title}</div><dl style="margin:0">` + list.map(([l,v])=>
         `<div class="fieldrow"><dt>${l}</dt><dd class="${v?"":"na"}">${v?esc(v):"[להשלים]"}</dd></div>`).join("") + `</dl>`;
@@ -2614,25 +2715,54 @@ function renderCardTab(p){
     ${cardMode==="edit"?`<button class="btn pri" onclick="saveCard('${pid}')">שמירה</button>`:""}
     <button class="btn" onclick="composeCard('${pid}')">הפקה מהתיק</button>
     <button class="btn" onclick="copyCard('${pid}')">העתקה לוואטסאפ</button>
+    <button class="btn pri" onclick="cardToImage('${pid}')">תמונה לוואטסאפ</button>
     <button class="btn" onclick="exportCardWord('${pid}')">שמירה כוורד</button>
     <button class="btn ghost" onclick="window.print()">הדפסה</button>`;
 }
 
-function renderCardDoc(p){
+const CARD_THEMES = {
+  classic: {name:"קלאסי ומכובד", accent:"#7a5c26", head:'"Frank Ruhl Libre", serif', frame:"double"},
+  modern:  {name:"מודרני ונקי",  accent:"#0f5f5c", head:'"Assistant", sans-serif',   frame:"line"},
+  warm:    {name:"חם ומשפחתי",   accent:"#8c3a4a", head:'"Frank Ruhl Libre", serif', frame:"soft"}
+};
+const SECTOR_TINT = {"דתי לייט":"#5a7a8a","דתי לאומי":"#2f6d5a","חרדל״ני":"#7a5c26","חרדי":"#3a4a6b"};
+
+function cardTheme(p){ return CARD_THEMES[(p.card&&p.card.theme)] || CARD_THEMES.classic; }
+
+function renderCardDoc(p, opts){
+  opts = opts || {};
   const c = cardOf(p), rows = cardRows(p);
-  const val = v => (v && String(v).trim()) ? esc(v) : `<span class="todo-mark">[להשלים]</span>`;
-  let h = `<div class="doc"><h2>כרטיס שידוכים</h2>`;
+  const th = cardTheme(p);
+  const tint = SECTOR_TINT[p.community] || th.accent;
+  const hideEmpty = (p.card && p.card.hideEmpty) || opts.forImage;
+  const val = v => (v && String(v).trim()) ? esc(v)
+    : (hideEmpty ? null : `<span class="todo-mark">[להשלים]</span>`);
+
+  const line = (l,v)=>{ const x=val(v); return x===null?"":`<li><b>${l}:</b> ${x}</li>`; };
+  const para = (v)=>{ const x=val(v); return x===null?"":`<p>${x}</p>`; };
+
+  let h = `<div class="doc doc-${(p.card&&p.card.theme)||"classic"}" style="--accent:${th.accent};--tint:${tint};--headfont:${th.head}">`;
+  h += `<div class="doc-band"></div>`;
+  h += `<h2>כרטיס שידוכים</h2>`;
   if(p.photo && p.photoInCard) h += `<div class="doc-photo"><img src="${p.photo}" alt=""></div>`;
+
   Object.entries(rows).forEach(([title,list])=>{
-    h += `<h3>${title}</h3><ul>` + list.map(([l,v])=>`<li><b>${l}:</b> ${val(v)}</li>`).join("") + `</ul>`;
-    if(title==="רקע משפחתי") h += `<p>${val(c.family)}</p>`;
+    const items = list.map(([l,v])=>line(l,v)).filter(Boolean).join("");
+    if(title==="רקע משפחתי"){
+      const fam = para(c.family);
+      if(items||fam) h += `<h3>${title}</h3>${items?`<ul>${items}</ul>`:""}${fam}`;
+    }else if(items){
+      h += `<h3>${title}</h3><ul>${items}</ul>`;
+    }
   });
-  h += `<h3>תכונות אופי ובניין אישי</h3><p>${val(c.character)}</p>`;
-  h += `<h3>מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)</h3><p>${val(c.looking)}</p>`;
+  const ch = para(c.character); if(ch) h += `<h3>תכונות אופי ובניין אישי</h3>${ch}`;
+  const lk = para(c.looking);   if(lk) h += `<h3>מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)</h3>${lk}`;
+
   const refs = (p.refs||[]).filter(r=>r.name||r.phone);
-  h += `<h3>אנשי קשר לבירורים</h3>` + (refs.length
-    ? `<ul>` + refs.map(r=>`<li><b>${esc(r.role||"ממליץ")}:</b> ${esc(r.name||"")} – ${r.phone?esc(r.phone):`<span class="todo-mark">[טלפון]</span>`}</li>`).join("") + `</ul>`
-    : `<p>${val("")}</p>`);
+  if(refs.length){
+    h += `<h3>אנשי קשר לבירורים</h3><ul>` + refs.map(r=>
+      `<li><b>${esc(r.role||"ממליץ")}:</b> ${esc(r.name||"")}${r.phone?" – "+esc(r.phone):""}</li>`).join("") + `</ul>`;
+  }
   return h + `</div>`;
 }
 
@@ -2657,6 +2787,35 @@ p{margin:0;text-align:justify}
 <body dir="rtl">${renderCardDoc(p)}</body></html>`;
   download(new Blob(["\ufeff"+html],{type:"application/msword"}), `כרטיס-שידוכים-${(p.fullName||"מועמד").replace(/\s+/g,"-")}.doc`);
   toast("הקובץ נשמר — ייפתח בוורד");
+}
+
+function setCardTheme(pid, theme){
+  const p = personById(pid); p.card = p.card || {}; p.card.theme = theme;
+  save(); openPerson(pid, "card");
+}
+function toggleHideEmpty(pid, on){
+  const p = personById(pid); p.card = p.card || {}; p.card.hideEmpty = on;
+  save();
+}
+
+/* ייצוא הכרטיס כתמונה מוכנה לוואטסאפ */
+async function cardToImage(pid){
+  if(typeof html2canvas === "undefined"){ toast("ספריית התמונות לא נטענה — בדקו חיבור לאינטרנט"); return; }
+  const p = personById(pid);
+  toast("מכין תמונה…");
+  const stage = document.createElement("div");
+  stage.style.cssText = "position:fixed;left:-9999px;top:0;width:600px;background:#fff;padding:0";
+  stage.innerHTML = `<div class="card-shot">${renderCardDoc(p, {forImage:true})}</div>`;
+  document.body.appendChild(stage);
+  try{
+    const canvas = await html2canvas(stage.firstChild, {scale:2, backgroundColor:"#ffffff", useCORS:true});
+    canvas.toBlob(blob=>{
+      if(!blob){ toast("יצירת התמונה נכשלה"); return; }
+      download(blob, `כרטיס-${(p.fullName||"מועמד").replace(/\s+/g,"-")}.png`);
+      toast("התמונה נשמרה — מוכנה לשליחה");
+    }, "image/png");
+  }catch(e){ toast("שגיאה ביצירת התמונה: " + e.message); }
+  finally{ setTimeout(()=>stage.remove(), 100); }
 }
 
 function saveCard(pid){
@@ -2940,7 +3099,25 @@ function renderFollowup(){
     </button>`;
   };
 
+  const overdue = DB.sessions.filter(s=>s.next && s.next<today());
+  const todayMeet = DB.sessions.filter(s=>s.next===today());
+  const engagedThisMonth = DB.matches.filter(m=>m.status==="התארסו" &&
+    (m.updated||"").slice(0,7)===today().slice(0,7)).length;
+  const activeProps = DB.matches.filter(m=>["הוצע","בבירור","נפגשו"].includes(m.status)).length;
+
   host.innerHTML = `
+    <div class="dash-stats">
+      <div class="dash-stat ${todayMeet.length?"hot":""}"><b>${todayMeet.length}</b><span>פגישות היום</span></div>
+      <div class="dash-stat ${overdue.length?"warn":""}"><b>${overdue.length}</b><span>פגישות שעבר זמנן</span></div>
+      <div class="dash-stat"><b>${tasks.length}</b><span>משימות פתוחות</span></div>
+      <div class="dash-stat"><b>${activeProps}</b><span>הצעות פעילות</span></div>
+      <div class="dash-stat"><b>${engagedThisMonth}</b><span>התארסו החודש</span></div>
+    </div>
+
+    ${todayMeet.length?`<div class="sect">היום</div>${todayMeet.map(s=>line(s.pid, s.type, "היום")).join("")}`:""}
+    ${overdue.length?`<div class="sect" style="color:var(--rose)">פגישות שעבר זמנן (${overdue.length})</div>${
+      overdue.sort((a,b)=>a.next.localeCompare(b.next)).map(s=>line(s.pid, s.type, s.next)).join("")}`:""}
+
     <div class="sect">פגישות שנקבעו (${upcoming.length})</div>
     ${upcoming.length ? upcoming.map(s=>line(s.pid, s.type, s.next)).join("")
       : `<div style="color:var(--ink-faint);font-size:13.5px">לא נקבעו פגישות עתידיות.</div>`}
