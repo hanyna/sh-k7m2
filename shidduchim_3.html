@@ -890,7 +890,7 @@ function showLock(mode, msg){
       <p>החשבון נשמר <b>במחשב הזה בלבד</b> ומצפין את כל התיקים. שם המשתמש והסיסמה יידרשו בכל כניסה — <b>גם אם מישהו מעתיק את הקובץ</b>.</p>
       ${legacy?`<div class="lock-warn">נמצאו נתונים קיימים לא מוצפנים. הם יוצפנו ויימחקו מהאחסון הגלוי.</div>`:""}
       <input type="text" id="userName" placeholder="שם משתמש" autocomplete="username">
-      <input type="password" id="pass1" placeholder="סיסמה — לפחות 8 תווים" autocomplete="new-password">
+      <input type="password" id="pass1" placeholder="סיסמה — 8 תווים, אות גדולה, קטנה, ספרה וסימן" autocomplete="new-password">
       <div id="strength" class="strength"></div>
       <input type="password" id="pass2" placeholder="שוב, לאימות" autocomplete="new-password">
       <div class="lock-warn">מיד לאחר ההפעלה יוצג <b>קוד שחזור</b> חד-פעמי, שיפתח את החשבון אם הסיסמה תישכח.
@@ -953,12 +953,24 @@ function showLock(mode, msg){
   }
 }
 
+/* מדיניות סיסמה — נאכפת ביצירת חשבון ובהחלפת סיסמה (לא בכניסה).
+   דורש 8 תווים, אות גדולה, אות קטנה, ספרה, וסימן. מחזיר הודעת שגיאה או "" אם תקין. */
+function passPolicy(p){
+  if(p.length < 8) return "הסיסמה חייבת להכיל לפחות 8 תווים.";
+  if(!/[A-Z]/.test(p)) return "הסיסמה חייבת להכיל לפחות אות גדולה אחת באנגלית (A-Z).";
+  if(!/[a-z]/.test(p)) return "הסיסמה חייבת להכיל לפחות אות קטנה אחת באנגלית (a-z).";
+  if(!/\d/.test(p)) return "הסיסמה חייבת להכיל לפחות ספרה אחת.";
+  if(!/[^A-Za-z0-9]/.test(p)) return "הסיסמה חייבת להכיל לפחות סימן אחד (כמו !@#$).";
+  return "";
+}
+
 async function setupPass(){
   const user = ($("#userName").value || "").trim();
   const p1 = $("#pass1").value, p2 = $("#pass2").value;
   const msg = $("#lockMsg");
   if(user.length < 2){ msg.textContent = "יש להזין שם משתמש."; return; }
-  if(p1.length < 8){ msg.textContent = "הסיסמה חייבת להיות באורך 8 תווים לפחות."; return; }
+  const pol = passPolicy(p1);
+  if(pol){ msg.textContent = pol; return; }
   if(p1 !== p2){ msg.textContent = "שתי הסיסמאות אינן זהות."; return; }
   msg.textContent = "מצפין…";
   try{
@@ -1008,10 +1020,18 @@ async function tryUnlock(){
   const savedUser = localStorage.getItem("acct_user") || "";
   msg.textContent = "פותח…";
   await new Promise(r=>setTimeout(r, Math.min(failCount * 700, 4000)));  /* האטה אחרי כישלונות */
-  /* אם לחשבון יש שם משתמש — הסוד נגזר מהשם שהוקלד + הסיסמה, כך ששם שגוי לא ייפתח.
-     בנוסף מנסים את הסיסמה לבדה, אך ורק לקוד שחזור ולכספת ישנה ללא שם משתמש. */
+  /* אם לחשבון יש שם משתמש — הסוד נגזר מהשם + הסיסמה. כדי שהבדל קטן בהקלדת השם
+     (רווח נסתר, שינוי מצב מקלדת) לא ינעל בטעות, מנסים כמה גרסאות של השם:
+     מה שהוקלד, מה ששמור, וגרסאות מנוקות. הסיסמה חייבת להיות מדויקת בכל מקרה. */
+  const userForms = new Set();
+  [user, savedUser].forEach(u=>{
+    if(!u) return;
+    userForms.add(u);
+    userForms.add(u.trim());
+    userForms.add(u.replace(/\s+/g,""));
+  });
   const candidates = [];
-  if(user) candidates.push(acctSecret(user, pass));   /* חייב להתאים לשם השמור, אם קיים */
+  userForms.forEach(u=>candidates.push(acctSecret(u, pass)));
   candidates.push(pass);                              /* קוד שחזור / כספת ישנה ללא שם */
   let opened = null, viaSecret = null;
   for(const secret of candidates){
@@ -1039,6 +1059,10 @@ async function tryUnlock(){
   }else{
     failCount++;
     msg.textContent = `שם משתמש או סיסמה שגויים (ניסיון ${failCount}).`;
+    if(failCount >= 3){
+      msg.innerHTML += `<br><span style="color:var(--ink-soft)">בדקו שהמקלדת באנגלית, שאין רווח נסתר, ושמקש Caps Lock כבוי.
+        אם הסיסמה נשכחה — לחצו "שכחתי את הסיסמה" והשתמשו בקוד השחזור.</span>`;
+    }
     $("#passIn").value = ""; $("#passIn").focus();
   }
 }
@@ -1092,7 +1116,8 @@ async function reissue(withNewPass){
                {label:"שוב, לאימות", type:"password"}]
     });
     if(!r) return;
-    if(!r[0] || r[0].length < 8){ toast("קוד קצר מדי — לא בוצע שינוי"); return; }
+    const polR = passPolicy(r[0] || "");
+    if(polR){ toast(polR); return; }
     if(r[0] !== r[1]){ toast("הקודים אינם זהים"); return; }
     pass = r[0];
   }else{
@@ -3089,7 +3114,7 @@ async function changePass(){
     note: "קוד השחזור הקיים ימשיך לעבוד גם אחרי ההחלפה.",
     fields: [{label:"הסיסמה הנוכחית", type:"password"},
              {label:"שם משתמש (אפשר להשאיר כמו שהוא)", type:"text", value:curUser},
-             {label:"סיסמה חדשה (8 תווים לפחות)", type:"password"},
+             {label:"סיסמה חדשה — 8 תווים, אות גדולה, קטנה, ספרה וסימן", type:"password"},
              {label:"שוב, לאימות", type:"password"}]
   });
   if(!r) return;
@@ -3097,7 +3122,8 @@ async function changePass(){
   if(!cur) return;
   try{ await openVault(localStorage.getItem(VAULT), acctVerify(cur)); }
   catch(e){ toast("הסיסמה הנוכחית שגויה"); return; }
-  if(!n1 || n1.length < 8){ toast("סיסמה קצרה מדי"); return; }
+  const pol2 = passPolicy(n1 || "");
+  if(pol2){ toast(pol2); return; }
   if(n1 !== n2){ toast("הסיסמאות אינן זהות"); return; }
   const newUser = (newUserRaw || curUser).trim() || curUser;
   localStorage.setItem("acct_user", newUser);
