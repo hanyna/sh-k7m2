@@ -622,7 +622,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
             </select>
           </div>
           <div class="field">
-            <label for="aiModel">מודל (ריק = ברירת מחדל)</label>
+            <label for="aiModel">מודל (נבחר אוטומטית — אפשר לשנות)</label>
             <input id="aiModel" list="dlModels" placeholder="gemini-3.5-flash-lite (מומלץ — מהיר)" autocomplete="off">
             <datalist id="dlModels"></datalist>
           </div>
@@ -2352,19 +2352,23 @@ async function callAI(prompt){
       /* ייתכן שהפרמטר לא נתמך במודל — ננסה שוב בלי thinkingConfig */
       const retry = await send(false);
       if(retry.ok) res = retry;
-      else{
-        /* עדיין 400 — נשלוף את ההודעה האמיתית של גוגל כדי לדעת מה באמת חסר */
-        let detail = "";
-        try{ const j = await retry.json(); detail = j.error && j.error.message ? " · " + j.error.message.slice(0,140) : ""; }catch(e){}
-        throw new Error("Gemini דחתה את הבקשה (400)" + detail +
-          (detail ? "" : " — ייתכן ששם המודל שגוי. לחצו 'טעינת המודלים הזמינים' ובחרו מהרשימה."));
-      }
+      else res = retry;   /* נמשיך לטיפול השגיאה המפורט למטה */
     }
-    if(!res.ok) throw new Error(aiError(res.status, "gemini"));
+    if(!res.ok){
+      /* תמיד שולפים את ההודעה האמיתית של גוגל — בלעדיה אי אפשר לדעת מה הבעיה */
+      let detail = "";
+      try{ const j = await res.clone().json(); detail = (j.error && j.error.message) || ""; }
+      catch(e){ try{ detail = (await res.clone().text()).slice(0,200); }catch(e2){} }
+      const hint = res.status===400
+        ? " (בדקו שם מודל, ולחצו 'טעינת המודלים הזמינים')"
+        : res.status===403 ? " (ודאו ש-Generative Language API מופעל ושהמפתח תקף)"
+        : res.status===429 ? " (חריגה ממכסה — נסו מאוחר יותר)" : "";
+      throw new Error(`Gemini החזירה שגיאה ${res.status}${hint}` + (detail ? " · " + detail.slice(0,180) : ""));
+    }
     const d = await res.json();
     if(!d.candidates || !d.candidates.length){
       const why = (d.promptFeedback && d.promptFeedback.blockReason) || "";
-      throw new Error("לא התקבלה תשובה" + (why ? " (" + why + ")" : "") + ".");
+      throw new Error("לא התקבלה תשובה" + (why ? " (חסימה: " + why + ")" : " — ייתכן שהתוכן ארוך מדי או נחסם") + ".");
     }
     return (d.candidates[0].content.parts || []).map(x=>x.text).filter(Boolean).join("\n");
   }
@@ -2386,28 +2390,66 @@ async function callAI(prompt){
 }
 
 /* שליפת המודלים שהמפתח באמת מורשה להם — כדי שהרשימה לא תתיישן */
+/* שולף מגוגל את המודלים שהמפתח מורשה להם ומדרג אותם — המהיר/חדש קודם */
+async function fetchGeminiModels(key){
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models",
+    {headers:{"x-goog-api-key":key}});
+  if(!res.ok) throw new Error(aiError(res.status, "gemini"));
+  const d = await res.json();
+  const names = (d.models||[])
+    .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+    .map(m=>String(m.name).replace(/^models\//,""))
+    .filter(n=>/gemini/i.test(n));
+  /* דירוג: flash-lite עדיף (מהיר וזול), אחריו flash; ומספר גרסה גבוה יותר קודם */
+  const score = n=>{
+    let s = 0;
+    if(/flash-lite|flash_lite/.test(n)) s += 100;
+    else if(/flash/.test(n)) s += 60;
+    else if(/pro/.test(n)) s += 10;
+    const v = (n.match(/(\d+\.?\d*)/)||[])[1];
+    if(v) s += parseFloat(v);
+    if(/latest/.test(n)) s += 0.5;
+    if(/preview|exp/.test(n)) s -= 5;   /* מעדיפים יציב על ניסיוני */
+    return s;
+  };
+  return names.sort((a,b)=>score(b)-score(a));
+}
+
+/* בוחר לבד את המודל הטוב ביותר ושומר אותו — נקרא בעת שמירת מפתח ובטעינה */
+async function autoPickModel(silent){
+  const cfg = aiCfg();
+  if(cfg.provider !== "gemini" || !cfg.key) return;
+  try{
+    const ranked = await fetchGeminiModels(cfg.key);
+    if(!ranked.length) return;
+    if($("#dlModels")) $("#dlModels").innerHTML = ranked.map(n=>`<option value="${n}">`).join("");
+    /* אם המשתמשת לא בחרה ידנית מודל תקף — נבחר את המדורג ראשון */
+    const cur = cfg.model;
+    if(!cur || !ranked.includes(cur)){
+      localStorage.setItem("ai_model", ranked[0]);
+      if($("#aiModel")) $("#aiModel").value = ranked[0];
+      if(!silent && $("#aiStatus"))
+        $("#aiStatus").innerHTML = `<span style="color:var(--teal)">נבחר אוטומטית המודל המהיר: ${esc(ranked[0])}</span>`;
+    }
+  }catch(e){ /* בשקט — נשארים עם ברירת המחדל אם הבדיקה נכשלה */ }
+}
+
 async function listModels(){
   const cfg = aiCfg();
   const st = $("#aiStatus");
   if(cfg.provider !== "gemini"){
-    st.innerHTML = `<span style="color:var(--ink-soft)">רשימת מודלים אוטומטית זמינה כרגע ל-Gemini בלבד. עבור Claude אפשר להשאיר ריק לברירת המחדל.</span>`;
+    st.innerHTML = `<span style="color:var(--ink-soft)">זיהוי מודלים אוטומטי זמין כרגע ל-Gemini בלבד. עבור Claude אפשר להשאיר את ברירת המחדל.</span>`;
     return;
   }
   if(!cfg.key){ st.innerHTML = `<span style="color:var(--rose)">קודם שמרו מפתח.</span>`; return; }
   st.textContent = "טוען…";
   try{
-    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models",
-      {headers:{"x-goog-api-key":cfg.key}});
-    if(!res.ok) throw new Error(aiError(res.status, "gemini"));
-    const d = await res.json();
-    const names = (d.models||[])
-      .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
-      .map(m=>String(m.name).replace(/^models\//,""))
-      .filter(n=>/gemini/i.test(n));
-    if(!names.length) throw new Error("לא נמצאו מודלים זמינים למפתח הזה.");
-    $("#dlModels").innerHTML = names.map(n=>`<option value="${esc(n)}">`).join("");
-    if(!$("#aiModel").value) $("#aiModel").value = names.find(n=>/flash/.test(n)) || names[0];
-    st.innerHTML = `<span style="color:var(--teal)">נמצאו ${names.length} מודלים. פתחו את השדה ובחרו.</span>`;
+    const ranked = await fetchGeminiModels(cfg.key);
+    if(!ranked.length) throw new Error("לא נמצאו מודלים זמינים למפתח הזה.");
+    $("#dlModels").innerHTML = ranked.map(n=>`<option value="${esc(n)}">`).join("");
+    $("#aiModel").value = ranked[0];
+    localStorage.setItem("ai_model", ranked[0]);
+    st.innerHTML = `<span style="color:var(--teal)">נמצאו ${ranked.length} מודלים. נבחר המהיר: ${esc(ranked[0])}. אפשר לשנות מהרשימה.</span>`;
   }catch(err){ st.innerHTML = `<span style="color:var(--rose)">${esc(err.message)}</span>`; }
 }
 
@@ -3383,13 +3425,20 @@ $("#btnPaste").addEventListener("click",()=>{
   $("#apiKey").value = cfg.key;
   const list = fillModelList(cfg.provider);
   $("#aiModel").value = cfg.model || list[0];
+  /* אם יש כבר מפתח Gemini — נבדוק ברקע ונבחר את המודל הטוב ביותר בלי להטריד */
+  autoPickModel(true);
 })();
-$("#btnSaveKey").addEventListener("click",()=>{
+$("#btnSaveKey").addEventListener("click", async ()=>{
   try{
     localStorage.setItem("ai_provider", $("#aiProvider").value);
     localStorage.setItem("ai_key", $("#apiKey").value.trim());
-    localStorage.setItem("ai_model", $("#aiModel").value.trim());
-    $("#aiStatus").innerHTML = `<span style="color:var(--teal)">נשמר. מומלץ ללחוץ על "בדיקת חיבור".</span>`;
+    /* אם נבחר מודל ידנית — נשמור אותו; אחרת נשאיר ריק ונבחר אוטומטית */
+    const chosen = $("#aiModel").value.trim();
+    localStorage.setItem("ai_model", chosen);
+    $("#aiStatus").innerHTML = `<span style="color:var(--ink-soft)">נשמר. מזהה מודל מתאים…</span>`;
+    await autoPickModel(false);
+    if($("#aiStatus").textContent.includes("מזהה"))
+      $("#aiStatus").innerHTML = `<span style="color:var(--teal)">נשמר. מומלץ ללחוץ "בדיקת חיבור".</span>`;
   }catch(e){ toast("לא ניתן לשמור במכשיר הזה"); }
 });
 $("#btnTestAI").addEventListener("click", testAI);
