@@ -1449,6 +1449,7 @@ function renderStats(){
      מגבלת הדפדפן היא כ-5 MB, ותמונות הן החלק הכבד.`;
 }
 
+const HAY = new Map();   /* מטמון טקסט חיפוש לכל כרטיס */
 function filtered(){
   const q = ui.q.trim().toLowerCase();
   let list = DB.people.filter(p=>{
@@ -1460,10 +1461,16 @@ function filtered(){
     if(ui.ageMin && (!age || age < ui.ageMin)) return false;
     if(ui.ageMax && (!age || age > ui.ageMax)) return false;
     if(!q) return true;
-    const hay = [p.fullName,p.city,p.study,p.notes,p.community,p.edah,p.family,p.occupation,p.looking,
-                 (p.openTo||[]).join(" "), (p.tags||[]).join(" "),
-                 Object.values(p.extra||{}).join(" ")].join(" ").toLowerCase();
-    return hay.includes(q);
+    /* חיפוש על כל שדות הכרטיס — כולל שדות הטופס החדשים, תוויות ושדות נוספים.
+       המטמון יושב במפה נפרדת כדי לא לנפח את הכספת והגיבויים. */
+    let hc = HAY.get(p.id);
+    if(!hc || hc.at !== p.updated){
+      hc = {at: p.updated, hay: FIELDS.map(f=>disp(p[f.k])).join(" ")
+        .concat(" ", (p.tags||[]).join(" "), " ", Object.values(p.extra||{}).join(" "))
+        .toLowerCase()};
+      HAY.set(p.id, hc);
+    }
+    return hc.hay.includes(q);
   });
   const s = ui.sort;
   list.sort((a,b)=>{
@@ -1475,7 +1482,13 @@ function filtered(){
   return list;
 }
 
-function renderCards(){
+/* בכרטסייה גדולה מציגים במנות — אלפי כרטיסים בבת אחת מכבידים על הדפדפן */
+const CARD_BATCH = 150;
+let cardLimit = CARD_BATCH;
+function showMoreCards(){ cardLimit += CARD_BATCH * 2; renderCards(true); }
+
+function renderCards(keepLimit){
+  if(!keepLimit) cardLimit = CARD_BATCH;
   const list = filtered();
   const host = $("#cardsHost");
   if(!DB.people.length){
@@ -1488,7 +1501,8 @@ function renderCards(){
     host.innerHTML = `<div class="empty"><h3>אין תוצאות</h3><p>נסו לשנות את החיפוש או את הסינון.</p></div>`;
     return;
   }
-  host.innerHTML = `<div class="grid">` + list.map(p=>{
+  const shown = list.slice(0, cardLimit);
+  host.innerHTML = `<div class="grid">` + shown.map(p=>{
     const open = openMatchesOf(p.id).length;
     const rows = [
       p.city ? "⌂ " + esc(p.city) : "",
@@ -1513,7 +1527,12 @@ function renderCards(){
         ${open?`<span class="tag">${open} הצעות פתוחות</span>`:""}
       </div>`:""}
     </button>`;
-  }).join("") + `</div>`;
+  }).join("") + `</div>` + (list.length > shown.length ? `
+    <div style="text-align:center;margin-top:16px">
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:8px">מוצגים ${shown.length} מתוך ${list.length} — החיפוש והסינון עוברים תמיד על כולם</div>
+      <button class="btn" onclick="showMoreCards()">הצגת עוד כרטיסים</button>
+    </div>` : (list.length > CARD_BATCH ? `
+    <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--ink-soft)">${list.length} כרטיסים</div>` : ""));
 }
 
 function renderMatches(){
@@ -2065,7 +2084,8 @@ function normalizeImported(p){
   }
   /* "מצב משפחתי" של הבית (הורים נשואים/גרושים/חוזרים בתשובה) שהתגלגל לשדה האישי —
      קודם מפנים אותו, כדי שהסטטוס האישי שמגיע בשדה "סטטוס" ייכנס למקומו אחר כך */
-  if(p.maritalStatus && /הורים|נשואים|חוזרים/.test(String(p.maritalStatus))){
+  /* "גרושים" (ברבים) = ההורים; "גרוש/ה" (ביחיד) = המועמד עצמו */
+  if(p.maritalStatus && /הורים|נשואים|גרושים|חוזרים/.test(String(p.maritalStatus))){
     if(!p.familyStatus) p.familyStatus = String(p.maritalStatus).trim();
     p.maritalStatus = "";
   }
@@ -2226,7 +2246,9 @@ function showMapping(){
     FIELDS.map(x=>`<option value="${x.k}" ${f===x.k?"selected":""}>${x.l}</option>`).join("");
 
   const rowsHtml = pending.headers.map((h,i)=>{
-    const guess = guessField(h);
+    let guess = guessField(h);
+    /* עמודות מערכת של גוגל פורמס — אין טעם לייבא אותן לכרטיס */
+    if(/חותמת זמן|timestamp|תאריך מילוי/i.test(String(h))) guess = "__skip";
     const sample = (pending.rows.find(r=>String(r[i]||"").trim()) || [])[i] || "";
     return `<tr>
       <td><b>${esc(h||"עמודה "+(i+1))}</b></td>
