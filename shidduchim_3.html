@@ -1029,7 +1029,7 @@ function showLock(mode, msg){
       <p>החשבון נשמר <b>במחשב הזה בלבד</b> ומצפין את כל התיקים. שם המשתמש והסיסמה יידרשו בכל כניסה — <b>גם אם מישהו מעתיק את הקובץ</b>.</p>
       ${legacy?`<div class="lock-warn">נמצאו נתונים קיימים לא מוצפנים. הם יוצפנו ויימחקו מהאחסון הגלוי.</div>`:""}
       <input type="text" id="userName" placeholder="שם משתמש" autocomplete="username">
-      <input type="password" id="pass1" placeholder="סיסמה — 8 תווים, אות גדולה, קטנה, ספרה וסימן" autocomplete="new-password">
+      <input type="password" id="pass1" placeholder="סיסמה — לפחות 8 תווים, בכל שפה (גם משפט בעברית)" autocomplete="new-password">
       <div id="strength" class="strength"></div>
       <input type="password" id="pass2" placeholder="שוב, לאימות" autocomplete="new-password">
       <div class="lock-warn">מיד לאחר ההפעלה יוצג <b>קוד שחזור</b> חד-פעמי, שיפתח את החשבון אם הסיסמה תישכח.
@@ -1093,13 +1093,10 @@ function showLock(mode, msg){
 }
 
 /* מדיניות סיסמה — נאכפת ביצירת חשבון ובהחלפת סיסמה (לא בכניסה).
-   דורש 8 תווים, אות גדולה, אות קטנה, ספרה, וסימן. מחזיר הודעת שגיאה או "" אם תקין. */
+   דרישה אחת בלבד: אורך. אפשר כל שפה וכל תו — גם משפט בעברית הוא סיסמה מצוינת
+   (ובדרך כלל חזק יותר מסיסמה קצרה ומסובכת). מד החוזק ממשיך להמליץ. */
 function passPolicy(p){
-  if(p.length < 8) return "הסיסמה חייבת להכיל לפחות 8 תווים.";
-  if(!/[A-Z]/.test(p)) return "הסיסמה חייבת להכיל לפחות אות גדולה אחת באנגלית (A-Z).";
-  if(!/[a-z]/.test(p)) return "הסיסמה חייבת להכיל לפחות אות קטנה אחת באנגלית (a-z).";
-  if(!/\d/.test(p)) return "הסיסמה חייבת להכיל לפחות ספרה אחת.";
-  if(!/[^A-Za-z0-9]/.test(p)) return "הסיסמה חייבת להכיל לפחות סימן אחד (כמו !@#$).";
+  if(p.length < 8) return "הסיסמה חייבת להכיל לפחות 8 תווים. טיפ: משפט קצר בעברית קל לזכור וקשה לנחש.";
   return "";
 }
 
@@ -1182,8 +1179,9 @@ async function tryUnlock(){
   const msg = $("#lockMsg");
   if(!pass) return;
   const savedUser = localStorage.getItem("acct_user") || "";
-  msg.textContent = "פותח…";
-  await new Promise(r=>setTimeout(r, Math.min(failCount * 700, 10000)));  /* האטה מצטברת אחרי כישלונות — גם אחרי רענון */
+  const wait = Math.min(failCount * 700, 6000);   /* האטה מצטברת אחרי כישלונות — גם אחרי רענון */
+  msg.textContent = wait > 1500 ? `רגע… האטה של ${Math.round(wait/1000)} שניות אחרי ${failCount} ניסיונות שגויים` : "פותח…";
+  await new Promise(r=>setTimeout(r, wait));
   /* אם לחשבון יש שם משתמש — הסוד נגזר מהשם + הסיסמה. כדי שהבדל קטן בהקלדת השם
      (רווח נסתר, שינוי מצב מקלדת) לא ינעל בטעות, מנסים כמה גרסאות של השם:
      מה שהוקלד, מה ששמור, וגרסאות מנוקות. הסיסמה חייבת להיות מדויקת בכל מקרה. */
@@ -3825,7 +3823,7 @@ async function changePass(){
     note: "קוד השחזור הקיים ימשיך לעבוד גם אחרי ההחלפה.",
     fields: [{label:"הסיסמה הנוכחית", type:"password"},
              {label:"שם משתמש (אפשר להשאיר כמו שהוא)", type:"text", value:curUser},
-             {label:"סיסמה חדשה — 8 תווים, אות גדולה, קטנה, ספרה וסימן", type:"password"},
+             {label:"סיסמה חדשה — לפחות 8 תווים, בכל שפה", type:"password"},
              {label:"שוב, לאימות", type:"password"}]
   });
   if(!r) return;
