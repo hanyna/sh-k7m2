@@ -372,6 +372,22 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .an-block ul{margin:0;padding-inline-start:18px;font-size:13.5px;color:var(--ink-soft)}
 .an-block li{margin-bottom:3px}
 .an-load{font-size:13.5px;color:var(--ink-soft);padding:10px 0}
+.ai-hint{font-size:13px;color:var(--ink-soft);background:var(--teal-light);border:1px solid #cde3e1;border-radius:9px;padding:9px 12px;margin-bottom:12px;line-height:1.55}
+.smart-item{border-top:1px solid #dde9e8;padding:10px 0}
+.smart-item:first-of-type{border-top:0}
+.smart-head{display:flex;align-items:center;gap:9px}
+.smart-why,.smart-gap{margin:6px 0 0;padding-inline-start:20px;font-size:13px;line-height:1.55}
+.smart-why li{color:var(--ink-soft)} .smart-why li::marker{content:"✓  ";color:var(--teal)}
+.smart-gap li{color:#7a5c26} .smart-gap li::marker{content:"?  ";color:var(--brass);font-weight:700}
+.fit{font-size:11.5px;font-weight:700;border-radius:99px;padding:3px 9px;white-space:nowrap}
+.fit-hi{background:#dff0e8;color:#1f6b4a} .fit-mid{background:var(--brass-light);color:#7a5c26} .fit-lo{background:#f3e6e9;color:var(--rose)}
+.desk-ai{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-top:1px solid var(--line-soft);background:#fafcfc}
+.desk-ai-l{font-size:12.5px;font-weight:700;color:var(--teal);margin-inline-end:4px}
+#deskAI .analysis{margin:4px 0 12px}
+.reco{background:#fff;border:1px solid #cfe0df;border-radius:8px;padding:8px 11px;font-size:13.5px;margin-top:6px}
+.smart-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--teal-light);border:1px solid #cde3e1;border-radius:var(--radius);padding:11px 14px;margin-bottom:14px;font-size:14px}
+.smart-banner > div{flex:1;min-width:220px}
+.smart-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
 .analysis pre{white-space:pre-wrap;font-size:12px;background:#fff;padding:9px;border-radius:7px;border:1px solid var(--line)}
 
 /* ---------- match desk (signature) ---------- */
@@ -520,6 +536,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         <span class="mag">⌕</span>
         <input id="q" type="search" placeholder="חיפוש לפי שם, עיר, ישיבה, הערות…">
       </div>
+      <button class="btn" id="btnSmart" title="חיפוש במילים רגילות בעזרת AI">✨ חיפוש חכם</button>
       <button class="btn" id="btnNew">+ מועמד חדש</button>
       <button class="btn pri" id="btnImportTop">העלאת קובץ</button>
     </div>
@@ -860,7 +877,7 @@ const SYN = {
 
 /* ============ state ============ */
 let DB = {people:[], matches:[], sessions:[], seq:1};
-let ui = {view:"cards", q:"", gender:"", status:"", sector:"", openTo:"",
+let ui = {view:"cards", q:"", smart:null, gender:"", status:"", sector:"", openTo:"",
           ageMin:null, ageMax:null, mstatus:"", sort:"name", openPerson:null};
 let canPersist = true;
 
@@ -1492,6 +1509,7 @@ function renderStats(){
 }
 
 const HAY = new Map();   /* מטמון טקסט חיפוש לכל כרטיס */
+const SMART_SCORE = new Map();
 function filtered(){
   const q = ui.q.trim().toLowerCase();
   let list = DB.people.filter(p=>{
@@ -1502,7 +1520,7 @@ function filtered(){
     const age = parseFloat(p.age);
     if(ui.ageMin && (!age || age < ui.ageMin)) return false;
     if(ui.ageMax && (!age || age > ui.ageMax)) return false;
-    if(!q) return true;
+    if(!q && !ui.smart) return true;
     /* חיפוש על כל שדות הכרטיס — כולל שדות הטופס החדשים, תוויות ושדות נוספים.
        המטמון יושב במפה נפרדת כדי לא לנפח את הכספת והגיבויים. */
     let hc = HAY.get(p.id);
@@ -1512,8 +1530,17 @@ function filtered(){
         .toLowerCase()};
       HAY.set(p.id, hc);
     }
-    return hc.hay.includes(q);
+    if(ui.smart){
+      const h = smartHit(p, hc.hay);
+      if(h === null) return false;
+      SMART_SCORE.set(p.id, h);
+    }
+    return !q || hc.hay.includes(q);
   });
+  if(ui.smart){
+    list.sort((a,b)=>(SMART_SCORE.get(b.id)||0)-(SMART_SCORE.get(a.id)||0));
+    return list;
+  }
   const s = ui.sort;
   list.sort((a,b)=>{
     if(s==="age") return (parseFloat(a.age)||999)-(parseFloat(b.age)||999);
@@ -1539,12 +1566,22 @@ function renderCards(keepLimit){
       <button class="btn pri" onclick="setView('import')">העלאת קובץ</button></div>`;
     return;
   }
+  const S = ui.smart;
+  const banner = S ? `<div class="smart-banner">
+      <div><b>✨ חיפוש חכם:</b> "${esc(S.label)}" · ${list.length} תוצאות, המתאימים ביותר ראשונים
+        <div class="smart-chips">${[
+          S.gender, S.ageMin&&("מגיל "+S.ageMin), S.ageMax&&("עד גיל "+S.ageMax),
+          ...S.sectors, ...S.openTo.map(x=>"פתוח/ה ל"+x), ...S.cities, ...S.keywords
+        ].filter(Boolean).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div></div>
+      <button class="btn ghost sm" onclick="smartSearch()">שינוי</button>
+      <button class="btn ghost sm" onclick="clearSmart()">× ניקוי</button>
+    </div>` : "";
   if(!list.length){
-    host.innerHTML = `<div class="empty"><h3>אין תוצאות</h3><p>נסו לשנות את החיפוש או את הסינון.</p></div>`;
+    host.innerHTML = banner + `<div class="empty"><h3>אין תוצאות</h3><p>נסו לשנות את החיפוש או את הסינון.</p></div>`;
     return;
   }
   const shown = list.slice(0, cardLimit);
-  host.innerHTML = `<div class="grid">` + shown.map(p=>{
+  host.innerHTML = banner + `<div class="grid">` + shown.map(p=>{
     const open = openMatchesOf(p.id).length;
     const rows = [
       p.city ? "⌂ " + esc(p.city) : "",
@@ -1912,10 +1949,13 @@ function openSuggest(id){
     </button>`;
   }).join("");
 
-  $("#sheetBody").innerHTML = `<div class="win-col"><input id="pickQ" placeholder="סינון לפי שם…"
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    <div id="smartBox">${p.aiMatch ? smartMatchHtml(p) : `<div class="ai-hint">✨ <b>התאמה חכמה:</b> ה-AI בוחן את 8 המובילים ברשימה, מדרג אותם לפי אופי, ערכים ורצונות, ומסביר למה — כולל פערים שכדאי לברר. רק בלחיצה על הכפתור למטה.</div>`}</div>
+    <input id="pickQ" placeholder="סינון לפי שם…"
       style="width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:12px">
     <div id="pickList">${list || '<div class="empty">אין מועמדים מתאימים בכרטסייה.</div>'}</div></div>`;
-  $("#sheetFoot").innerHTML = `<button class="btn ghost" onclick="openPerson('${id}')">חזרה לכרטיס</button>`;
+  $("#sheetFoot").innerHTML = `<button class="btn pri" onclick="smartMatch('${id}')">✨ ${p.aiMatch?"התאמה חכמה מחדש":"התאמה חכמה (AI)"}</button>
+    <button class="btn ghost" onclick="openPerson('${id}')">חזרה לכרטיס</button>`;
   $("#pickQ").addEventListener("input", e=>{
     const q = e.target.value.trim();
     $$("#pickList .picker-item").forEach(el=>{
@@ -2000,6 +2040,15 @@ function openMatch(mid){
           <button class="btn sm" onclick="openPerson('${b.id}')">פתיחת הכרטיס</button>
         </div>
       </div>
+      <div class="desk-ai">
+        <span class="desk-ai-l">✨ כלי AI</span>
+        <button class="btn sm" onclick="pairDebrief('${m.id}')">🧭 תחקיר זוגי</button>
+        <span class="divider-v"></span>
+        <select class="mini" id="msgAud" title="למי ההודעה"><option value="מועמד">למועמד/ת</option><option value="הורים">להורים</option></select>
+        <button class="btn sm" onclick="proposalMsg('${m.id}','${a.id}')">✉️ הודעה ל${esc(a.fullName.split(" ")[0])}</button>
+        <button class="btn sm" onclick="proposalMsg('${m.id}','${b.id}')">✉️ הודעה ל${esc(b.fullName.split(" ")[0])}</button>
+      </div>
+      <div id="deskAI" style="padding:0 16px">${m.aiDebrief?debriefHtml(m.aiDebrief):""}</div>
       <div class="cmp">${rows}</div>
       <div class="timeline">
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -2476,6 +2525,13 @@ function renderDossier(p){
         מפיק תמצית מקצועית מכל סיכומי הפגישות: מה עולה בעקביות, מה עדיין לא ברור, ומה כדאי לשאול בפגישה הבאה.
         ${ss.length?"":"<br><b>צריך לפחות פגישה אחת מתועדת.</b>"}</div>`}</div>`;
 
+  /* הכנה לפגישה — בלחיצה */
+  box += `<div class="sect" style="display:flex;align-items:center;gap:8px">
+      הכנה לפגישה הבאה
+      <button class="btn sm" style="margin-inline-start:auto" onclick="meetingPrep('${p.id}')">📋 ${p.prep?"הכנה מחדש":"הכנה לפגישה (AI)"}</button>
+    </div>
+    <div id="prepBox">${p.prep?prepHtml(p.prep):`<div style="font-size:13.5px;color:var(--ink-faint)">דף קצר לפני שיחה: איפה עצרנו, מה הובטח, מה לשאול הפעם ולמה לשים לב.</div>`}</div>`;
+
   /* יומן הפגישות */
   box += `<div class="sect" style="display:flex;align-items:center;gap:8px">
       יומן פגישות (${ss.length})
@@ -2777,7 +2833,12 @@ function scrubForAI(text, p){
   if(p && p.fullName){
     const names = [String(p.fullName).trim(),
       ...String(p.fullName).trim().split(/\s+/).filter(w=>w.length>2)];
-    names.forEach(n=>{ if(n) t = t.split(n).join(alias); });
+    /* מילה שלמה בלבד (עם עד שתי אותיות שימוש: ו/ה/ב/ל/מ/ש/כ) — כדי ששם כמו "אור" לא ייפגע בתוך "אורח" */
+    const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    names.forEach(n=>{
+      if(!n) return;
+      t = t.replace(new RegExp(`(^|[^א-ת])([והבלמשכ]{0,2})${escRe(n)}(?![א-ת])`, "g"), (m0,pre,pfx)=>pre+pfx+alias);
+    });
   }
   return t.replace(/0\d[\d\-\s]{7,}/g, "[טלפון]")
           .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[מייל]");
@@ -3466,6 +3527,294 @@ function suggestListHtml(pid, limit){
   }).join("") + `<div style="font-size:12px;color:var(--ink-faint);margin-top:6px">לחיצה על מועמד פותחת הצעת שידוך. ${strong.length?"":"לא נמצאו התאמות חזקות — מוצגים הקרובים ביותר."}</div>`;
 }
 
+/* ============ כלי AI — כולם בלחיצת כפתור בלבד, שום דבר לא רץ אוטומטית ============
+   עקרון הפרטיות: לשירות נשלח רק תוכן. שמות, טלפונים, מיילים וממליצים מוסרים,
+   ובהשוואה בין כמה מועמדים כל אחד מקבל קוד (C1, C2…) שמתורגם בחזרה רק במחשב. */
+
+function aiParse(raw){
+  const t = String(raw||"").replace(/```json|```/g,"").trim();
+  try{ return JSON.parse(t); }catch(e){}
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if(a>=0 && b>a){ try{ return JSON.parse(t.slice(a,b+1)); }catch(e){} }
+  throw new Error("השירות לא החזיר תשובה תקינה — נסו שוב");
+}
+
+/* פרופיל תמציתי למועמד, בלי פרטים מזהים */
+function aiProfile(p){
+  const skip = new Set(AI_PII.concat(["notes","status","maritalStatus"]));
+  const cut = v => { const x = String(disp(v)||"").trim(); return x.length>280 ? x.slice(0,280)+"…" : x; };
+  const lines = FIELDS.filter(f=>!skip.has(f.k) && p[f.k] && cut(p[f.k])).map(f=>`${f.l}: ${cut(p[f.k])}`);
+  const c = p.card || {};
+  if(c.about)   lines.push("קצת על עצמו/ה: " + cut(c.about));
+  if(c.middot)  lines.push("אופי ומידות: " + cut(c.middot));
+  if(c.looking) lines.push("מחפש/ת: " + cut(c.looking));
+  if(p.maritalStatus && p.maritalStatus!=="רווק/ה") lines.push("מצב אישי: " + p.maritalStatus);
+  return scrubForAI(lines.join("\n"), p);
+}
+function aiBusy(el, txt){ if(el) el.innerHTML = `<div class="an-load">✨ ${esc(txt)}</div>`; }
+function aiFail(el, err){ if(el) el.innerHTML = `<div class="an-load" style="color:var(--rose)">${esc(err.message||err)}</div>`; }
+const fitClass = f => /גבוה/.test(f||"") ? "fit-hi" : /נמוכ/.test(f||"") ? "fit-lo" : "fit-mid";
+
+/* ---------- 1) התאמה חכמה עם הסבר ---------- */
+async function smartMatch(id){
+  const p = personById(id);
+  const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
+  const pool = DB.people
+    .filter(x=>x.id!==id && (!want || x.gender===want) && (x.status||"פנוי")!=="נסגר")
+    .filter(x=>!DB.matches.some(m=>(m.a===id&&m.b===x.id)||(m.b===id&&m.a===x.id)))
+    .map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s).slice(0,8);
+  if(!pool.length){ toast("אין מועמדים פנויים להשוואה"); return; }
+  const box = $("#smartBox");
+  aiBusy(box, `ה-AI בוחן את ${pool.length} ההתאמות המובילות…`);
+  const codes = pool.map((o,i)=>({code:"C"+(i+1), x:o.x}));
+  const prompt = `אתה עוזר מקצועי לשדכנית. לפניך פרופיל של מועמד/ת, ו-${codes.length} מועמדים מהצד השני שעברו סינון ראשוני.
+המשימה: לדרג אותם לפי מידת ההתאמה האמיתית — אופי, ערכים, השקפה, אורח חיים, תוכניות ורצונות הדדיים — ולא רק לפי נתונים טכניים.
+
+כללים:
+- הסתמך רק על הכתוב. אל תמציא.
+- "why": 2-3 סיבות קונקרטיות להתאמה, כל אחת משפט קצר שמצביע על נקודה משותפת או משלימה.
+- "gaps": פערים או סימני שאלה שכדאי לברר לפני הצעה (רשימה ריקה אם אין).
+- "fit": גבוהה / בינונית / נמוכה.
+- דרג את כולם, מהמתאים ביותר.
+- כתוב בעברית, ענייני ומכבד.
+
+המועמד/ת:
+${aiProfile(p)}
+
+המועמדים מהצד השני:
+${codes.map(o=>`--- ${o.code} ---\n${aiProfile(o.x)}`).join("\n")}
+
+החזר JSON בלבד:
+{"ranked":[{"id":"C1","fit":"גבוהה","why":["…"],"gaps":["…"]}]}`;
+  try{
+    const d = aiParse(await callAI(prompt));
+    const items = (d.ranked||[]).map(r=>{
+      const o = codes.find(c=>c.code===String(r.id).trim()); if(!o) return null;
+      return {pid:o.x.id, fit:r.fit||"", why:r.why||[], gaps:r.gaps||[]};
+    }).filter(Boolean);
+    if(!items.length) throw new Error("לא התקבלו התאמות — נסו שוב");
+    p.aiMatch = {date:today(), items};
+    save();
+    box.innerHTML = smartMatchHtml(p);
+  }catch(err){ aiFail(box, err); }
+}
+function smartMatchHtml(p){
+  const am = p.aiMatch; if(!am) return "";
+  return `<div class="analysis" style="margin-bottom:14px">
+    <div class="an-date">✨ התאמה חכמה · ${esc(am.date)} · הסבר של ה-AI, ההחלטה שלך</div>
+    ${am.items.map(it=>{
+      const x = personById(it.pid); if(!x) return "";
+      const exists = DB.matches.some(m=>(m.a===p.id&&m.b===x.id)||(m.b===p.id&&m.a===x.id));
+      return `<div class="smart-item">
+        <div class="smart-head">
+          ${avatar(x,30)}
+          <div style="flex:1;min-width:0"><b>${esc(x.fullName)}</b>
+            <div style="font-size:12px;color:var(--ink-faint)">${[x.age,x.city,x.hashkafa||x.community].filter(Boolean).map(esc).join(" · ")}</div></div>
+          <span class="fit ${fitClass(it.fit)}">התאמה ${esc(it.fit)}</span>
+          ${exists?`<span class="score">קיים</span>`:`<button class="btn pri sm" onclick="createMatch('${p.id}','${x.id}')">פתיחת הצעה</button>`}
+        </div>
+        ${it.why.length?`<ul class="smart-why">${it.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`:""}
+        ${it.gaps.length?`<ul class="smart-gap">${it.gaps.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`:""}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+/* ---------- 2) הכנה לפגישה ---------- */
+async function meetingPrep(pid){
+  const p = personById(pid);
+  const ss = sessionsOf(pid).slice().reverse();
+  const box = $("#prepBox");
+  aiBusy(box, "מכין דף הכנה לפגישה…");
+  const props = DB.matches.filter(m=>m.a===pid||m.b===pid).map((m,i)=>
+    `הצעה ${i+1}: סטטוס ${m.status}${m.reason?" · סיבת עצירה: "+m.reason:""} · יומן: ${(m.log||[]).slice(-4).map(e=>e.d+" "+e.t).join(" | ")}`);
+  const prompt = `אתה עוזר לשדכנית להתכונן לפגישת ליווי עם מועמד/ת. הכן דף הכנה קצר ומעשי.
+
+כללים: רק על סמך הכתוב, בלי להמציא. בלי אבחנות. עברית ענייניה. כל פריט משפט אחד.
+אם אין חומר לסעיף — רשימה ריקה.
+
+פרופיל:
+${aiProfile(p)}
+
+פגישות קודמות (מהישן לחדש):
+${ss.length ? ss.map(s=>`[${s.date} · ${s.type}] ${scrubForAI(s.notes||"",p)}${s.actions?" | משימה: "+s.actions+(s.done?" (בוצע)":" (פתוח)"):""}`).join("\n") : "אין עדיין פגישות מתועדות"}
+
+הצעות שידוך:
+${props.length ? props.join("\n") : "אין"}
+${p.analysis&&p.analysis.summary?"\nתמצית ניתוח קודם: "+p.analysis.summary:""}
+
+החזר JSON בלבד:
+{"where":"משפט-שניים: איפה התהליך עומד",
+ "followup":["מה הובטח או נשאר פתוח מהפעם הקודמת"],
+ "ask":["שאלות מומלצות לפגישה הזו"],
+ "watch":["נקודות רגישות לשים לב אליהן"]}`;
+  try{
+    const d = aiParse(await callAI(prompt));
+    p.prep = Object.assign({date:today()}, d);
+    save();
+    box.innerHTML = prepHtml(p.prep);
+  }catch(err){ aiFail(box, err); }
+}
+function prepHtml(d){
+  const block = (t, arr) => (arr&&arr.length) ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  return `<div class="analysis">
+    <div class="an-date">📋 הכנה לפגישה · ${esc(d.date||"")}</div>
+    ${d.where?`<p class="an-sum">${esc(d.where)}</p>`:""}
+    ${block("להמשיך מהפעם הקודמת", d.followup)}
+    ${block("שאלות מומלצות", d.ask)}
+    ${block("לשים לב", d.watch)}
+  </div>`;
+}
+
+/* ---------- 3) תחקיר זוגי אחרי פגישה ---------- */
+async function pairDebrief(mid){
+  const m = DB.matches.find(x=>x.id===mid); if(!m) return;
+  const a = personById(m.a), b = personById(m.b);
+  const linked = DB.sessions.filter(s=>s.mid===mid).sort((x,y)=>(x.date||"").localeCompare(y.date||""));
+  const box = $("#deskAI");
+  if(!linked.length){
+    box.innerHTML = `<div class="an-load">לתחקיר זוגי צריך קודם לרשום תחקיר עם לפחות אחד הצדדים (הכפתורים "תחקיר עם…" למטה).</div>`;
+    return;
+  }
+  aiBusy(box, "מסכם את התחקירים של שני הצדדים…");
+  const side = s => s.pid===a.id ? "צד א" : "צד ב";
+  const scrub2 = t => scrubForAI(scrubForAI(t, a), b);
+  const prompt = `אתה עוזר מקצועי לשדכנית. שני מועמדים נפגשו, והשדכנית ערכה תחקיר עם כל צד. סכם את התמונה.
+
+כללים: רק על סמך הכתוב. אל תמציא ואל תשפוט. אם יש פער בין מה שכל צד אמר — הצג את שני הצדדים בהגינות.
+ההמלצה היא הצעה לשדכנית בלבד, בלשון זהירה. עברית ענייניה.
+
+צד א:
+${aiProfile(a)}
+
+צד ב:
+${aiProfile(b)}
+
+יומן ההצעה: ${(m.log||[]).map(e=>e.d+" "+e.t).join(" | ")}
+
+התחקירים:
+${linked.map(s=>`[${s.date} · ${side(s)}] ${scrub2(s.notes||"")}`).join("\n")}
+
+החזר JSON בלבד:
+{"summary":"2-3 משפטים: איך הפגישה עברה בעיני כל צד",
+ "agree":["נקודות שבהן שני הצדדים מתחברים"],
+ "gaps":["פערים בין מה שכל צד חווה או מבקש"],
+ "next":["צעדים מוצעים להמשך"],
+ "recommendation":"המשך / בירור נוסף / עצירה — ובמשפט אחד למה"}`;
+  try{
+    const d = aiParse(await callAI(prompt));
+    m.aiDebrief = Object.assign({date:today()}, d);
+    save();
+    box.innerHTML = debriefHtml(m.aiDebrief);
+  }catch(err){ aiFail(box, err); }
+}
+function debriefHtml(d){
+  const block = (t, arr) => (arr&&arr.length) ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  return `<div class="analysis">
+    <div class="an-date">🧭 תחקיר זוגי · ${esc(d.date||"")}</div>
+    ${d.summary?`<p class="an-sum">${esc(d.summary)}</p>`:""}
+    ${block("מה מחבר", d.agree)}
+    ${block("פערים", d.gaps)}
+    ${block("המשך מוצע", d.next)}
+    ${d.recommendation?`<div class="reco">💡 ${esc(d.recommendation)}</div>`:""}
+  </div>`;
+}
+
+/* ---------- 4) הודעת הצעה ---------- */
+async function proposalMsg(mid, toId){
+  const m = DB.matches.find(x=>x.id===mid); if(!m) return;
+  const to = personById(toId), other = personById(m.a===toId ? m.b : m.a);
+  const aud = ($("#msgAud") && $("#msgAud").value) || "מועמד";
+  const box = $("#deskAI");
+  aiBusy(box, "מנסח הודעת הצעה…");
+  const prompt = `נסח הודעת הצעת שידוך קצרה ומכובדת, שהשדכנית שולחת ${aud==="הורים"?"להורים של המועמד/ת":"למועמד/ת עצמו/ה"}.
+ההודעה מציגה את הצד השני בצורה חמה ואמינה, על סמך הפרופיל בלבד, בלי הגזמות ובלי להמציא.
+אל תכלול פרטים רגישים (בריאות, מצב משפחתי של ההורים, קווים אדומים).
+במקום שם הנמען כתוב בדיוק {TO}, ובמקום שם הצד השני כתוב בדיוק {OTHER}. 5-8 שורות, בלי חתימה.
+
+הנמען (${to.gender==="בת"?"מועמדת":"מועמד"}):
+${aiProfile(to)}
+
+הצד השני (${other.gender==="בת"?"מועמדת":"מועמד"}):
+${aiProfile(other)}
+
+החזר JSON בלבד: {"message":"…"}`;
+  try{
+    const d = aiParse(await callAI(prompt));
+    const first = n => String(n||"").trim().split(/\s+/)[0] || "";
+    let msg = String(d.message||"").replace(/\{TO\}/g, first(to.fullName)).replace(/\{OTHER\}/g, first(other.fullName));
+    msg += "\n\n" + gcardSign();
+    box.innerHTML = `<div class="analysis">
+      <div class="an-date">✉️ הודעת הצעה ל${aud==="הורים"?"הורים של ":""}${esc(to.fullName)} — אפשר לערוך לפני ההעתקה</div>
+      <textarea id="propMsg" style="width:100%;min-height:190px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;line-height:1.6">${esc(msg)}</textarea>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn pri sm" onclick="copyProp('${mid}')">📋 העתקה</button>
+        <button class="btn ghost sm" onclick="proposalMsg('${mid}','${toId}')">🔄 ניסוח אחר</button>
+      </div></div>`;
+  }catch(err){ aiFail(box, err); }
+}
+function copyProp(mid){
+  const t = $("#propMsg").value;
+  navigator.clipboard.writeText(t).then(()=>toast("ההודעה הועתקה")).catch(()=>toast("לא ניתן להעתיק — סמנו והעתיקו ידנית"));
+  const m = DB.matches.find(x=>x.id===mid);
+  if(m){ m.log.push({d:today(), t:"נוסחה הודעת הצעה"}); m.updated = today(); save(); }
+}
+
+/* ---------- 5) חיפוש במילים רגילות ----------
+   ה-AI מקבל רק את משפט החיפוש — לא את המאגר. הוא מתרגם אותו לסינון,
+   והסינון עצמו רץ במחשב. כך החיפוש פרטי ומהיר גם על אלפי כרטיסים. */
+async function smartSearch(){
+  const r = await ask({title:"✨ חיפוש חכם",
+    note:"כתבו במילים רגילות את מי אתם מחפשים. למשל: בחורה רגועה שאוהבת טבע, עד גיל 26, מירושלים או מהסביבה.",
+    fields:[{label:"מה מחפשים?", type:"text", value:(ui.smart&&ui.smart.label)||""}], ok:"חיפוש"});
+  if(!r || !r[0] || !r[0].trim()) return;
+  const q = r[0].trim();
+  toast("✨ מתרגם את החיפוש…");
+  const prompt = `תרגם בקשת חיפוש של שדכנית למסנן מובנה עבור מאגר מועמדים.
+ערכים אפשריים לחוג: ${SECTORS.join(" / ")}.
+keywords: מילות מפתח לחיפוש בטקסט החופשי של הכרטיסים (אופי, תחביבים, מה מחפשים), כולל מילים נרדפות וצורות נפוצות — 4-12 מילים קצרות.
+השאר ריק (null או []) כל מה שלא נאמר במפורש או במשתמע ברור. אל תנחש.
+
+הבקשה: "${q}"
+
+החזר JSON בלבד:
+{"gender":"בן"|"בת"|null,"ageMin":null,"ageMax":null,"sectors":[],"openTo":[],"cities":[],"keywords":[]}`;
+  try{
+    const d = aiParse(await callAI(prompt));
+    ui.smart = {
+      label:q,
+      gender: ["בן","בת"].includes(d.gender) ? d.gender : "",
+      ageMin: parseFloat(d.ageMin)||null, ageMax: parseFloat(d.ageMax)||null,
+      sectors: (d.sectors||[]).filter(x=>SECTORS.includes(x)),
+      openTo:  (d.openTo||[]).filter(x=>SECTORS.includes(x)),
+      cities:  (d.cities||[]).map(String).filter(Boolean),
+      keywords:(d.keywords||[]).map(x=>String(x).trim().toLowerCase()).filter(x=>x.length>1)
+    };
+    setView("cards");
+  }catch(err){ toast(err.message); }
+}
+function clearSmart(){ ui.smart = null; renderCards(); }
+/* ציון חיפוש חכם לכרטיס: null = לא עובר את הסינון */
+function smartHit(p, hay){
+  const S = ui.smart; if(!S) return 0;
+  if(S.gender && p.gender!==S.gender) return null;
+  const age = parseFloat(p.age);
+  if(S.ageMin && (!age || age < S.ageMin)) return null;
+  if(S.ageMax && (!age || age > S.ageMax)) return null;
+  if(S.sectors.length){
+    const sec = p.community || normSector(p.hashkafa);
+    if(!S.sectors.includes(sec)) return null;
+  }
+  if(S.openTo.length && !S.openTo.some(x=>(p.openTo||[]).includes(x))) return null;
+  if(S.cities.length){
+    const where = (String(p.city||"")+" "+String(p.preferredLocation||"")).toLowerCase();
+    if(!S.cities.some(c=>where.includes(c.toLowerCase()))) return null;
+  }
+  if(!S.keywords.length) return 1;
+  const hits = S.keywords.filter(k=>hay.includes(k)).length;
+  return hits ? hits : null;
+}
+
 /* ============ גיבוי אוטומטי לגוגל דרייב ============ */
 const DRIVE = {token:null, exp:0, tc:null, busy:false};
 const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -4108,6 +4457,7 @@ $("#btnClearFilters").addEventListener("click",()=>{
   renderCards();
 });
 $("#btnNew").addEventListener("click",()=>editPerson(""));
+$("#btnSmart").addEventListener("click", smartSearch);
 $("#btnImportTop").addEventListener("click",()=>setView("import"));
 $("#scrim").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e=>{
