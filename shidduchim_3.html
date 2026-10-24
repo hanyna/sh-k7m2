@@ -629,6 +629,10 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         <p>כפתור "הפקת ניתוח" בכרטיס שולח את סיכומי הפגישות לשירות חיצוני ומקבל בחזרה תמצית.
            <b>המידע יוצא מהמחשב ברגע הזה</b> — כדאי להחליט מראש מול הלקוחה אם היא רוצה בכך.
            כל שאר המערכת, כולל יומן הפגישות עצמו, עובדת לגמרי מקומית.</p>
+        <label class="todo" style="margin-bottom:10px">
+          <input type="checkbox" id="aiAnonBox">
+          <span><b>שליחה אנונימית (מומלץ):</b> שם, טלפונים, מיילים וממליצים מוחלפים בכינוי לפני השליחה — הניתוח מקבל רק את התוכן</span>
+        </label>
         <div class="form-grid" style="max-width:560px">
           <div class="field">
             <label for="aiProvider">ספק השירות</label>
@@ -969,6 +973,7 @@ function adoptDB(d){
 let saveTimer = null, saving = false, dirty = false;
 function save(){
   dirty = true;
+  DRIVE.changed = true;   /* לגיבוי האוטומטי בסגירה */
   touchActivity();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(persist, 250);
@@ -2457,12 +2462,15 @@ function analysisHtml(an){
   const block = (title, arr) => (arr && arr.length)
     ? `<div class="an-block"><b>${title}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
   return `<div class="analysis">
-    <div class="an-date">הופק ב-${esc(an.date)} · מבוסס על ${an.basedOn||"?"} פגישות</div>
+    <div class="an-date">הופק ב-${esc(an.date)} · מבוסס על ${an.basedOn||"?"} פגישות${an.anon?" · נשלח ללא פרטים מזהים":""}</div>
     ${an.summary?`<p class="an-sum">${esc(an.summary)}</p>`:""}
+    ${block("חוזקות ומשאבים", an.strengths)}
     ${block("מה עולה בעקביות", an.wants)}
+    ${block("שינוי והתקדמות בין הפגישות", an.shifts)}
     ${block("עדיין לא ברור — לשאול בפגישה הבאה", an.clarify)}
     ${block("קווים מנחים לחיפוש", an.criteria)}
     ${block("לשים לב", an.flags)}
+    ${block("מהלך מוצע לפגישה הבאה", an.nextMeeting)}
     ${an.raw?`<details><summary>הטקסט המלא</summary><pre>${esc(an.raw)}</pre></details>`:""}
   </div>`;
 }
@@ -2582,7 +2590,7 @@ async function callAI(prompt){
        לא מכירים את הפרמטר ומחזירים 400 — לכן ננסה שוב אוטומטית בלעדיו. */
     async function send(thinkOff){
       const gen = {temperature:0.4, maxOutputTokens:2000};
-      if(thinkOff) gen.thinkingConfig = {thinkingBudget:0};
+      if(thinkOff){ gen.thinkingConfig = {thinkingBudget:0}; gen.responseMimeType = "application/json"; }
       const ctl = new AbortController();
       const timer = setTimeout(()=>ctl.abort(), 45000);
       try{
@@ -2717,9 +2725,28 @@ async function testAI(){
   }catch(err){ st.innerHTML = `<span style="color:var(--rose)">${esc(err.message)}</span>`; }
 }
 
+/* ---- פרטיות מול שירות הניתוח ----
+   כברירת מחדל שום פרט מזהה לא יוצא מהמחשב: שם, טלפונים, מיילים וממליצים
+   מוחלפים בכינוי לפני השליחה. הניתוח לא צריך אותם — רק את התוכן. */
+function aiAnon(){ return localStorage.getItem("ai_anon") !== "0"; }
+const AI_PII = ["fullName","prayerName","email","phone","contact","contactPhone","refs"];
+function scrubForAI(text, p){
+  if(!aiAnon()) return String(text);
+  let t = String(text);
+  const alias = p && p.gender==="בת" ? "המועמדת" : "המועמד";
+  if(p && p.fullName){
+    const names = [String(p.fullName).trim(),
+      ...String(p.fullName).trim().split(/\s+/).filter(w=>w.length>2)];
+    names.forEach(n=>{ if(n) t = t.split(n).join(alias); });
+  }
+  return t.replace(/0\d[\d\-\s]{7,}/g, "[טלפון]")
+          .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[מייל]");
+}
+
 function buildPrompt(p){
   const ss = sessionsOf(p.id).slice().reverse();
-  const prof = FIELDS.filter(f=>p[f.k] && f.k!=="notes")
+  const skip = aiAnon() ? AI_PII.concat("notes") : ["notes"];
+  const prof = FIELDS.filter(f=>p[f.k] && !skip.includes(f.k))
     .map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
   const log = ss.map((s,i)=>
     `--- פגישה ${i+1} · ${s.date} · ${s.type}${s.clarity?` · בהירות ${s.clarity}/5`:""}
@@ -2727,24 +2754,34 @@ function buildPrompt(p){
 סיכום: ${s.notes||"(ללא)"}
 ${s.actions?"משימה: "+s.actions:""}`).join("\n");
 
-  return `אתה עוזר לשדכן/ית מקצועי/ת בשירות שידוכים אישי. לפניך תיק של מועמד/ת: פרטי רקע וסיכומי הפגישות האישיות שנערכו איתו/ה.
+  const body = `אתה עוזר מקצועי לשדכנית בשירות שידוכים אישי (בוטיק): היא מקיימת פגישת ליווי אישית עם כל מועמד/ת ותחקיר אחרי כל פגישת היכרות. לפניך תיק מועמד/ת: פרטי רקע מהטופס שמילא/ה, וסיכומי פגישות הליווי.
 
-המשימה: להפיק תמצית מקצועית שתעזור לשדכן/ית להתכונן לפגישה הבאה ולכוון את החיפוש.
+המשימה: תמצית עבודה מקצועית שתעזור לשדכנית (א) להתכונן לפגישת הליווי הבאה, (ב) לכוון את חיפוש ההצעות.
 
 כללים מחייבים:
-- הסתמך אך ורק על מה שכתוב בסיכומים. אל תמציא ואל תשלים פרטים חסרים.
-- אל תאבחן, אל תתייג באבחנות פסיכולוגיות ואל תשפוט את המועמד/ת. תאר מה נאמר, לא מה "מסתתר מאחורי".
-- כשמשהו לא ברור או סותר בין פגישות — נסח אותו כשאלה לבירור ולא כמסקנה.
-- כתוב בעברית, ענייני, קצר. כל פריט משפט אחד.
+- הסתמך אך ורק על מה שכתוב. אל תמציא, אל תשלים פרטים חסרים ואל תסיק מעבר לנאמר.
+- אל תאבחן ואל תתייג באבחנות פסיכולוגיות. תאר מה נאמר, לא מה "מסתתר מאחורי".
+- סתירה בין הטופס לפגישות, או בין פגישה לפגישה — נסח כשאלה לבירור, לא כמסקנה. ציין ממתי כל צד של הסתירה.
+- אם מופיעה התקדמות או שינוי לאורך הפגישות — שקף אותם.
+- כתוב בעברית, ענייני ומכבד. כל פריט משפט אחד, קצר.
+- אם אין בחומר בסיס לסעיף מסוים — החזר בו רשימה ריקה. אל תמלא כדי למלא.
 
-פרטי רקע:
+פרטי רקע מהטופס:
 ${prof}
 
 סיכומי הפגישות (מהישן לחדש):
 ${log}
 
 החזר JSON בלבד, בלי טקסט לפני או אחרי ובלי סימוני קוד, במבנה:
-{"summary":"פסקה אחת של 2-3 משפטים","wants":["מה עולה בעקביות כבקשה"],"clarify":["מה עדיין לא ברור ושווה לשאול"],"criteria":["קווים מנחים מעשיים לחיפוש"],"flags":["נקודות שדורשות תשומת לב, אם יש"]}`;
+{"summary":"תמונת מצב — פסקה אחת של 2-3 משפטים: היכן התהליך עומד",
+ "strengths":["חוזקות ומשאבים שעולים מהחומר"],
+ "wants":["מה עולה בעקביות כבקשה או כצורך"],
+ "shifts":["שינוי או התקדמות בין הפגישות, אם יש"],
+ "clarify":["מה עדיין לא ברור או סותר — לשאול בפגישה הבאה"],
+ "criteria":["קווים מנחים מעשיים לסינון הצעות"],
+ "flags":["נקודות רגישות שדורשות תשומת לב, אם יש"],
+ "nextMeeting":["הצעה קצרה למהלך פגישת הליווי הבאה — 2-3 נקודות"]}`;
+  return scrubForAI(body, p);
 }
 
 async function runAnalysis(pid){
@@ -2758,8 +2795,8 @@ async function runAnalysis(pid){
     let parsed = null;
     try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
     p.analysis = parsed
-      ? Object.assign({date:today(), basedOn:ss.length}, parsed)
-      : {date:today(), basedOn:ss.length, summary:"", raw};
+      ? Object.assign({date:today(), basedOn:ss.length, anon:aiAnon()}, parsed)
+      : {date:today(), basedOn:ss.length, anon:aiAnon(), summary:"", raw};
     p.updated = today();
     save(); openPerson(pid); toast("הניתוח הופק");
   }catch(err){
@@ -2791,7 +2828,8 @@ async function organizeDoc(pid, text){
   const p = personById(pid);
   $("#sheetBody").innerHTML = `<div class="win-col"><div class="an-load">קורא את המסמך ומסדר אותו…</div></div>`;
 
-  const prompt = `לפניך טקסט גולמי ממסמך שהשדכנית ניהלה על מועמד/ת בשם ${p.fullName}. סדר אותו לרישומים מובנים.
+  const who = aiAnon() ? (p.gender==="בת"?"המועמדת":"המועמד") : (p.fullName || "המועמד/ת");
+  const prompt = `לפניך טקסט גולמי ממסמך שהשדכנית ניהלה על ${who}. סדר אותו לרישומים מובנים.
 
 כללים מחייבים:
 - אל תמציא כלום. אם אין תאריך לפגישה — החזר מחרוזת ריקה בשדה date. אל תנחש תאריכים.
@@ -2803,7 +2841,7 @@ async function organizeDoc(pid, text){
 - כל מה שלא הצלחת לשייך — לשדה leftover.
 
 הטקסט:
-${text.slice(0,12000)}
+${scrubForAI(text.slice(0,12000), p)}
 
 החזר JSON בלבד, בלי סימוני קוד:
 {"sessions":[{"date":"YYYY-MM-DD או ריק","type":"","topics":[],"notes":"","actions":""}],"profile":{},"leftover":""}`;
@@ -3160,7 +3198,8 @@ async function composeCard(pid){
   const p = personById(pid);
   const ss = sessionsOf(pid);
   const an = p.analysis;
-  const facts = FIELDS.filter(f=>p[f.k] && !["refs"].includes(f.k)).map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
+  const skipF = aiAnon() ? AI_PII : ["refs"];
+  const facts = FIELDS.filter(f=>p[f.k] && !skipF.includes(f.k)).map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
   const log = ss.map(s=>`[${s.date} · ${s.type}] ${s.notes||""}`).join("\n");
   const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
   const g = p.gender==="בת" ? "בחורה" : "בחור";
@@ -3188,7 +3227,7 @@ ${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
   const old = foot.innerHTML;
   foot.innerHTML = `<div class="an-load">מנסח מתוך התיק…</div>`;
   try{
-    const raw = await callAI(prompt);
+    const raw = await callAI(scrubForAI(prompt, p));
     let parsed = null;
     try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
     if(!parsed) throw new Error("לא התקבל נוסח תקין — נסו שוב");
@@ -3208,7 +3247,7 @@ const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 const FOLDER_NAME = "גיבויי שידוכים";
 
 function driveCfg(){
-  const def = {clientId:"", enabled:false, hour:1, folderId:"", last:"", keep:14, encOn:true, xlsxOn:true};
+  const def = {clientId:"", enabled:false, hour:1, folderId:"", last:"", keep:14, encOn:true, xlsxOn:true, closeOn:true};
   try{ return Object.assign(def, JSON.parse(localStorage.getItem("drive_cfg") || "null") || {}); }
   catch(e){ return def; }
 }
@@ -3341,6 +3380,7 @@ async function driveUpload(token, folder, name, mime, data){
 
 async function driveBackup(silent){
   if(DRIVE.busy) return;
+  if(CRY.locked){ if(!silent) toast("הכלי נעול — פתחו אותו לפני גיבוי"); return; }   /* אחרי נעילה הנתונים ריקים בזיכרון */
   DRIVE.busy = true;
   driveStatus("מגבה לדרייב…");
   try{
@@ -3378,6 +3418,7 @@ async function driveBackup(silent){
     cfg.last = new Date().toISOString();
     driveSave(cfg);
     markBackup();
+    DRIVE.changed = false;
     driveStatus("הגיבוי האחרון: " + cfg.last.slice(0,16).replace("T"," ") + " · " + made.join(" + "), "var(--teal)");
     if(!silent) toast("הגיבוי עלה לדרייב (" + made.join(" + ") + ")");
     drivePrune().catch(()=>{});
@@ -3465,6 +3506,24 @@ function driveDue(){
 }
 function driveTick(){ if(driveDue()) driveBackup(true); }
 
+/* גיבוי אוטומטי כשיוצאים מהכלי (מעבר לחלון אחר, מזעור או סגירה) —
+   רק אם היו שינויים מאז הגיבוי האחרון, ולא יותר מפעם ב-10 דקות.
+   בסגירה ממש של הדפדפן ההעלאה מספיקה רק כשיש כבר הרשאה בתוקף מאותו יום,
+   ולכן הגיבוי היומי הקבוע נשאר רשת הביטחון. */
+let lastCloseBk = 0;
+function driveCloseBackup(onPageHide){
+  const cfg = driveCfg();
+  if(!cfg.enabled || !cfg.closeOn || !cfg.clientId) return;
+  if(CRY.locked || !DRIVE.changed || DRIVE.busy) return;
+  if(Date.now() - lastCloseBk < 10*60000) return;
+  const tokenOk = DRIVE.token && Date.now() < DRIVE.exp - 60000;
+  if(onPageHide && !tokenOk) return;   /* בזמן סגירה אין אפשרות לבקש הרשאה חדשה */
+  lastCloseBk = Date.now();
+  driveBackup(true);
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) driveCloseBackup(false); });
+window.addEventListener("pagehide", ()=>driveCloseBackup(true));
+
 function renderDrive(){
   const cfg = driveCfg();
   const host = $("#driveHost"); if(!host) return;
@@ -3498,6 +3557,8 @@ function renderDrive(){
           <span>קובץ <b>מוצפן</b> לשחזור מלא — מומלץ תמיד; נפתח רק עם הסיסמה שלכם</span></label>
         <label class="todo"><input type="checkbox" id="drvXlsx" ${cfg.xlsxOn?"checked":""}>
           <span>קובץ <b>אקסל קריא</b> לעיון — שימו לב: כל מי שנכנס לדרייב יכול לקרוא אותו</span></label>
+        <label class="todo"><input type="checkbox" id="drvClose" ${cfg.closeOn?"checked":""}>
+          <span>גיבוי אוטומטי גם <b>ביציאה מהכלי</b> (מעבר לחלון אחר או סגירה), כשהיו שינויים</span></label>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -3517,6 +3578,7 @@ function renderDrive(){
     c.enabled = $("#drvOn").checked;
     c.encOn = $("#drvEnc").checked;
     c.xlsxOn = $("#drvXlsx").checked;
+    c.closeOn = $("#drvClose").checked;
     driveSave(c);
     driveStatus("ההגדרות נשמרו.", "var(--teal)");
     if(c.enabled && !c.last) driveStatus("ההגדרות נשמרו. לחצו על \u05F4התחברות לגוגל\u05F4 או \u05F4גיבוי עכשיו\u05F4 כדי לאשר את ההרשאה פעם אחת.", "var(--teal)");
@@ -3848,6 +3910,11 @@ $("#btnPaste").addEventListener("click",()=>{
 });
 (function initAI(){
   const cfg = aiCfg();
+  $("#aiAnonBox").checked = aiAnon();
+  $("#aiAnonBox").addEventListener("change", e=>{
+    localStorage.setItem("ai_anon", e.target.checked ? "1" : "0");
+    toast(e.target.checked ? "השליחה אנונימית" : "שימו לב: פרטים מזהים יישלחו לשירות");
+  });
   $("#aiProvider").value = cfg.provider;
   $("#apiKey").value = cfg.key;
   const list = fillModelList(cfg.provider);
