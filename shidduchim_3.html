@@ -156,9 +156,25 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 
 /* ---------- lock ---------- */
 .lock{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
-  background:linear-gradient(160deg,#16212e,#0f2a2a)}
-.lock-card{background:var(--card);border-radius:16px;padding:30px 30px 24px;width:min(420px,100%);
-  box-shadow:0 30px 70px -20px rgba(0,0,0,.5)}
+  background:
+    radial-gradient(460px 340px at 85% 10%, rgba(15,95,92,.38), transparent 62%),
+    radial-gradient(560px 420px at 10% 92%, rgba(169,124,52,.20), transparent 62%),
+    radial-gradient(900px 600px at 50% 120%, rgba(255,255,255,.04), transparent 70%),
+    linear-gradient(160deg,#131c28,#0d2626)}
+.lock-wrap{width:min(430px,100%);animation:lockIn .5s cubic-bezier(.2,.7,.3,1)}
+@keyframes lockIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.lock-brand{text-align:center;margin-bottom:20px}
+.rings{width:66px;height:42px;position:relative;margin:0 auto 12px;
+  filter:drop-shadow(0 8px 18px rgba(0,0,0,.45))}
+.rings span{position:absolute;top:0;width:42px;height:42px;border:3px solid;border-radius:50%}
+.rings span:first-child{right:0;border-color:#e2c078}
+.rings span:last-child{left:0;border-color:#8fcdc7;opacity:.9}
+.lock-title{font-family:var(--display);color:#f3eee3;font-size:27px;letter-spacing:.4px;font-weight:700}
+.lock-tag{color:#92a4b1;font-size:13px;margin-top:4px;letter-spacing:.2px}
+.lock-card{background:var(--card);border-radius:20px;padding:28px 30px 24px;width:100%;
+  box-shadow:0 40px 90px -24px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07)}
+.lock-foot{text-align:center;color:#6b7d8b;font-size:11.5px;margin-top:16px;letter-spacing:.2px}
+.lock-foot b{color:#8fa4b1;font-weight:600}
 .ask{position:fixed;inset:0;background:rgba(22,33,46,.5);z-index:300;display:grid;place-items:center;padding:20px}
 .ask-card{background:#fff;border-radius:14px;padding:22px 24px;width:min(420px,100%);
   box-shadow:0 30px 70px -20px rgba(22,33,46,.5)}
@@ -172,10 +188,15 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 
 .lock-card h1{font-family:var(--display);font-size:24px;margin:0 0 6px}
 .lock-card p{font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;line-height:1.6}
-.lock-card input[type=password]{width:100%;padding:11px 13px;border:1px solid var(--line);
-  border-radius:9px;margin-bottom:9px;font-size:15px}
-.lock-card input:focus{border-color:var(--teal);outline:none}
-.lock-card .btn{width:100%;margin-top:4px;padding:11px}
+.lock-card input[type=password],.lock-card input[type=text]{width:100%;padding:12px 14px;
+  border:1.5px solid var(--line);border-radius:11px;margin-bottom:10px;font-size:15px;
+  background:#fbfcfd;transition:border-color .15s, box-shadow .15s}
+.lock-card input[type=password]:focus,.lock-card input[type=text]:focus{
+  border-color:var(--teal);outline:none;box-shadow:0 0 0 3.5px var(--teal-light);background:#fff}
+.lock-card .btn{width:100%;margin-top:4px;padding:12px;border-radius:11px;font-size:15px;
+  transition:transform .12s, box-shadow .15s, filter .15s}
+.lock-card .btn.pri:hover{filter:brightness(1.07);box-shadow:0 10px 24px -10px rgba(15,95,92,.55)}
+.lock-card .btn:active{transform:translateY(1px)}
 .lock-warn{background:var(--brass-light);border:1px solid #ecdcbe;color:#7a5c26;border-radius:8px;
   padding:9px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.5}
 .lock-warn.danger{background:#f9ecee;border-color:#eed6da;color:#8c3a4a}
@@ -1019,12 +1040,19 @@ function lock(){
   showLock("unlock");
 }
 
+const LOCK_BRAND = `<div class="lock-brand">
+  <div class="rings"><span></span><span></span></div>
+  <div class="lock-title">כרטסיית שידוכים</div>
+  <div class="lock-tag">ניהול מועמדים והצעות — פרטי, מוצפן, אצלך בלבד</div>
+</div>`;
+const LOCK_FOOT = `<div class="lock-foot">הנתונים מוצפנים <b>במחשב הזה בלבד</b> ואינם נשלחים לשום שרת</div>`;
+
 function showLock(mode, msg){
   const box = $("#lock");
   box.classList.remove("hidden");
   const legacy = localStorage.getItem(LEGACY);
   if(mode === "setup"){
-    box.innerHTML = `<div class="lock-card">
+    box.innerHTML = `<div class="lock-wrap">${LOCK_BRAND}<div class="lock-card">
       <h1>יצירת חשבון</h1>
       <p>החשבון נשמר <b>במחשב הזה בלבד</b> ומצפין את כל התיקים. שם המשתמש והסיסמה יידרשו בכל כניסה — <b>גם אם מישהו מעתיק את הקובץ</b>.</p>
       ${legacy?`<div class="lock-warn">נמצאו נתונים קיימים לא מוצפנים. הם יוצפנו ויימחקו מהאחסון הגלוי.</div>`:""}
@@ -1037,7 +1065,7 @@ function showLock(mode, msg){
       <button class="btn pri" id="btnSetPass">יצירת החשבון</button>
       <button class="btn ghost" id="btnSkip">להמשיך בינתיים ללא חשבון</button>
       <div id="lockMsg" class="lock-msg"></div>
-    </div>`;
+    </div>${LOCK_FOOT}</div>`;
     $("#pass1").addEventListener("input", e=>{
       const v = e.target.value, s = $("#strength");
       const score = (v.length>=8?1:0)+(v.length>=12?1:0)+(/[א-ת]/.test(v)||/[a-z]/i.test(v)?1:0)+(/\d/.test(v)?1:0)+(/[^\w\sא-ת]/.test(v)?1:0);
@@ -1056,15 +1084,15 @@ function showLock(mode, msg){
     $("#pass2").addEventListener("keydown", e=>{ if(e.key==="Enter") setupPass(); });
   }else{
     const acctName = localStorage.getItem("acct_user") || "";
-    box.innerHTML = `<div class="lock-card">
-      <h1>כניסה לחשבון</h1>
+    box.innerHTML = `<div class="lock-wrap">${LOCK_BRAND}<div class="lock-card">
+      <h1>${acctName?"ברוכה הבאה":"כניסה לחשבון"}</h1>
       <p>${acctName?`שלום, ${esc(acctName)}. `:""}הזינו את פרטי הכניסה כדי לפתוח את התיקים.</p>
       <input type="text" id="userIn" placeholder="שם משתמש" autocomplete="username" value="${esc(acctName)}">
       <input type="password" id="passIn" placeholder="סיסמה" autocomplete="current-password">
       <button class="btn pri" id="btnUnlock">כניסה</button>
       <div id="lockMsg" class="lock-msg">${msg?esc(msg):""}</div>
       <button class="btn ghost sm" id="btnForgot">שכחתי את הסיסמה</button>
-    </div>`;
+    </div>${LOCK_FOOT}</div>`;
     $("#btnUnlock").addEventListener("click", tryUnlock);
     $("#passIn").addEventListener("keydown", e=>{ if(e.key==="Enter") tryUnlock(); });
     $("#userIn").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#passIn").focus(); });
@@ -1126,7 +1154,7 @@ function showRecovery(rec, firstTime){
   const box = $("#lock");
   box.classList.remove("hidden");
   $("#app").classList.add("blurred");
-  box.innerHTML = `<div class="lock-card">
+  box.innerHTML = `<div class="lock-wrap">${LOCK_BRAND}<div class="lock-card">
     <h1>קוד השחזור</h1>
     <p>זהו המפתח החלופי לכספת. הוא פותח את התיקים גם אם קוד הכניסה נשכח.</p>
     <div class="rec-code">${esc(rec)}</div>
@@ -1135,7 +1163,7 @@ function showRecovery(rec, firstTime){
     <button class="btn" id="btnCopyRec">העתקה</button>
     <label class="rec-ok"><input type="checkbox" id="recSaved"> שמרתי את הקוד במקום בטוח</label>
     <button class="btn pri" id="btnRecDone" disabled>${firstTime?"כניסה לכרטסייה":"סיום"}</button>
-  </div>`;
+  </div></div>`;
   $("#btnCopyRec").addEventListener("click", ()=>{
     navigator.clipboard.writeText(rec).then(()=>{
       toast("הועתק — הלוח יתנקה בעוד דקה");
