@@ -591,6 +591,9 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         מתחברים פעם אחת לחשבון הגוגל, והכלי מעלה לדרייב פעם ביום שני קבצים:
         <b>גיבוי מוצפן</b> שממנו משחזרים הכול (נפתח רק עם הסיסמה — בטוח גם אם מישהו מגיע לדרייב),
         ולצדו <b>אקסל קריא</b> לעיון. שחזור מלא מהדרייב — בלחיצת כפתור.
+        <b>מחזור אוטומטי:</b> נשמרים הגיבויים של השבוע האחרון (ניתן לשינוי); הישנים יותר נמחקים
+        מעצמם, ו-3 האחרונים מכל סוג נשמרים תמיד, ליתר ביטחון. כמה גיבויים באותו יום מעדכנים
+        את אותו קובץ — בלי כפילויות.
         <b>שימו לב:</b> דפדפן אינו יכול לפעול כשהמחשב כבוי — לכן אם בשעה שנבחרה המחשב היה סגור,
         הגיבוי מתבצע אוטומטית בפתיחה הראשונה של הכלי אחריה. כך תמיד יש עותק יומי, גם בלי שרת.
       </div>
@@ -3247,7 +3250,7 @@ const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 const FOLDER_NAME = "גיבויי שידוכים";
 
 function driveCfg(){
-  const def = {clientId:"", enabled:false, hour:1, folderId:"", last:"", keep:14, encOn:true, xlsxOn:true, closeOn:true};
+  const def = {clientId:"", enabled:false, hour:1, folderId:"", last:"", keepDays:7, encOn:true, xlsxOn:true, closeOn:true};
   try{ return Object.assign(def, JSON.parse(localStorage.getItem("drive_cfg") || "null") || {}); }
   catch(e){ return def; }
 }
@@ -3364,9 +3367,16 @@ async function driveFolder(token){
   return id;
 }
 
-/* העלאת קובץ בודד לתיקיית הגיבויים */
+/* העלאת קובץ לתיקיית הגיבויים. אם כבר קיים קובץ באותו שם (גיבוי נוסף מאותו יום) —
+   הוא מתעדכן במקומו, כך שבדרייב נשאר קובץ אחד ליום מכל סוג, תמיד העדכני ביותר. */
 async function driveUpload(token, folder, name, mime, data){
-  const meta = {name, parents:[folder], mimeType:mime};
+  let id = null;
+  try{
+    const q = encodeURIComponent(`'${folder}' in parents and name='${name.replace(/'/g,"\\'")}' and trashed=false`);
+    const found = await driveApi(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`, token);
+    id = found.files && found.files[0] && found.files[0].id;
+  }catch(e){ /* אם החיפוש נכשל — פשוט ניצור קובץ חדש */ }
+  const meta = id ? {name, mimeType:mime} : {name, parents:[folder], mimeType:mime};
   const boundary = "sh" + Date.now() + Math.random().toString(36).slice(2,6);
   const body = new Blob([
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`,
@@ -3374,8 +3384,10 @@ async function driveUpload(token, folder, name, mime, data){
     data,
     `\r\n--${boundary}--`
   ], {type:`multipart/related; boundary=${boundary}`});
-  return driveApi("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", token,
-                  {method:"POST", body});
+  const url = id
+    ? `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart&fields=id,name`
+    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name";
+  return driveApi(url, token, {method: id ? "PATCH" : "POST", body});
 }
 
 async function driveBackup(silent){
@@ -3474,19 +3486,26 @@ async function driveRestore(){
   }
 }
 
-/* שמירת מספר קבוע של גיבויים אחרונים, כדי שהתיקייה לא תתפוצץ */
+/* מחזור גיבויים: גיבוי ישן מהתקופה שנקבעה (ברירת מחדל — שבוע) נמחק, והחדש נשמר.
+   ליתר ביטחון, 3 הגיבויים האחרונים מכל סוג לעולם לא נמחקים — גם אם הם ישנים
+   (למשל אחרי חופשה ארוכה בלי עבודה בכלי). */
 async function drivePrune(){
   const cfg = driveCfg();
-  const keep = parseInt(cfg.keep,10) || 14;
+  const days = parseInt(cfg.keepDays,10) || 7;
   if(!cfg.folderId || !DRIVE.token) return;
   const q = encodeURIComponent(`'${cfg.folderId}' in parents and trashed=false`);
   const list = await driveApi(
     `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime desc&fields=files(id,name,createdTime)&pageSize=200`,
     DRIVE.token);
-  /* שומרים N אחרונים מכל סוג בנפרד — כדי שהאקסל היומי לא ידחק החוצה את הגיבויים המוצפנים */
   const files = list.files || [];
   const isEnc = f => /מוצפן|\.shbk/.test(f.name || "");
-  const extra = files.filter(isEnc).slice(keep).concat(files.filter(f=>!isEnc(f)).slice(keep));
+  const cutoff = Date.now() - days * 86400000;
+  const MIN_KEEP = 3;
+  const oldOnes = grp => grp.slice(MIN_KEEP).filter(f=>{
+    const t = new Date(f.createdTime || 0).getTime();
+    return t && t < cutoff;
+  });
+  const extra = oldOnes(files.filter(isEnc)).concat(oldOnes(files.filter(f=>!isEnc(f))));
   for(const f of extra){
     await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`,
       {method:"DELETE", headers:{Authorization:"Bearer " + DRIVE.token}}).catch(()=>{});
@@ -3547,8 +3566,8 @@ function renderDrive(){
           `<option value="${h}" ${String(cfg.hour)===String(h)?"selected":""}>${String(h).padStart(2,"0")}:00</option>`).join("")}</select>
       </div>
       <div class="field">
-        <label for="drvKeep">כמה גיבויים לשמור (מכל סוג)</label>
-        <input id="drvKeep" type="number" min="3" max="90" value="${esc(cfg.keep||14)}">
+        <label for="drvKeep">כמה ימים לשמור גיבויים</label>
+        <input id="drvKeep" type="number" min="3" max="90" value="${esc(cfg.keepDays||7)}">
       </div>
       <div class="field wide">
         <label class="todo"><input type="checkbox" id="drvOn" ${cfg.enabled?"checked":""}>
@@ -3574,7 +3593,7 @@ function renderDrive(){
     const c = driveCfg();
     c.clientId = $("#drvId").value.trim();
     c.hour = parseInt($("#drvHour").value,10);
-    c.keep = parseInt($("#drvKeep").value,10) || 14;
+    c.keepDays = parseInt($("#drvKeep").value,10) || 7;
     c.enabled = $("#drvOn").checked;
     c.encOn = $("#drvEnc").checked;
     c.xlsxOn = $("#drvXlsx").checked;
