@@ -554,7 +554,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
     <!-- ===== IMPORT ===== -->
     <section class="page hidden" id="view-import">
       <h2>ייבוא קובץ</h2>
-      <div class="sub">אקסל, CSV, וורד (docx), קובץ גיבוי JSON או גיבוי מוצפן (shbk). בטבלה — השורה הראשונה היא הכותרות. במסמך וורד של מועמד בודד — המערכת קוראת את השורות ובונה כרטיס.</div>
+      <div class="sub">אקסל, CSV, וורד (docx), קובץ גיבוי JSON או גיבוי מוצפן (shbk). בטבלה — השורה הראשונה היא הכותרות. <b>קובץ תשובות מטופס הגוגל של כרטיס השידוכים מזוהה אוטומטית</b> — כל שאלה ממופה לשדה המתאים. במסמך וורד של מועמד בודד — המערכת קוראת את השורות ובונה כרטיס.</div>
       <div class="drop" id="drop">
         <h3>גררו לכאן את הקובץ</h3>
         <p>או בחרו קובץ מהמחשב</p>
@@ -696,54 +696,130 @@ const TOPICS = ["ערכים והשקפה","לימודים ותורה","קריי�
                 "משפחה ורקע","אופי ואישיות","ציפיות מבן/בת הזוג","מוכנות לתהליך"];
 const CLARITY = {1:"ערפול מוחלט",2:"מתלבט/ת",3:"כיוון כללי",4:"בהיר",5:"ממוקד/ת מאוד"};
 
+const HASHKAFOT = ["דתי לאומי","דתי לאומי פתוח","חרדי לאומי","חרדי מודרני","חרדי","אחר"];
+/* סכמת השדות — על בסיס טופס "כרטיס שידוכים" שממלאים המועמדים.
+   כל שדה כאן מופיע אוטומטית בעריכה, בתצוגה, בייבוא, בייצוא לאקסל ובניתוח. */
 const FIELDS = [
-  {k:"fullName", l:"שם מלא",           t:"text",     sec:"זיהוי"},
-  {k:"gender",   l:"מין",              t:"select",   sec:"זיהוי", opts:["בן","בת"]},
-  {k:"age",      l:"גיל",              t:"number",   sec:"זיהוי"},
-  {k:"status",   l:"סטטוס",            t:"select",   sec:"זיהוי", opts:STATUSES},
-  {k:"maritalStatus",l:"מצב משפחתי",   t:"select",   sec:"זיהוי", opts:["רווק/ה","גרוש/ה","אלמן/ה"]},
-  {k:"city",     l:"עיר",              t:"text",     sec:"רקע"},
-  {k:"community",l:"חוג",              t:"select",   sec:"רקע", opts:SECTORS},
-  {k:"edah",     l:"עדה / זרם",        t:"combo",    sec:"רקע", opts:EDOT},
-  {k:"openTo",   l:"חוגים מתאימים",    t:"multi",    sec:"בקשה", opts:SECTORS},
-  {k:"family",   l:"משפחה / הורים",    t:"text",     sec:"רקע"},
-  {k:"study",    l:"ישיבה / סמינר",    t:"text",     sec:"רקע"},
-  {k:"service",  l:"שירות צבאי / לאומי",t:"text",    sec:"רקע"},
-  {k:"parentsHome",l:"מגורי ההורים",   t:"text",     sec:"רקע"},
-  {k:"occupation",l:"עיסוק",           t:"text",     sec:"רקע"},
-  {k:"height",   l:"גובה",             t:"text",     sec:"רקע"},
-  {k:"phone",    l:"טלפון",            t:"tel",      sec:"קשר"},
-  {k:"contact",  l:"איש קשר",          t:"text",     sec:"קשר"},
-  {k:"contactPhone",l:"טלפון איש קשר", t:"tel",      sec:"קשר"},
-  {k:"refs",     l:"אנשי קשר לבירורים",t:"refs",     sec:"קשר"},
-  {k:"character",l:"קווים לדמות",      t:"textarea", sec:"בקשה"},
-  {k:"looking",  l:"מה מחפשים",        t:"textarea", sec:"בקשה"},
-  {k:"notes",    l:"הערות",            t:"textarea", sec:"בקשה"}
+  /* זיהוי */
+  {k:"fullName", l:"שם מלא",             t:"text",     sec:"זיהוי"},
+  {k:"prayerName",l:"שם לתפילה",         t:"text",     sec:"זיהוי"},
+  {k:"gender",   l:"מין",                t:"select",   sec:"זיהוי", opts:["בן","בת"]},
+  {k:"age",      l:"גיל",                t:"number",   sec:"זיהוי"},
+  {k:"status",   l:"סטטוס טיפול",        t:"select",   sec:"זיהוי", opts:STATUSES},
+  {k:"maritalStatus",l:"מצב אישי",       t:"select",   sec:"זיהוי", opts:["רווק/ה","גרוש/ה","אלמן/ה"]},
+  /* קשר */
+  {k:"phone",    l:"טלפון",              t:"tel",      sec:"קשר"},
+  {k:"email",    l:"כתובת מייל",         t:"text",     sec:"קשר"},
+  {k:"contact",  l:"איש קשר",            t:"text",     sec:"קשר"},
+  {k:"contactPhone",l:"טלפון איש קשר",   t:"tel",      sec:"קשר"},
+  {k:"refs",     l:"אנשי קשר לבירורים",  t:"refs",     sec:"קשר"},
+  /* רקע */
+  {k:"city",     l:"מקום מגורים",        t:"text",     sec:"רקע"},
+  {k:"community",l:"חוג (לסולם ההתאמה)", t:"select",   sec:"רקע", opts:SECTORS},
+  {k:"hashkafa", l:"השקפה (כהגדרתם)",    t:"combo",    sec:"רקע", opts:HASHKAFOT},
+  {k:"edah",     l:"עדה / זרם",          t:"combo",    sec:"רקע", opts:EDOT},
+  {k:"study",    l:"תיכון / ישיבה / סמינר",t:"text",   sec:"רקע"},
+  {k:"postSchool",l:"מאז סיום הלימודים — מה עשה/תה ואיך היה",t:"textarea",sec:"רקע"},
+  {k:"training", l:"הכשרה לימודית / מקצועית",t:"text", sec:"רקע"},
+  {k:"occupation",l:"עיסוק",             t:"text",     sec:"רקע"},
+  {k:"service",  l:"שירות צבאי / לאומי", t:"text",     sec:"רקע"},
+  /* מראה חיצוני */
+  {k:"height",   l:"גובה",               t:"text",     sec:"מראה חיצוני"},
+  {k:"build",    l:"מבנה גוף",           t:"select",   sec:"מראה חיצוני", opts:["רזה","בינוני/ת","מלא/ה"]},
+  {k:"glasses",  l:"משקפיים",            t:"select",   sec:"מראה חיצוני", opts:["עם","בלי"]},
+  {k:"skinTone", l:"צבע עור",            t:"text",     sec:"מראה חיצוני"},
+  {k:"hairColor",l:"צבע שיער",           t:"text",     sec:"מראה חיצוני"},
+  {k:"health",   l:"מצב בריאותי",        t:"text",     sec:"מראה חיצוני"},
+  /* אופי והשקפה */
+  {k:"character",l:"תיאור אופי / קווים לדמות",t:"textarea",sec:"אופי והשקפה"},
+  {k:"torahAttitude",l:"היחס לתורה, ולחלוקה מול עבודה",t:"textarea",sec:"אופי והשקפה"},
+  {k:"hobbies",  l:"תחומי התעניינות ותחביבים",t:"textarea",sec:"אופי והשקפה"},
+  {k:"futurePlans",l:"תוכניות לעתיד (חוץ מלהתחתן...)",t:"textarea",sec:"אופי והשקפה"},
+  {k:"preferredLocation",l:"מקום מגורים מועדף וגמישות",t:"text",sec:"אופי והשקפה"},
+  {k:"moreInfo", l:"דברים נוספים שחשוב לדעת",t:"textarea",sec:"אופי והשקפה"},
+  /* משפחה */
+  {k:"familyStatus",l:"מצב משפחתי בבית", t:"combo",    sec:"משפחה", opts:["הורים נשואים","הורים גרושים","חוזרים בתשובה"]},
+  {k:"family",   l:"כמה מילים על המשפחה",t:"textarea", sec:"משפחה"},
+  {k:"parentsOccupation",l:"עיסוק ההורים",t:"text",    sec:"משפחה"},
+  {k:"siblings", l:"אחים ואחיות — מספר, גילים ומצב דתי",t:"textarea",sec:"משפחה"},
+  {k:"parentsHome",l:"מגורי ההורים",     t:"text",     sec:"משפחה"},
+  /* מה מחפשים */
+  {k:"openTo",   l:"חוגים מתאימים",      t:"multi",    sec:"מה מחפשים", opts:SECTORS},
+  {k:"ageRange", l:"טווח גילאים מבוקש",  t:"text",     sec:"מה מחפשים"},
+  {k:"lookingTraits",l:"תכונות אופי מבוקשות",t:"textarea",sec:"מה מחפשים"},
+  {k:"lookingLooks",l:"תיאור חיצוני מבוקש",t:"text",   sec:"מה מחפשים"},
+  {k:"lookingReligious",l:"מה חשוב מבחינה דתית",t:"textarea",sec:"מה מחפשים"},
+  {k:"lookingHashkafa",l:"מה חשוב מבחינה השקפתית",t:"textarea",sec:"מה מחפשים"},
+  {k:"looking",  l:"מה מחפשים — כללי",   t:"textarea", sec:"מה מחפשים"},
+  {k:"lookingMore",l:"דברים נוספים",     t:"text",     sec:"מה מחפשים"},
+  /* שאלות עומק */
+  {k:"goodRelationship",l:"איך נראית זוגיות טובה בעיניו/ה",t:"textarea",sec:"שאלות עומק"},
+  {k:"mustTrait",l:"תכונה אחת שחייבת להיות",t:"text",  sec:"שאלות עומק"},
+  {k:"dealBreaker",l:"שובר עסקה — קו אדום",t:"text",   sec:"שאלות עומק"},
+  {k:"compromise",l:"על מה מוכנ/ה להתפשר",t:"text",    sec:"שאלות עומק"},
+  {k:"challenge",l:"אתגר מרכזי בפגישות עד כה",t:"textarea",sec:"שאלות עומק"},
+  /* בחור ישיבה */
+  {k:"yeshivaPlans",l:"ללמוד כל החיים או לצאת לעבוד?",t:"textarea",sec:"בחור ישיבה"},
+  {k:"afterYeshiva",l:"המשך אחרי הישיבה",t:"text",     sec:"בחור ישיבה"},
+  /* הערות */
+  {k:"notes",    l:"הערות השדכנית",      t:"textarea", sec:"הערות"}
 ];
-const SECTIONS = ["זיהוי","רקע","קשר","בקשה"];
+const SECTIONS = ["זיהוי","קשר","רקע","מראה חיצוני","אופי והשקפה","משפחה","מה מחפשים","שאלות עומק","בחור ישיבה","הערות"];
 
 const SYN = {
   fullName:["שם","שם מלא","שם המועמד","שם פרטי ומשפחה","שם מועמד","name","full name"],
-  gender:["מין","מגדר","בן/בת","סוג","gender"],
+  prayerName:["שם לתפילה","בונוס! שם לתפילה"],
+  gender:["מין","מגדר","בן/בת","זכר/נקבה","gender"],
   age:["גיל","age","שנת לידה","גיל המועמד"],
-  status:["סטטוס","מצב","status","מצב טיפול"],
+  status:["סטטוס","מצב","status","מצב טיפול","סטטוס טיפול"],
+  maritalStatus:["מצב משפחתי","סטטוס משפחתי","מצב אישי"],
+  familyStatus:["מצב משפחתי בבית","מצב ההורים"],
+  email:["מייל","אימייל","כתובת מייל","דואר אלקטרוני","email"],
   city:["עיר","יישוב","ישוב","מקום מגורים","כתובת","city"],
-  community:["חוג","מגזר","רמה","השקפה","סוג","זרם דתי","רמה דתית","הגדרה"],
+  preferredLocation:["מקום מגורים מועדף","גמיש למקומות אחרים","גמישה למקומות אחרים"],
+  community:["חוג","מגזר","רמה","זרם דתי","רמה דתית","הגדרה"],
+  hashkafa:["השקפה","השקפה דתית","הגדרה דתית"],
   edah:["עדה","זרם","קהילה","חסידות","מוצא","נוסח"],
-  openTo:["חוגים מתאימים","פתוח ל","פתוחה ל","מוכן ל","מוכנה ל","טווח","חוגים מבוקשים"],
-  family:["משפחה","הורים","שם האב","שם המשפחה","רקע משפחתי","אב"],
-  study:["ישיבה","סמינר","מוסד","מקום לימודים","כולל","לימודים"],
+  openTo:["חוגים מתאימים","פתוח ל","פתוחה ל","מוכן ל","מוכנה ל","חוגים מבוקשים"],
+  family:["משפחה","הורים","שם האב","רקע משפחתי","כמה מילים על המשפחה","על המשפחה שלי"],
+  parentsOccupation:["עיסוק של ההורים","עיסוק ההורים","מקצוע ההורים"],
+  siblings:["מספר אחים","אחים ואחיות","כמה אחים"],
+  parentsHome:["מגורי ההורים","מגורי הורים","כתובת ההורים","היכן גרים ההורים"],
+  study:["ישיבה","סמינר","מוסד","מקום לימודים","כולל","לימודים","תיכון","מקום לימודים בתיכון"],
+  postSchool:["מה עשית אחרי סיום הלימודים","אחרי סיום הלימודים","מאז סיום הלימודים"],
+  training:["הכשרה לימודית","הכשרה מקצועית","השכלה","תואר"],
   occupation:["עיסוק","מקצוע","עבודה","תעסוקה","job"],
   phone:["טלפון","נייד","פלאפון","טל","phone","מספר טלפון"],
   contact:["איש קשר","ממליץ","מקור","הפניה","יצירת קשר"],
   contactPhone:["טלפון איש קשר","טלפון ממליץ","טלפון הורים","טלפון נוסף"],
-  looking:["מה מחפש","מה מחפשת","דרישות","בקשות","מבוקש","העדפות"],
-  maritalStatus:["מצב משפחתי","סטטוס משפחתי"],
-  service:["שירות","שירות צבאי","שירות לאומי","צבא","שנת שירות","מכינה"],
-  parentsHome:["מגורי ההורים","מגורי הורים","כתובת ההורים","היכן גרים ההורים"],
-  character:["קווים לדמות","קווים לדמותו","קווים לדמותה","תכונות","אופי","תכונות אופי","בניין אישי"],
+  refs:["אצל מי אפשר לברר","אנשי קשר לבירורים","ממליצים לבירור"],
   height:["גובה","height"],
-  notes:["הערות","הערה","פרטים","תיאור","מידע","notes","comments"]
+  build:["מראה","מבנה גוף"],
+  glasses:["משקפיים"],
+  skinTone:["צבע עור","גוון עור"],
+  hairColor:["צבע שיער"],
+  health:["מצב בריאותי","מצב בריאות","בריאות"],
+  character:["קווים לדמות","קווים לדמותו","קווים לדמותה","תכונות","אופי","תכונות אופי","בניין אישי","תיאור אופי"],
+  torahAttitude:["היחס שלך לתורה","יחס לתורה","היחס לתורה","קביעת עיתים"],
+  hobbies:["תחומי התעניינות","תחביבים","תחומי עניין"],
+  futurePlans:["תוכניות ותכנונים לעתיד","תוכניות לעתיד","תכנונים לעתיד"],
+  moreInfo:["דברים נוספים שחשוב לדעת"],
+  service:["שירות","שירות צבאי","שירות לאומי","צבא","שנת שירות","מכינה"],
+  looking:["מה מחפש","מה מחפשת","דרישות","בקשות","מבוקש","העדפות"],
+  lookingTraits:["תכונות אופי (שקט","תכונות אופי מבוקשות","תכונות אופי בבן","תכונות אופי בבת"],
+  lookingLooks:["תיאור חיצוני","תיאור חיצוני מבוקש"],
+  lookingReligious:["מבחינה דתית"],
+  lookingHashkafa:["מבחינה השקפתית"],
+  lookingMore:["דברים נוספים"],
+  ageRange:["טווח גילאים","טווח גיל"],
+  goodRelationship:["זוגיות טובה"],
+  mustTrait:["תכונה אחת"],
+  dealBreaker:["שובר עסקה","קו אדום"],
+  compromise:["להתפשר"],
+  challenge:["האתגר המרכזי","אתגר בפגישות"],
+  yeshivaPlans:["ללמוד כל החיים","לצאת לעבוד מתישהו"],
+  afterYeshiva:["אחרי הישיבה","להמשיך אחרי הישיבה"],
+  notes:["הערות","הערה","פרטים","מידע","notes","comments"]
 };
 
 /* ============ state ============ */
@@ -1800,7 +1876,7 @@ function openMatch(mid){
   setView("matches");
   closeSheet();
 
-  const rows = FIELDS.filter(f=>!["fullName","gender","status","notes","refs","character","maritalStatus"].includes(f.k)).map(f=>{
+  const rows = FIELDS.filter(f=>!["fullName","gender","status","notes","refs","character","maritalStatus","prayerName","email","phone","contact","contactPhone"].includes(f.k)).map(f=>{
     const va = disp(a[f.k]), vb = disp(b[f.k]);
     let same = va && vb && String(va).trim()===String(vb).trim();
     let warn = false, note = "";
@@ -1926,9 +2002,11 @@ function delMatch(mid){
 }
 
 /* ============ import ============ */
-const SECTION_TITLES = ["פרטים אישיים","רקע לימודי ותורני","רקע לימודי","רקע משפחתי",
+const SECTION_TITLES = ["פרטים אישיים","רקע לימודי ותורני","רקע לימודי","רקע משפחתי","מראה חיצוני",
   "תכונות אופי ובניין אישי","תכונות אופי","מה מחפש","מה מחפשת","מה מחפש (הצעה מבוקשת)",
-  "אנשי קשר לבירורים","אנשי קשר","הצעה מבוקשת","כרטיס שידוכים"];
+  "אנשי קשר לבירורים","אנשי קשר","הצעה מבוקשת","כרטיס שידוכים",
+  "פרטים ראשוניים","תיאור חיצוני","אופי, השקפה, תכנונים, תחביבים","משפחה",
+  "מה אני מחפש\\ת בבן או בת הזוג?","כמעט סיימנו!","לבחור ישיבה"];
 
 /* מסמך וורד של מועמד בודד — שורות "כותרת: ערך" מזוהות לשדות */
 function parseProfileText(text){
@@ -1985,6 +2063,38 @@ function normalizeImported(p){
     if(arr.length) p.openTo = arr;
     else { p.extra["חוגים מתאימים (כפי שנרשם)"] = raw; p.openTo = []; }
   }
+  /* "מצב משפחתי" של הבית (הורים נשואים/גרושים/חוזרים בתשובה) שהתגלגל לשדה האישי —
+     קודם מפנים אותו, כדי שהסטטוס האישי שמגיע בשדה "סטטוס" ייכנס למקומו אחר כך */
+  if(p.maritalStatus && /הורים|נשואים|חוזרים/.test(String(p.maritalStatus))){
+    if(!p.familyStatus) p.familyStatus = String(p.maritalStatus).trim();
+    p.maritalStatus = "";
+  }
+  /* "סטטוס" בטופס המועמדים = מצב אישי (רווק/ה...), לא סטטוס הטיפול */
+  if(p.status && /רווק|גרוש|אלמן/.test(String(p.status))){
+    if(!p.maritalStatus) p.maritalStatus = String(p.status).trim();
+    p.status = "";
+  }
+  /* השקפה מהטופס קובעת גם את החוג לסולם ההתאמה, אם טרם נבחר */
+  if(p.hashkafa && !p.community){
+    const n = normSector(p.hashkafa);
+    if(n) p.community = n;
+  }
+  if(p.glasses){
+    const g = String(p.glasses).trim();
+    if(/^(עם|כן)/.test(g)) p.glasses = "עם";
+    else if(/^(בלי|לא)/.test(g)) p.glasses = "בלי";
+  }
+  /* "אצל מי אפשר לברר" כטקסט חופשי → רשימת ממליצים מובנית */
+  if(p.refs && !Array.isArray(p.refs)){
+    const raw = String(p.refs);
+    const parts = raw.split(/\r?\n|[;,]/).map(x=>x.trim()).filter(Boolean);
+    p.refs = parts.map(part=>{
+      const ph = part.match(/0\d[\d\-\s]{7,}/);
+      return {name: part.replace(/0\d[\d\-\s]{7,}/,"").replace(/[\-–:]+\s*$/,"").trim(),
+              role:"", phone: ph ? ph[0].trim() : ""};
+    }).filter(r=>r.name || r.phone);
+    if(!p.refs.length){ p.extra["בירורים (כפי שנרשם)"] = raw; p.refs = []; }
+  }
   if(!p.status || !STATUSES.includes(p.status)) p.status = "פנוי";
   return p;
 }
@@ -2022,14 +2132,18 @@ function parseCSV(text){
 }
 
 function guessField(header){
-  const h = String(header||"").trim().toLowerCase();
+  const h = String(header||"").trim().toLowerCase().replace(/\s+/g," ");
   for(const k in SYN){
     if(SYN[k].some(s=>h===s.toLowerCase())) return k;
   }
-  for(const k in SYN){
-    if(SYN[k].some(s=>h.includes(s.toLowerCase()))) return k;
+  /* התאמה חלקית — הביטוי הארוך ביותר מנצח, כך ששאלה מפורטת מהטופס
+     ("מה חשוב לי שיהיה בו/ה מבחינה דתית?") לא תיתפס לשדה כללי. */
+  let best = "__extra", bestLen = 0;
+  for(const k in SYN) for(const sn of SYN[k]){
+    const sl = sn.toLowerCase();
+    if(sl.length > bestLen && h.includes(sl)){ best = k; bestLen = sl.length; }
   }
-  return "__extra";
+  return best;
 }
 
 function handleFile(file){
@@ -2782,7 +2896,15 @@ function cardOf(p){
   return {
     family:    c.family    != null ? c.family    : (p.family    || ""),
     character: c.character != null ? c.character : (p.character || ""),
-    looking:   c.looking   != null ? c.looking   : (p.looking   || ""),
+    /* אם אין טקסט "מה מחפשים" כללי — מורכב אוטומטית מהשדות המפורטים של הטופס */
+    looking:   c.looking   != null ? c.looking   : (p.looking || [
+      p.lookingTraits     && "תכונות אופי: " + p.lookingTraits,
+      p.lookingLooks      && "מראה: " + p.lookingLooks,
+      p.lookingReligious  && "מבחינה דתית: " + p.lookingReligious,
+      p.lookingHashkafa   && "מבחינה השקפתית: " + p.lookingHashkafa,
+      p.ageRange          && "טווח גילאים: " + p.ageRange,
+      p.lookingMore
+    ].filter(Boolean).join("\n")),
     date: c.date || ""
   };
 }
@@ -2792,15 +2914,24 @@ function cardRows(p){
   return {
     "פרטים אישיים": [
       ["שם", p.fullName], ["גיל", p.age], ["גובה", p.height],
-      ["מקום מגורים", p.city], ["מצב משפחתי", p.maritalStatus || "רווק/ה"],
-      ["חוג", p.community], ["עדה", p.edah]
+      ["מקום מגורים", p.city], ["מצב אישי", p.maritalStatus || "רווק/ה"],
+      ["השקפה", p.hashkafa || p.community], ["עדה", p.edah]
+    ],
+    "מראה חיצוני": [
+      ["מבנה גוף", p.build], ["משקפיים", p.glasses],
+      ["צבע עור", p.skinTone], ["צבע שיער", p.hairColor],
+      ["מצב בריאותי", p.health]
     ],
     "רקע לימודי ותורני": [
       [isF ? "סמינר / מדרשה" : "ישיבה", p.study],
       [isF ? "שירות לאומי" : "שירות צבאי", p.service],
+      ["הכשרה לימודית", p.training],
       ["עיסוק נוכחי", p.occupation]
     ],
     "רקע משפחתי": [
+      ["מצב משפחתי בבית", p.familyStatus],
+      ["עיסוק ההורים", p.parentsOccupation],
+      ["אחים ואחיות", p.siblings],
       ["מגורי ההורים", p.parentsHome]
     ]
   };
