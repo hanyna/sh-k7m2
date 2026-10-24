@@ -313,6 +313,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .doc-warm h2{border-bottom:1px dashed var(--accent)}
 .doc-warm h3::before{content:"◆ ";color:var(--tint);font-size:.7em;vertical-align:middle}
 .card-shot{width:600px}
+.doc-basics{list-style:none;margin:0 0 6px;padding:0;line-height:2.05;font-size:15px}
+.doc-basics li b{font-weight:600}
+.doc-star{margin:0 0 11px}
+.doc-star-t{font-weight:700;color:var(--accent);margin-bottom:2px}
+.doc-contact{margin-top:22px;border-top:1px solid var(--line-soft);padding-top:13px;text-align:center;line-height:1.8;font-size:14.5px}
+.doc-contact b{color:var(--accent)}
 .card-shot .doc{border-radius:0}
 .theme-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .theme-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font-size:13.5px;cursor:pointer;transition:.15s}
@@ -1735,19 +1741,6 @@ function editPerson(id){
         </label>
         <div class="photo-note">התמונה נשמרת במחשב בלבד ומוקטנת אוטומטית. כברירת מחדל היא נשארת בתיק הפנימי ולא נכנסת לכרטיס שנשלח החוצה.</div>
       </div>
-    </div>
-    <div class="sect">מילוי מהקלטה</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <button type="button" class="btn sm" id="recBtn" onclick="recToggle('form')">🎙️ הקלטה</button>
-      <button type="button" class="btn ghost sm" onclick="document.getElementById('recFile').click()">העלאת קובץ שמע</button>
-      <input type="file" id="recFile" accept="audio/*" class="hidden">
-      <span id="recStatus" style="font-size:12.5px;color:var(--ink-faint)"></span>
-    </div>
-    <div class="photo-note" style="margin-top:4px">מספרים בקול (או מעלים הקלטה של השיחה) — והפרטים שנאמרו ממולאים אוטומטית בשדות הריקים שלמטה. ההקלטה נשלחת לניתוח כפי שהיא.</div>
-    <div id="recTranscript" style="display:none;margin-top:8px">
-      <label style="font-size:12.5px;color:var(--ink-faint)">תמלול ההקלטה — לבדיקה:</label>
-      <textarea readonly style="width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px"></textarea>
-      <button type="button" class="btn ghost sm" style="margin-top:4px" onclick="transcriptToNotes()">הוספת התמלול להערות השדכנית</button>
     </div>`;
   SECTIONS.forEach(sec=>{
     html += `<div class="sect">${sec}</div><div class="form-grid">`;
@@ -1797,13 +1790,8 @@ function editPerson(id){
       toast("התמונה תישמר עם הכרטיס");
     });
   });
-  $("#recFile").addEventListener("change", e=>{
-    const f = e.target.files[0]; if(f) processAudio(f, "form");
-    e.target.value = "";
-  });
   $("#sheetFoot").innerHTML = `
-    <button class="btn pri" onclick="savePerson('${id||""}','finish')" title="שמירה, ניסוח כרטיס לקבוצות וחיפוש הצעות מתאימות">✓ סיימתי</button>
-    <button class="btn" onclick="savePerson('${id||""}')">שמירה</button>
+    <button class="btn pri" onclick="savePerson('${id||""}')">שמירה</button>
     <button class="btn ghost" onclick="${id?`openPerson('${id}')`:"closeSheet()"}">ביטול</button>`;
   openSheet();
 }
@@ -1826,7 +1814,7 @@ function refRow(r){
 }
 function addRefRow(){ $("#refsBox").insertAdjacentHTML("beforeend", refRow()); }
 
-function savePerson(id, after){
+function savePerson(id){
   const p = id ? personById(id) : {id:uid(), created:today(), extra:{}};
   FIELDS.forEach(f=>{
     if(f.t==="multi"){
@@ -1863,9 +1851,7 @@ function savePerson(id, after){
   const pic = $("#photoInCard"); if(pic) p.photoInCard = pic.checked;
   p.updated = today();
   if(!id) DB.people.push(p);
-  save(); render();
-  if(after === "finish"){ finishFlow(p.id); }
-  else openPerson(p.id);
+  save(); render(); openPerson(p.id);
   toast(id?"הכרטיס עודכן":"המועמד נוסף לכרטסייה");
 }
 
@@ -2550,13 +2536,7 @@ function sessionForm(pid, sid, matchId){
         <div class="multi">${TOPICS.map(t=>
           `<label><input type="checkbox" data-topic value="${esc(t)}" ${(s.topics||[]).includes(t)?"checked":""}>${esc(t)}</label>`).join("")}</div></div>
       <div class="field wide"><label for="s_notes">סיכום הפגישה</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
-          <button type="button" class="btn ghost sm" id="recBtn" onclick="recToggle('notes')">🎙️ הכתבת סיכום</button>
-          <button type="button" class="btn ghost sm" onclick="document.getElementById('recFileS').click()">העלאת הקלטה</button>
-          <input type="file" id="recFileS" accept="audio/*" class="hidden">
-          <span id="recStatus" style="font-size:12px;color:var(--ink-faint)"></span>
-        </div>
-        <textarea id="s_notes" style="min-height:150px" placeholder="מה נאמר, מה השתנה מאז הפעם הקודמת, ציטוטים ששווה לזכור… אפשר גם להכתיב בקול או להעלות הקלטה של השיחה.">${esc(s.notes||"")}</textarea></div>
+        <textarea id="s_notes" style="min-height:150px" placeholder="מה נאמר, מה השתנה מאז הפעם הקודמת, ציטוטים ששווה לזכור…">${esc(s.notes||"")}</textarea></div>
       <div class="field wide"><label for="s_clarity">עד כמה הבקשה ברורה בשלב הזה</label>
         <select id="s_clarity"><option value="">לא נקבע</option>
           ${[1,2,3,4,5].map(n=>`<option value="${n}" ${String(s.clarity)===String(n)?"selected":""}>${n} — ${CLARITY[n]}</option>`).join("")}</select></div>
@@ -2574,10 +2554,6 @@ function sessionForm(pid, sid, matchId){
     <button class="btn pri" onclick="saveSession('${pid}','${sid||""}')">שמירת הפגישה</button>
     <button class="btn ghost" onclick="openPerson('${pid}')">ביטול</button>
     ${sid?`<button class="btn danger sm" style="margin-inline-start:auto" onclick="delSession('${sid}','${pid}')">מחיקה</button>`:""}`;
-  $("#recFileS").addEventListener("change", e=>{
-    const f = e.target.files[0]; if(f) processAudio(f, "notes");
-    e.target.value = "";
-  });
   openSheet();
 }
 
@@ -3007,18 +2983,26 @@ function applyDoc(){
 
 /* ============ כרטיס שידוכים ============ */
 const CARD_SECTIONS = [
-  {k:"family",    l:"רקע משפחתי"},
-  {k:"character", l:"תכונות אופי ובניין אישי"},
-  {k:"looking",   l:"מה מחפש/ת"}
+  {k:"about",   l:"קצת על עצמי", ph:"פסקה חמה בגוף שלישי: בית, רקע, מסלול החיים עד היום…"},
+  {k:"middot",  l:"אופי ומידות", ph:"⭐ עדינה ומקשיבה:\nשקטה ופנימית, אוזן קשבת ולב רחב.\n⭐ אכפתית וחברותית:\nנעימה ואוהבת להיות בחברת אנשים.\n(שורה שמתחילה ב-⭐ היא כותרת מודגשת)"},
+  {k:"hobbies", l:"תחומי עניין", ph:"קרמיקה וציור, טיולים בטבע…"},
+  {k:"looking", l:"מה מחפש/ת", ph:"פסקה: אופי, יראת שמיים, כיוון בחיים…"}
 ];
+
+/* פרטי השדכנית לתחתית הכרטיס — "לפרטים ויצירת קשר" */
+function shadchanCfg(){
+  try{ return JSON.parse(localStorage.getItem("shadchan_contact")||"null") || {name:"",phone:""}; }
+  catch(e){ return {name:"",phone:""}; }
+}
 
 function cardOf(p){
   const c = p.card || {};
   return {
-    family:    c.family    != null ? c.family    : (p.family    || ""),
-    character: c.character != null ? c.character : (p.character || ""),
-    /* אם אין טקסט "מה מחפשים" כללי — מורכב אוטומטית מהשדות המפורטים של הטופס */
-    looking:   c.looking   != null ? c.looking   : (p.looking || [
+    about:   c.about   != null ? c.about   : (c.family != null ? c.family : (p.family || "")),
+    middot:  c.middot  != null ? c.middot  : (c.character != null ? c.character : (p.character || "")),
+    hobbies: c.hobbies != null ? c.hobbies : (p.hobbies || ""),
+    /* אם אין טקסט "מה מחפשים" — מורכב אוטומטית מהשדות המפורטים של הטופס */
+    looking: c.looking != null ? c.looking : (p.looking || [
       p.lookingTraits     && "תכונות אופי: " + p.lookingTraits,
       p.lookingLooks      && "מראה: " + p.lookingLooks,
       p.lookingReligious  && "מבחינה דתית: " + p.lookingReligious,
@@ -3031,52 +3015,37 @@ function cardOf(p){
 }
 
 function cardRows(p){
-  const isF = p.gender === "בת";
-  return {
-    "פרטים אישיים": [
-      ["שם", p.fullName], ["גיל", p.age], ["גובה", p.height],
-      ["מקום מגורים", p.city], ["מצב אישי", p.maritalStatus || "רווק/ה"],
-      ["השקפה", p.hashkafa || p.community], ["עדה", p.edah]
-    ],
-    "מראה חיצוני": [
-      ["מבנה גוף", p.build], ["משקפיים", p.glasses],
-      ["צבע עור", p.skinTone], ["צבע שיער", p.hairColor],
-      ["מצב בריאותי", p.health]
-    ],
-    "רקע לימודי ותורני": [
-      [isF ? "סמינר / מדרשה" : "ישיבה", p.study],
-      [isF ? "שירות לאומי" : "שירות צבאי", p.service],
-      ["הכשרה לימודית", p.training],
-      ["עיסוק נוכחי", p.occupation]
-    ],
-    "רקע משפחתי": [
-      ["מצב משפחתי בבית", p.familyStatus],
-      ["עיסוק ההורים", p.parentsOccupation],
-      ["אחים ואחיות", p.siblings],
-      ["מגורי ההורים", p.parentsHome]
-    ]
-  };
+  const base = [["גיל", p.age], ["מגורים", p.city], ["גובה", p.height], ["עדה", p.edah]];
+  if(p.maritalStatus && p.maritalStatus !== "רווק/ה") base.push(["מצב אישי", p.maritalStatus]);
+  return base;
+}
+
+/* "אופי ומידות": שורה שמתחילה ב-⭐ (או * / •) היא כותרת מודגשת, והשורות אחריה — תוכן */
+function middotBlocks(t){
+  const out = []; let cur = null;
+  String(t||"").split(/\r?\n/).forEach(l=>{
+    const m = l.match(/^\s*[⭐★*•]+\s*(.*)$/);
+    if(m){ if(cur) out.push(cur); cur = {title: m[1].replace(/[:：]\s*$/,""), body: []}; }
+    else if(l.trim()){ if(!cur) cur = {title:"", body:[]}; cur.body.push(l.trim()); }
+  });
+  if(cur) out.push(cur);
+  return out;
 }
 
 function cardText(p){
   const c = cardOf(p), rows = cardRows(p);
+  const sh = shadchanCfg();
   const fill = v => (v && String(v).trim()) ? String(v).trim() : "[להשלים]";
-  let out = `*כרטיס שידוכים — ${p.fullName || "[להשלים]"}*\n`;
-  Object.entries(rows).forEach(([title, list])=>{
-    const lines = list.filter(([,v])=>v || title==="פרטים אישיים");
-    if(title==="רקע משפחתי"){
-      out += `\n*${title}*\n` + lines.map(([l,v])=>`${l}: ${fill(v)}`).join("\n");
-      out += `\n${fill(c.family)}\n`;
-    }else{
-      out += `\n*${title}*\n` + lines.map(([l,v])=>`${l}: ${fill(v)}`).join("\n") + "\n";
-    }
-  });
-  out += `\n*תכונות אופי ובניין אישי*\n${fill(c.character)}\n`;
-  out += `\n*מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)*\n${fill(c.looking)}\n`;
-  const refs = (p.refs||[]).filter(r=>r.name||r.phone);
-  out += `\n*אנשי קשר לבירורים*\n` + (refs.length
-    ? refs.map(r=>`${r.role?r.role+": ":""}${r.name||""}${r.phone?" – "+r.phone:" – [טלפון]"}`).join("\n")
-    : "[להשלים]");
+  let out = `*${p.fullName || "[להשלים]"}*\n\n`;
+  out += rows.map(([l,v])=>`${l}: ${fill(v)}`).join("\n") + "\n";
+  out += `\n*קצת על ${p.gender==="בת"?"עצמה":"עצמו"}:*\n${fill(c.about)}\n`;
+  const mb = middotBlocks(c.middot);
+  out += `\n*אופי ומידות:*\n` + (mb.length
+    ? mb.map(b=>(b.title?`⭐ ${b.title}:\n`:"")+b.body.join("\n")).join("\n\n")
+    : "[להשלים]") + "\n";
+  out += `\n*תחומי עניין:*\n${fill(c.hobbies)}\n`;
+  out += `\n*${p.gender==="בת"?"מחפשת":"מחפש"}:*\n${fill(c.looking)}\n`;
+  out += `\n*לפרטים ויצירת קשר:*\n${sh.name||"[שם]"}${sh.phone?" - "+sh.phone:" - [טלפון]"}`;
   return out;
 }
 
@@ -3091,8 +3060,9 @@ function renderCardTab(p){
     $("#sheetBody").innerHTML = `<div class="win-col">${renderCardDoc(p)}</div>`;
   }else{
     const rows = cardRows(p);
-    let html = `<div class="card-hint">השדות העליונים נלקחים מהכרטיס עצמו — לתיקון שלהם יש לערוך את הכרטיס.
-      שלושת הקטעים למטה ניתנים לכתיבה חופשית, ונשמרים בנפרד מהנתונים הגולמיים.</div>`;
+    const sh = shadchanCfg();
+    let html = `<div class="card-hint">פרטי הבסיס נלקחים מהכרטיס עצמו — לתיקונם יש לערוך את הכרטיס.
+      הקטעים למטה ניתנים לכתיבה חופשית (או בהפקה אוטומטית מהתיק), ונשמרים בנפרד מהנתונים הגולמיים.</div>`;
 
     html += `<div class="sect">עיצוב הכרטיס</div>
       <div class="theme-row">
@@ -3106,19 +3076,17 @@ function renderCardTab(p){
         <input type="checkbox" ${(p.card&&p.card.hideEmpty)?"checked":""} onchange="toggleHideEmpty('${pid}',this.checked)">
         <span>להסתיר שדות ריקים בכרטיס (במקום להציג [להשלים])</span>
       </label>`;
-    Object.entries(rows).forEach(([title,list])=>{
-      html += `<div class="sect">${title}</div><dl style="margin:0">` + list.map(([l,v])=>
-        `<div class="fieldrow"><dt>${l}</dt><dd class="${v?"":"na"}">${v?esc(v):"[להשלים]"}</dd></div>`).join("") + `</dl>`;
-    });
-    html += CARD_SECTIONS.map(s=>`
-      <div class="sect">${s.l}</div>
-      <textarea id="c_${s.k}" style="width:100%;min-height:110px;border:1px solid var(--line);border-radius:8px;padding:9px 11px"
-        placeholder="נוסח חופשי — או הפקה אוטומטית מהתיק">${esc(c[s.k])}</textarea>`).join("");
-    html += `<div class="sect">אנשי קשר לבירורים</div>` +
-      ((p.refs||[]).length
-        ? `<dl style="margin:0">` + p.refs.map(r=>
-            `<div class="fieldrow"><dt>${esc(r.role||"ממליץ")}</dt><dd>${esc(r.name||"")}${r.phone?" – "+esc(r.phone):" – [טלפון]"}</dd></div>`).join("") + `</dl>`
-        : `<div style="font-size:13.5px;color:var(--ink-faint)">אין ממליצים בכרטיס. אפשר להוסיף דרך עריכת הכרטיס.</div>`);
+    html += `<div class="sect">פרטי בסיס (מהכרטיס)</div><dl style="margin:0">` + rows.map(([l,v])=>
+      `<div class="fieldrow"><dt>${l}</dt><dd class="${v?"":"na"}">${v?esc(v):"[להשלים]"}</dd></div>`).join("") + `</dl>`;
+    html += CARD_SECTIONS.map(sx=>`
+      <div class="sect">${sx.l}</div>
+      <textarea id="c_${sx.k}" style="width:100%;min-height:${sx.k==="hobbies"?"70":"110"}px;border:1px solid var(--line);border-radius:8px;padding:9px 11px"
+        placeholder="${esc(sx.ph||"")}">${esc(c[sx.k])}</textarea>`).join("");
+    html += `<div class="sect">לפרטים ויצירת קשר (מופיע בתחתית כל כרטיס)</div>
+      <div class="form-grid" style="max-width:460px">
+        <div class="field"><label for="shName">שם השדכנית</label><input id="shName" value="${esc(sh.name)}" placeholder="מרים לנדסברג"></div>
+        <div class="field"><label for="shPhone">טלפון</label><input id="shPhone" value="${esc(sh.phone)}" placeholder="050-0000000"></div>
+      </div>`;
     $("#sheetBody").innerHTML = `<div class="win-col">${html}</div>`;
   }
 
@@ -3146,35 +3114,48 @@ function renderCardDoc(p, opts){
   opts = opts || {};
   const c = cardOf(p), rows = cardRows(p);
   const th = cardTheme(p);
+  const sh = shadchanCfg();
   const tint = SECTOR_TINT[p.community] || th.accent;
   const hideEmpty = (p.card && p.card.hideEmpty) || opts.forImage;
   const val = v => (v && String(v).trim()) ? esc(v)
     : (hideEmpty ? null : `<span class="todo-mark">[להשלים]</span>`);
-
-  const line = (l,v)=>{ const x=val(v); return x===null?"":`<li><b>${l}:</b> ${x}</li>`; };
-  const para = (v)=>{ const x=val(v); return x===null?"":`<p>${x}</p>`; };
+  const para = (v)=>{ const x=val(v); return x===null?"":`<p>${x.replace(/\n/g,"<br>")}</p>`; };
 
   let h = `<div class="doc doc-${(p.card&&p.card.theme)||"classic"}" style="--accent:${th.accent};--tint:${tint};--headfont:${th.head}">`;
   h += `<div class="doc-band"></div>`;
-  h += `<h2>כרטיס שידוכים</h2>`;
+  h += `<h2>${esc(p.fullName||"ללא שם")}</h2>`;
   if(p.photo && p.photoInCard) h += `<div class="doc-photo"><img src="${p.photo}" alt=""></div>`;
 
-  Object.entries(rows).forEach(([title,list])=>{
-    const items = list.map(([l,v])=>line(l,v)).filter(Boolean).join("");
-    if(title==="רקע משפחתי"){
-      const fam = para(c.family);
-      if(items||fam) h += `<h3>${title}</h3>${items?`<ul>${items}</ul>`:""}${fam}`;
-    }else if(items){
-      h += `<h3>${title}</h3><ul>${items}</ul>`;
-    }
-  });
-  const ch = para(c.character); if(ch) h += `<h3>תכונות אופי ובניין אישי</h3>${ch}`;
-  const lk = para(c.looking);   if(lk) h += `<h3>מה ${p.gender==="בת"?"מחפשת":"מחפש"} (הצעה מבוקשת)</h3>${lk}`;
+  /* פרטי בסיס */
+  h += `<ul class="doc-basics">` + rows.map(([l,v])=>{
+    const x = val(v); return x===null?"":`<li><b>${l}:</b> ${x}</li>`;
+  }).filter(Boolean).join("") + `</ul>`;
 
-  const refs = (p.refs||[]).filter(r=>r.name||r.phone);
-  if(refs.length){
-    h += `<h3>אנשי קשר לבירורים</h3><ul>` + refs.map(r=>
-      `<li><b>${esc(r.role||"ממליץ")}:</b> ${esc(r.name||"")}${r.phone?" – "+esc(r.phone):""}</li>`).join("") + `</ul>`;
+  /* קצת על עצמי */
+  const ab = para(c.about);
+  if(ab) h += `<h3>קצת על ${p.gender==="בת"?"עצמה":"עצמו"}</h3>${ab}`;
+
+  /* אופי ומידות — נקודות ⭐ */
+  const mb = middotBlocks(c.middot);
+  if(mb.length){
+    h += `<h3>אופי ומידות</h3>` + mb.map(b=>
+      `<div class="doc-star">${b.title?`<div class="doc-star-t">⭐ ${esc(b.title)}</div>`:""}` +
+      (b.body.length?`<p>${esc(b.body.join("\n")).replace(/\n/g,"<br>")}</p>`:"") + `</div>`).join("");
+  }else if(!hideEmpty){
+    h += `<h3>אופי ומידות</h3><p><span class="todo-mark">[להשלים]</span></p>`;
+  }
+
+  /* תחומי עניין */
+  const hb = para(c.hobbies);
+  if(hb) h += `<h3>תחומי עניין</h3>${hb}`;
+
+  /* מחפש/ת */
+  const lk = para(c.looking);
+  if(lk) h += `<h3>${p.gender==="בת"?"מחפשת":"מחפש"}</h3>${lk}`;
+
+  /* יצירת קשר */
+  if(sh.name || sh.phone || !hideEmpty){
+    h += `<div class="doc-contact"><b>לפרטים ויצירת קשר:</b><br>${esc(sh.name||"[שם השדכנית]")}${sh.phone?" - "+esc(sh.phone):(hideEmpty?"":" - [טלפון]")}</div>`;
   }
   return h + `</div>`;
 }
@@ -3235,6 +3216,11 @@ function saveCard(pid){
   const p = personById(pid);
   p.card = p.card || {};
   CARD_SECTIONS.forEach(s=>{ const el=$("#c_"+s.k); if(el) p.card[s.k]=el.value.trim(); });
+  const sn = $("#shName"), sp = $("#shPhone");
+  if(sn || sp){
+    try{ localStorage.setItem("shadchan_contact",
+      JSON.stringify({name: sn?sn.value.trim():"", phone: sp?sp.value.trim():""})); }catch(e){}
+  }
   p.card.date = today(); p.updated = today();
   save(); openPerson(pid,"card"); toast("הכרטיס נשמר");
 }
@@ -3265,7 +3251,7 @@ async function composeCard(pid){
   const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
   const g = p.gender==="בת" ? "בחורה" : "בחור";
 
-  const prompt = `נסח שלושה קטעים לכרטיס שידוכים עבור ${g}, מתוך החומר שנאסף בתיק אצל השדכנית.
+  const prompt = `נסח ארבעה קטעים לכרטיס שידוכים עבור ${g}, מתוך החומר שנאסף בתיק אצל השדכנית.
 
 ${style}
 
@@ -3281,8 +3267,14 @@ ${facts}
 ${log?`סיכומי הפגישות עם השדכנית:\n${log}`:""}
 ${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
 
+מבנה הקטעים:
+- about — "קצת על עצמי": פסקה חמה וזורמת בגוף שלישי על הבית, הרקע ומסלול החיים (3-4 משפטים).
+- middot — "אופי ומידות": 3-4 נקודות. כל נקודה: שורה ראשונה "⭐ כותרת של 2-4 מילים:" ומתחתיה משפט-שניים. הפרד נקודות בשורה ריקה.
+- hobbies — "תחומי עניין": שורה-שתיים ענייניות.
+- looking — "מה ${p.gender==="בת"?"מחפשת":"מחפש"}": פסקה של 2-4 משפטים על האופי, הכיוון בחיים והבית המבוקש.
+
 החזר JSON בלבד, בלי סימוני קוד:
-{"family":"רקע משפחתי","character":"תכונות אופי ובניין אישי","looking":"מה ${p.gender==="בת"?"מחפשת":"מחפש"} בהצעה"}`;
+{"about":"","middot":"","hobbies":"","looking":""}`;
 
   const foot = $("#sheetFoot");
   const old = foot.innerHTML;
@@ -3300,303 +3292,6 @@ ${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
     foot.innerHTML = old;
     toast(err.message);
   }
-}
-
-/* ============ "סיימתי": כרטיס לקבוצות וואטסאפ + הצעות מהמאגר ============ */
-
-/* שורת "לפרטים ויצירת קשר" שבסוף כל כרטיס לקבוצה — ניתנת לשינוי בלחיצה */
-function gcardSign(){
-  return localStorage.getItem("gcard_sign") || "מרים לנדסברג - 050-6316853";
-}
-
-/* שדות שלא נכנסים לכרטיס לקבוצה: פרטים מזהים, רגישים או כאלה שעלולים להביך */
-const GCARD_SKIP = AI_PII.concat(["notes","health","dealBreaker","compromise","challenge",
-  "familyStatus","moreInfo","goodRelationship","status","glasses","skinTone","hairColor",
-  "build","parentsHome","parentsOccupation","siblings"]);
-
-/* ניסוח כרטיס קצר לקבוצות — בתבנית המקובלת אצל שדכניות, מהחומר שבתיק בלבד */
-async function composeGroupCard(pid){
-  const p = personById(pid);
-  const g = p.gender==="בת" ? "בחורה" : "בחור";
-  const self = p.gender==="בת" ? "עצמה" : "עצמו";
-  const seek = p.gender==="בת" ? "מחפשת" : "מחפש";
-  const facts = FIELDS.filter(f=>p[f.k] && !GCARD_SKIP.includes(f.k))
-    .map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
-  const an = p.analysis;
-
-  const prompt = `נסח כרטיס שידוכים קצר לשליחה בקבוצות וואטסאפ של שדכניות, עבור ${g}. במקום השם כתוב תמיד [שם].
-
-מבנה הכרטיס (הדגשות וואטסאפ עם כוכביות):
-*[שם]*
-גיל: … | מגורים: … | גובה: …${p.edah?" | עדה: …":""}
-
-*קצת על ${self}:*
-2-3 משפטים שמציירים דמות: רקע, מסלול חיים, עיסוק.
-
-*אופי ומידות:*
-2-3 שורות קצרות. כל שורה: *כותרת של 2-3 מילים:* ואז משפט קצר אחד.
-
-*תחומי עניין:* שורה אחת.
-
-*${seek}:*
-2-3 משפטים על מי שיתאים.
-
-עקרונות מחייבים:
-- להבליט את הייחודיות ואת המעלות — שהקורא ידמיין אדם אמיתי מול העיניים, לא רשימת תכונות כללית.
-- אך ורק על סמך החומר שלמטה. בלי להמציא עובדות ובלי סופרלטיבים ריקים ("מדהימה", "מושלם").
-- בלי פרטים מזהים או רגישים: בלי שם משפחה, בלי בריאות, בלי פרטי משפחה רגישים ובלי שום דבר שעלול להביך.
-- קצר: עד 110 מילים בסך הכול — שמתאים להודעת וואטסאפ אחת.
-- עברית חיה, חמה ומכובדת, בגוף שלישי.
-
-החומר מהתיק:
-${facts}
-${an&&an.summary?`\nתמצית השדכנית: ${an.summary}`:""}
-
-החזר את טקסט הכרטיס בלבד, בלי הסברים ובלי סימוני קוד.`;
-
-  const raw = await callAI(scrubForAI(prompt, p));
-  const first = String(p.fullName||"").trim().split(/\s+/)[0] || "";
-  let text = raw.replace(/```/g,"").trim();
-  if(first){
-    text = text.split("[שם]").join(first)
-               .split("המועמדת").join(first).split("המועמד").join(first);
-  }
-  text += `\n\n*לפרטים ויצירת קשר:*\n${gcardSign()}`;
-  p.groupCard = {text, date:today()};
-  p.updated = today();
-  save();
-  return text;
-}
-
-/* המסך שנפתח בלחיצה על "סיימתי": הכרטיס לקבוצה + הצעות מתאימות מהמאגר */
-function finishFlow(pid){
-  const p = personById(pid);
-  $("#sheetHead").innerHTML = `<div style="flex:1">
-      <h3>✓ הקליטה הושלמה — ${esc(p.fullName)}</h3>
-      <div class="meta">כרטיס לקבוצות וואטסאפ והצעות מתאימות מהמאגר</div>
-    </div><button class="x" onclick="openPerson('${pid}')" aria-label="לכרטיס">×</button>`;
-  $("#sheetBody").innerHTML = `<div class="win-col">
-    <div class="sect">כרטיס לקבוצות וואטסאפ</div>
-    <div id="gcardBox"><div class="an-load">מנסח כרטיס לקבוצה מתוך התיק…</div></div>
-    <div class="sect">הצעות מתאימות מהמאגר</div>
-    <div id="gMatches">${suggestListHtml(pid)}</div>
-  </div>`;
-  $("#sheetFoot").innerHTML = `
-    <button class="btn pri" onclick="openPerson('${pid}')">לכרטיס המלא</button>
-    <button class="btn" onclick="openSuggest('${pid}')">כל ההצעות</button>
-    <button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
-  openSheet();
-  regenGroupCard(pid);
-}
-
-function gcardBoxHtml(pid){
-  const p = personById(pid);
-  const t = (p.groupCard && p.groupCard.text) || "";
-  return `<textarea id="gcardText" dir="rtl" style="width:100%;min-height:270px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;line-height:1.55">${esc(t)}</textarea>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
-      <button class="btn pri sm" onclick="copyGroupCard('${pid}')">📋 העתקה לוואטסאפ</button>
-      <button class="btn sm" onclick="regenGroupCard('${pid}')">🔄 ניסוח מחדש</button>
-      <button class="btn ghost sm" onclick="editGcardSign('${pid}')" title="שורת יצירת הקשר שבסוף הכרטיס">חתימה: ${esc(gcardSign())}</button>
-    </div>
-    <div style="font-size:12px;color:var(--ink-faint);margin-top:4px">אפשר לערוך את הנוסח ישירות בתיבה — ההעתקה שומרת ולוקחת את מה שכתוב בה.</div>`;
-}
-
-async function regenGroupCard(pid){
-  const box = $("#gcardBox");
-  if(box) box.innerHTML = `<div class="an-load">מנסח כרטיס לקבוצה מתוך התיק…</div>`;
-  try{
-    await composeGroupCard(pid);
-    if($("#gcardBox")) $("#gcardBox").innerHTML = gcardBoxHtml(pid);
-  }catch(err){
-    const p = personById(pid);
-    if($("#gcardBox")) $("#gcardBox").innerHTML =
-      `<div style="color:#b3261e;font-size:13px">${esc(err.message)}</div>
-       ${p.groupCard&&p.groupCard.text?gcardBoxHtml(pid):""}
-       <button class="btn sm" style="margin-top:6px" onclick="regenGroupCard('${pid}')">ניסיון נוסף</button>`;
-  }
-}
-
-function copyGroupCard(pid){
-  const p = personById(pid);
-  const ta = $("#gcardText");
-  const txt = ta ? ta.value : ((p.groupCard && p.groupCard.text) || "");
-  if(ta && (!p.groupCard || ta.value !== p.groupCard.text)){
-    p.groupCard = Object.assign({}, p.groupCard, {text: ta.value, date: today()});
-    save();
-  }
-  navigator.clipboard.writeText(txt).then(()=>toast("הכרטיס הועתק — אפשר להדביק בקבוצה")).catch(()=>{
-    const t=document.createElement("textarea"); t.value=txt; document.body.appendChild(t);
-    t.select(); document.execCommand("copy"); t.remove(); toast("הכרטיס הועתק");
-  });
-}
-
-function editGcardSign(pid){
-  const v = prompt("שורת 'לפרטים ויצירת קשר' שתופיע בסוף כל כרטיס לקבוצה:", gcardSign());
-  if(v === null) return;
-  localStorage.setItem("gcard_sign", v.trim());
-  toast("החתימה עודכנה — תיכנס לכרטיסים שינוסחו מעכשיו");
-}
-
-/* רשימת ההצעות המתאימות ביותר מהמאגר — אותו ניקוד כמו "הצעת שידוך" */
-function suggestListHtml(pid, limit){
-  const p = personById(pid);
-  const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
-  const pool = DB.people.filter(x=>x.id!==pid && (!want || x.gender===want))
-    .map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s);
-  const strong = pool.filter(o=>o.s>=45);
-  const show = (strong.length?strong:pool).slice(0, limit||8);
-  if(!show.length) return `<div class="empty">אין כרגע מועמדים מתאימים במאגר.</div>`;
-  return show.map(({x,s})=>{
-    const exists = DB.matches.some(m=>(m.a===pid&&m.b===x.id)||(m.b===pid&&m.a===x.id));
-    const gap = sectorGap(p,x);
-    const warn = gap!==null && gap>=2 ? `<span class="warnflag" title="פער בסולם החוגים">⚠</span>` : "";
-    return `<button class="picker-item" ${exists?"disabled style='opacity:.45'":`onclick="createMatch('${pid}','${x.id}')"`}>
-      ${avatar(x,32)}
-      <div style="min-width:0">
-        <div style="font-weight:600">${esc(x.fullName)} ${warn}</div>
-        <div style="font-size:12px;color:var(--ink-faint)">${[x.age,x.city,x.community].filter(Boolean).map(esc).join(" · ")||"—"}</div>
-      </div>
-      <span class="score">${exists?"כבר הוצע":"התאמה "+s+"%"}</span>
-    </button>`;
-  }).join("") + `<div style="font-size:12px;color:var(--ink-faint);margin-top:6px">לחיצה על מועמד פותחת הצעת שידוך. ${strong.length?"":"לא נמצאו התאמות חזקות — מוצגים הקרובים ביותר."}</div>`;
-}
-
-/* ============ הקלטה → טקסט (Gemini) ============ */
-const REC = {mr:null, chunks:[], mode:"", timer:null, t0:0};
-
-/* כמו callAI, אבל עם קובץ שמע מצורף. עובד רק מול Gemini (שתומך בשמע). */
-async function callAIAudio(prompt, b64, mime){
-  const cfg = aiCfg();
-  if(cfg.provider !== "gemini") throw new Error("המרת הקלטות עובדת עם מפתח Gemini — בחרו בספק Google בהגדרות.");
-  if(!cfg.key) throw new Error("לא הוזן מפתח Gemini בהגדרות.");
-  const model = cfg.model || GEMINI_DEFAULT;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const ctl = new AbortController();
-  const timer = setTimeout(()=>ctl.abort(), 120000);
-  let res;
-  try{
-    res = await fetch(url,{method:"POST",
-      headers:{"Content-Type":"application/json","x-goog-api-key":cfg.key},
-      signal: ctl.signal,
-      body: JSON.stringify({contents:[{role:"user", parts:[{text:prompt},{inlineData:{mimeType:mime, data:b64}}]}],
-        generationConfig:{temperature:0.2, maxOutputTokens:8000}})});
-  }catch(e){
-    clearTimeout(timer);
-    throw new Error(e.name==="AbortError" ? "ההמרה ארכה יותר מדי — נסו הקלטה קצרה יותר." : "בעיית תקשורת מול Gemini: "+e.message);
-  }
-  clearTimeout(timer);
-  if(!res.ok){
-    let detail=""; try{ const j=await res.clone().json(); detail=(j.error&&j.error.message)||""; }catch(e){}
-    throw new Error(`Gemini החזירה שגיאה ${res.status}` + (detail?" · "+detail.slice(0,160):""));
-  }
-  const d = await res.json();
-  if(!d.candidates || !d.candidates.length) throw new Error("לא התקבל תמלול — ייתכן שההקלטה ארוכה מדי או נחסמה.");
-  return (d.candidates[0].content.parts||[]).map(x=>x.text).filter(Boolean).join("\n");
-}
-
-/* התחלה/עצירה של הקלטה מהמיקרופון. mode: "form" = מילוי טופס, "notes" = סיכום פגישה */
-function recToggle(mode){
-  if(REC.mr){ REC.mr.stop(); return; }
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined"){
-    toast("הדפדפן לא תומך בהקלטה — אפשר להעלות קובץ שמע"); return;
-  }
-  navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
-    const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
-               : MediaRecorder.isTypeSupported("audio/mp4")  ? "audio/mp4" : "";
-    const mr = new MediaRecorder(stream, mime?{mimeType:mime}:{});
-    REC.mr = mr; REC.chunks = []; REC.mode = mode; REC.t0 = Date.now();
-    mr.ondataavailable = e=>{ if(e.data && e.data.size) REC.chunks.push(e.data); };
-    mr.onstop = ()=>{
-      stream.getTracks().forEach(t=>t.stop());
-      clearInterval(REC.timer); REC.timer = null;
-      const blob = new Blob(REC.chunks, {type: mr.mimeType || "audio/webm"});
-      REC.mr = null;
-      const btn = $("#recBtn"); if(btn){ btn.textContent = mode==="form" ? "🎙️ הקלטה" : "🎙️ הכתבת סיכום"; btn.classList.remove("danger"); }
-      processAudio(blob, mode);
-    };
-    mr.start();
-    const btn = $("#recBtn"); if(btn){ btn.textContent = "⏹ עצירה 0:00"; btn.classList.add("danger"); }
-    REC.timer = setInterval(()=>{
-      const sec = Math.floor((Date.now()-REC.t0)/1000);
-      const b = $("#recBtn"); if(b && REC.mr) b.textContent = `⏹ עצירה ${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
-    }, 1000);
-    recStatus("מקליט… לחצו שוב לעצירה.");
-  }).catch(()=>toast("אין גישה למיקרופון — בדקו את הרשאות הדפדפן"));
-}
-
-function recStatus(t){ const el = $("#recStatus"); if(el) el.textContent = t || ""; }
-
-function blobToB64(blob){
-  return new Promise((res, rej)=>{
-    const r = new FileReader();
-    r.onload = ()=>res(String(r.result).split(",")[1] || "");
-    r.onerror = ()=>rej(new Error("קריאת הקובץ נכשלה"));
-    r.readAsDataURL(blob);
-  });
-}
-
-/* המרה של הקלטה: "notes" — תמלול לתוך סיכום הפגישה; "form" — חילוץ פרטים לשדות הריקים */
-async function processAudio(blob, mode){
-  if(blob.size > 15*1024*1024){ recStatus(""); toast("ההקלטה גדולה מדי (מעל 15MB) — נסו הקלטה קצרה יותר"); return; }
-  if(!blob.size){ recStatus(""); toast("ההקלטה ריקה"); return; }
-  recStatus("ממיר את ההקלטה לטקסט…");
-  try{
-    const b64 = await blobToB64(blob);
-    const mime = (blob.type || "audio/webm").split(";")[0];
-    if(mode === "notes"){
-      const txt = await callAIAudio(
-        "תמלל את ההקלטה לעברית, נקי וקריא: שיחה או סיכום של שדכנית. בלי חותמות זמן ובלי הערות שלך — רק הטקסט עצמו. דיבור בשפה אחרת — תרגם לעברית.", b64, mime);
-      const ta = $("#s_notes");
-      if(ta) ta.value = (ta.value ? ta.value.trim() + "\n\n" : "") + txt.trim();
-      recStatus("");
-      toast("התמלול נוסף לסיכום הפגישה — עברו ותקנו במידת הצורך");
-    }else{
-      const keys = FIELDS.filter(f=>f.t!=="refs" && f.t!=="multi" && f.k!=="status");
-      const prompt = `בהקלטה: שיחה או הכתבה של שדכנית על מועמד/ת לשידוך.
-המשימה: לחלץ מההקלטה את הפרטים ולסדר אותם בשדות.
-החזר JSON בלבד, בלי סימוני קוד: {"fields":{...}, "transcript":"תמלול מלא בעברית"}
-ב-fields השתמש אך ורק במפתחות האלה (רק אלה שבאמת נאמר עליהם משהו):
-${keys.map(f=>`${f.k} = ${f.l}`).join("\n")}
-- כל ערך: מה שנאמר, בעברית, בלי המצאות ובלי השלמות משלך.
-- gender: "בן" או "בת" בלבד. age: מספר בלבד.
-- מה שלא נאמר — לא יופיע ב-fields בכלל.`;
-      const raw = await callAIAudio(prompt, b64, mime);
-      let parsed = null;
-      try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){
-        const i = raw.indexOf("{"), j = raw.lastIndexOf("}");
-        if(i>=0 && j>i){ try{ parsed = JSON.parse(raw.slice(i,j+1)); }catch(e2){} }
-      }
-      if(!parsed || !parsed.fields) throw new Error("לא הצלחתי לחלץ פרטים מההקלטה — נסו שוב");
-      let n = 0;
-      Object.entries(parsed.fields).forEach(([k,v])=>{
-        if(v == null || v === "") return;
-        const f = FIELDS.find(x=>x.k===k); if(!f) return;
-        const el = $("#f_"+k); if(!el) return;
-        if(el.tagName === "SELECT"){
-          if(!el.value && f.opts && f.opts.includes(String(v).trim())){ el.value = String(v).trim(); n++; }
-        }else if(!el.value.trim()){ el.value = String(v).trim(); n++; }
-      });
-      recStatus("");
-      const box = $("#recTranscript");
-      if(box && parsed.transcript){
-        box.style.display = "block";
-        box.querySelector("textarea").value = String(parsed.transcript).trim();
-      }
-      toast(n ? `מולאו ${n} שדות מההקלטה — עברו על הטופס ובדקו` : "לא נמצאו פרטים חדשים למלא מההקלטה");
-    }
-  }catch(err){
-    recStatus("");
-    toast(err.message);
-  }
-}
-
-/* התמלול שנשמר בתיבת הבדיקה — להוספה להערות השדכנית שבטופס */
-function transcriptToNotes(){
-  const box = $("#recTranscript"); if(!box) return;
-  const txt = box.querySelector("textarea").value.trim(); if(!txt) return;
-  const el = $("#f_notes"); if(!el) return;
-  el.value = (el.value ? el.value.trim() + "\n\n" : "") + "תמלול הקלטה (" + today() + "):\n" + txt;
-  toast("התמלול נוסף להערות — ייכנס בשמירה");
 }
 
 /* ============ גיבוי אוטומטי לגוגל דרייב ============ */
