@@ -155,13 +155,14 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .empty p{margin:0 0 16px;font-size:14px}
 
 /* ---------- lock ---------- */
-.lock{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
+.lock{position:fixed;inset:0;z-index:200;display:flex;overflow-y:auto;padding:20px;
   background:
     radial-gradient(460px 340px at 85% 10%, rgba(15,95,92,.38), transparent 62%),
     radial-gradient(560px 420px at 10% 92%, rgba(169,124,52,.20), transparent 62%),
     radial-gradient(900px 600px at 50% 120%, rgba(255,255,255,.04), transparent 70%),
     linear-gradient(160deg,#131c28,#0d2626)}
-.lock-wrap{width:min(430px,100%);animation:lockIn .5s cubic-bezier(.2,.7,.3,1)}
+.lock-wrap{width:min(430px,100%);margin:auto;animation:lockIn .5s cubic-bezier(.2,.7,.3,1)}
+/* margin:auto בתוך flex ממרכז כשיש מקום, ומאפשר גלילה מלאה כשהכרטיס גבוה מהחלון */
 @keyframes lockIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .lock-brand{text-align:center;margin-bottom:20px}
 .rings{width:66px;height:42px;position:relative;margin:0 auto 12px;
@@ -175,7 +176,8 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
   box-shadow:0 40px 90px -24px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07)}
 .lock-foot{text-align:center;color:#6b7d8b;font-size:11.5px;margin-top:16px;letter-spacing:.2px}
 .lock-foot b{color:#8fa4b1;font-weight:600}
-.ask{position:fixed;inset:0;background:rgba(22,33,46,.5);z-index:300;display:grid;place-items:center;padding:20px}
+.ask{position:fixed;inset:0;background:rgba(22,33,46,.5);z-index:300;display:flex;overflow-y:auto;padding:20px}
+.ask-card{margin:auto}
 .ask-card{background:#fff;border-radius:14px;padding:22px 24px;width:min(420px,100%);
   box-shadow:0 30px 70px -20px rgba(22,33,46,.5)}
 .ask-card h3{font-family:var(--display);font-size:19px;margin:0 0 6px}
