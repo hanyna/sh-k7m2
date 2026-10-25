@@ -1579,10 +1579,15 @@ function renderCards(keepLimit){
   }
   const S = ui.smart;
   const pend = (DB.form && DB.form.pending || []).length;
-  const fbanner = pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
+  const fc = formCfg();
+  const connectBanner = (fc.sheetId && !fc.last && driveCfg().clientId) ? `<div class="smart-banner">
+      <div><b>📝 הכרטסייה מחוברת לטופס "כרטיס שידוכים"</b> — נשאר רק לאשר מול גוגל, פעם אחת. מעכשיו כל מי שממלא את הטופס ייכנס לבד.</div>
+      <button class="btn sm pri" onclick="syncForm(true)">אישור מול גוגל</button>
+    </div>` : "";
+  const fbanner = connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
       <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
       <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
-    </div>` : "";
+    </div>` : "");
   const banner = fbanner + (S ? `<div class="smart-banner">
       <div><b>✨ חיפוש חכם:</b> "${esc(S.label)}" · ${list.length} תוצאות, המתאימים ביותר ראשונים
         <div class="smart-chips">${[
@@ -2392,8 +2397,11 @@ function runImport(){
   const existing = new Set(DB.people.map(p=>String(p.fullName||"").trim()));
   let added=0, skipped=0;
 
+  const F = formDB(), seen = new Set(F.seen);
   pending.rows.forEach(r=>{
-    const p = {id:uid(), created:today(), updated:today(), extra:{}};
+    const key = rowKey(pending.headers, r.map(c=>String(c==null?"":c).trim()));
+    seen.add(key);
+    const p = {id:uid(), created:today(), updated:today(), extra:{}, formKey:key};
     pending.headers.forEach((h,i)=>{
       const target = map[i]; const val = String(r[i]==null?"":r[i]).trim();
       if(!val || target==="__skip") return;
@@ -2406,6 +2414,7 @@ function runImport(){
     existing.add(p.fullName.trim());
     DB.people.push(p); added++;
   });
+  F.seen = [...seen];
 
   save(); cancelImport(); setView("cards");
   toast(`יובאו ${added} מועמדים${skipped?` · דולגו ${skipped}`:""}`);
@@ -3836,8 +3845,10 @@ function smartHit(p, hay){
    ומכניס כרטיס לכל תשובה חדשה. כל תשובה מזוהה לפי חותמת הזמן שלה — ולא תיכנס פעמיים.
    מי שכבר קיים בכרטסייה (טלפון או מייל זהים) לא נכנס שוב — הוא ממתין לאישור השדכנית. */
 const FORM = {busy:false};
+/* הגיליון של טופס "כרטיס שידוכים" — מוגדר מראש, כדי שהשדכנית לא תצטרך להגדיר כלום */
+const FORM_PRESET = {url:"", sheetId:"", gid:""};
 function formCfg(){
-  const def = {url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0};
+  const def = Object.assign({url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0}, FORM_PRESET);
   try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
 }
 function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
@@ -3934,12 +3945,17 @@ async function syncForm(manual, dryRun){
       formStatus(msg, "var(--teal)");
       return {total:rows.length, fresh:fresh.length};
     }
-    let added = 0, pending = 0, similar = 0, skipped = 0;
+    let added = 0, pending = 0, similar = 0, skipped = 0, already = 0;
+    const firstRun = !F.baselined;
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
       seen.add(key);
       const p = rowToPerson(headers, r, key);
       if(!p){ skipped++; return; }
+      if(firstRun){
+        const nm = String(p.fullName).trim();
+        if(findExisting(p) || DB.people.some(x=>String(x.fullName||"").trim()===nm)){ already++; return; }
+      }
       const ex = findExisting(p);
       if(ex){ F.pending.push({key, p, exId:ex.id, date:today()}); pending++; return; }
       const nm = String(p.fullName).trim();
@@ -3949,14 +3965,16 @@ async function syncForm(manual, dryRun){
       DB.people.push(p); added++;
     });
     F.seen = [...seen];
+    if(firstRun){ F.baselined = true; }
     const c = formCfg();
     c.last = new Date().toISOString(); c.total = rows.length;
     c.lastMsg = added||pending ? `${added===1?"נוסף 1":"נוספו "+added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
     formSave(c);
-    if(added || pending || skipped) save();
+    if(added || pending || skipped || already || firstRun) save();
     render();
     renderForm();
-    if(added || pending){
+    if(firstRun && already) toast(`📝 החיבור לטופס פעיל ✓ — ${already} תשובות כבר היו בכרטסייה וסומנו כטופלו${added?`, ${added===1?"נוסף מועמד חדש":"נוספו "+added+" חדשים"}`:""}. מעכשיו נכנסות רק תשובות חדשות.`);
+    else if(added || pending){
       toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
     }else if(manual) toast("אין תשובות חדשות בטופס");
     FORM.busy = false;
