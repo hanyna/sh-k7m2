@@ -536,6 +536,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         <span class="mag">⌕</span>
         <input id="q" type="search" placeholder="חיפוש לפי שם, עיר, ישיבה, הערות…">
       </div>
+      <button class="btn hidden" id="btnFormSync" title="בדיקה אם מילאו את הטופס מאז הפעם הקודמת">📝 תשובות מהטופס</button>
       <button class="btn" id="btnSmart" title="חיפוש במילים רגילות בעזרת AI">✨ חיפוש חכם</button>
       <button class="btn" id="btnNew">+ מועמד חדש</button>
       <button class="btn pri" id="btnImportTop">העלאת קובץ</button>
@@ -644,6 +645,14 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         הגיבוי מתבצע אוטומטית בפתיחה הראשונה של הכלי אחריה. כך תמיד יש עותק יומי, גם בלי שרת.
       </div>
       <div id="driveHost"></div>
+
+      <div class="sect" style="margin-top:30px">חיבור לטופס הגוגל — תשובות נכנסות אוטומטית</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:12px">
+        כל מי שממלא את טופס כרטיס השידוכים — נכנס לכרטסייה ככרטיס מלא, בלי להקליד כלום.
+        הבדיקה נעשית בכל כניסה לכלי (ובלחיצת כפתור). אותה תשובה לא נכנסת פעמיים, ומי שכבר קיים בכרטסייה
+        (לפי טלפון או מייל) לא יוצר כרטיס כפול — הוא ממתין לאישורך. <b>מה שערכת בכלי לעולם לא נדרס.</b>
+      </div>
+      <div id="formHost"></div>
 
       <div class="sect" style="margin-top:30px">גיבוי בענן</div>
       <div id="cloudHost"></div>
@@ -876,7 +885,7 @@ const SYN = {
 };
 
 /* ============ state ============ */
-let DB = {people:[], matches:[], sessions:[], seq:1};
+let DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[]}};
 let ui = {view:"cards", q:"", smart:null, gender:"", status:"", sector:"", openTo:"",
           ageMin:null, ageMax:null, mstatus:"", sort:"name", openPerson:null};
 let canPersist = true;
@@ -1015,7 +1024,8 @@ async function openVault(raw, secret){
 }
 
 function adoptDB(d){
-  DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1};
+  DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
+        form: d.form || {seen:[], pending:[]}};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
@@ -1058,7 +1068,7 @@ function hideLockOn(){ return localStorage.getItem("hide_lock") !== "0"; }   /* 
 
 function lock(){
   CRY.key = null; CRY.locked = true;
-  DB = {people:[], matches:[], sessions:[], seq:1};
+  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[]}};
   ui.openPerson = null;
   closeSheet();
   $("#app").classList.add("blurred");
@@ -1266,6 +1276,7 @@ async function tryUnlock(){
     setSaveState("נשמר ומוצפן");
     touchActivity(); render(); setView("cards");
     setTimeout(backupNudge, 1500);
+    setTimeout(()=>{ renderForm(); formAuto(); }, 2500);
     if(CRY.usedRec){
       setTimeout(async ()=>{
         alert("נכנסתם באמצעות קוד השחזור. כעת יש לקבוע סיסמה חדשה, ויונפק קוד שחזור חדש במקומו.");
@@ -1567,7 +1578,12 @@ function renderCards(keepLimit){
     return;
   }
   const S = ui.smart;
-  const banner = S ? `<div class="smart-banner">
+  const pend = (DB.form && DB.form.pending || []).length;
+  const fbanner = pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
+      <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
+      <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
+    </div>` : "";
+  const banner = fbanner + (S ? `<div class="smart-banner">
       <div><b>✨ חיפוש חכם:</b> "${esc(S.label)}" · ${list.length} תוצאות, המתאימים ביותר ראשונים
         <div class="smart-chips">${[
           S.gender, S.ageMin&&("מגיל "+S.ageMin), S.ageMax&&("עד גיל "+S.ageMax),
@@ -1575,7 +1591,7 @@ function renderCards(keepLimit){
         ].filter(Boolean).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div></div>
       <button class="btn ghost sm" onclick="smartSearch()">שינוי</button>
       <button class="btn ghost sm" onclick="clearSmart()">× ניקוי</button>
-    </div>` : "";
+    </div>` : "");
   if(!list.length){
     host.innerHTML = banner + `<div class="empty"><h3>אין תוצאות</h3><p>נסו לשנות את החיפוש או את הסינון.</p></div>`;
     return;
@@ -2329,7 +2345,7 @@ async function importJson(text){
 
     if(!d.people) throw new Error("קובץ גיבוי לא תקין");
     if(DB.people.length && !confirm("לטעון את הגיבוי במקום הנתונים הקיימים?")) return;
-    DB = {people:d.people, matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1};
+    DB = {people:d.people, matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1, form:d.form||{seen:[], pending:[]}};
     save(); setView("cards"); toast("הגיבוי נטען: "+DB.people.length+" מועמדים");
   }catch(err){ toast("שגיאה: "+err.message); }
 }
@@ -3815,6 +3831,290 @@ function smartHit(p, hay){
   return hits ? hits : null;
 }
 
+/* ============ חיבור לטופס הגוגל — תשובות נכנסות אוטומטית ============
+   הטופס שומר כל תשובה בגיליון גוגל. הכלי קורא את הגיליון (הרשאת קריאה בלבד),
+   ומכניס כרטיס לכל תשובה חדשה. כל תשובה מזוהה לפי חותמת הזמן שלה — ולא תיכנס פעמיים.
+   מי שכבר קיים בכרטסייה (טלפון או מייל זהים) לא נכנס שוב — הוא ממתין לאישור השדכנית. */
+const FORM = {busy:false};
+function formCfg(){
+  const def = {url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0};
+  try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
+}
+function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
+function formDB(){ if(!DB.form) DB.form = {seen:[], pending:[]}; DB.form.seen = DB.form.seen||[]; DB.form.pending = DB.form.pending||[]; return DB.form; }
+
+/* מזהה הגיליון מכל צורה של קישור (edit / view / עם מספר לשונית) */
+function parseSheetUrl(u){
+  u = String(u||"").trim();
+  if(/docs\.google\.com\/forms/i.test(u)) return {err:"זה קישור לטופס עצמו, לא לגיליון התשובות. בטופס: לשונית ״תשובות״ ← הסמל הירוק ״קישור לגיליון״ — ומעתיקים את הקישור של הגיליון שנפתח."};
+  const m = u.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/) || u.match(/^([a-zA-Z0-9_-]{30,})$/);
+  if(!m) return {err:"הקישור לא נראה כמו קישור לגיליון גוגל. הוא צריך להתחיל ב-docs.google.com/spreadsheets"};
+  const g = u.match(/[#&?]gid=(\d+)/);
+  return {id:m[1], gid: g ? g[1] : ""};
+}
+const normPhone = v => { let d = String(v||"").replace(/\D/g,""); if(d.startsWith("972")) d = "0"+d.slice(3); return d.length>=9 ? d : ""; };
+const normEmail = v => { const e = String(v||"").trim().toLowerCase(); return /@/.test(e) ? e : ""; };
+
+/* שגיאות מגוגל — בעברית ועם מה עושים */
+async function sheetsApi(url, token){
+  let res;
+  try{ res = await fetch(url, {headers:{Authorization:"Bearer "+token}}); }
+  catch(e){ throw new Error("אין חיבור לגוגל — בדקו את האינטרנט ונסו שוב"); }
+  if(res.ok) return res.json();
+  const t = await res.text().catch(()=>"");
+  if(res.status===401){ DRIVE.token = null; throw new Error("פג תוקף החיבור לגוגל — לחצו ״התחברות לגוגל״ בהגדרות הדרייב ונסו שוב"); }
+  if(res.status===403 && /insufficient|scope/i.test(t)){ DRIVE.token = null; DRIVE.tc = null;
+    throw new Error("חסרה הרשאה לקריאת הגיליון — לחצו ״התחברות לגוגל״ פעם אחת ואשרו את ההרשאה החדשה"); }
+  if(res.status===403 && /has not been used|disabled|SERVICE_DISABLED/i.test(t))
+    throw new Error("Google Sheets API לא מופעל בפרויקט בגוגל קלאוד — ראו ״איך מחברים״ למטה, שלב 1");
+  if(res.status===403) throw new Error("אין גישה לגיליון — ודאו שהוא שייך לחשבון הגוגל שמחובר לכלי");
+  if(res.status===404) throw new Error("הגיליון לא נמצא — אולי נמחק, הוזז, או שהקישור שגוי");
+  if(res.status===429) throw new Error("גוגל ביקש להמתין רגע — נסו שוב בעוד דקה");
+  throw new Error("גוגל החזיר שגיאה " + res.status);
+}
+
+async function fetchFormRows(token){
+  const cfg = formCfg();
+  const meta = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets.properties(title,sheetId)`, token);
+  const tabs = (meta.sheets||[]).map(x=>x.properties);
+  const tab = (cfg.gid && tabs.find(t=>String(t.sheetId)===String(cfg.gid))) || tabs[0];
+  if(!tab) throw new Error("הגיליון ריק — אין בו לשוניות");
+  const range = encodeURIComponent("'" + tab.title.replace(/'/g,"''") + "'");
+  const v = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`, token);
+  const all = v.values || [];
+  const headers = (all[0]||[]).map(h=>String(h).trim());
+  const rows = all.slice(1).filter(r=>r.some(c=>String(c==null?"":c).trim()));
+  return {headers, rows, tab:tab.title};
+}
+
+/* מזהה קבוע לכל תשובה: חותמת הזמן + השם (ואם אין חותמת — כל תוכן השורה) */
+function rowKey(headers, r){
+  const ti = headers.findIndex(h=>/חותמת זמן|timestamp/i.test(h));
+  const ni = headers.findIndex(h=>guessField(h)==="fullName");
+  if(ti>=0 && String(r[ti]||"").trim()) return "t:" + String(r[ti]).trim() + "|" + String(ni>=0 ? r[ni]||"" : "").trim();
+  return "r:" + r.map(c=>String(c==null?"":c).trim()).join("¦");
+}
+function rowToPerson(headers, r, key){
+  const p = {id:uid(), created:today(), updated:today(), extra:{}, source:"טופס", formKey:key};
+  headers.forEach((h,i)=>{
+    const val = String(r[i]==null?"":r[i]).trim();
+    if(!val || /חותמת זמן|timestamp|תאריך מילוי/i.test(h)) return;
+    const k = guessField(h);
+    if(k==="__extra") p.extra[h || ("עמודה "+(i+1))] = val;
+    else if(!p[k]) p[k] = val;
+    else p.extra[h] = val;      /* שתי שאלות שממופות לאותו שדה — השנייה נשמרת בצד */
+  });
+  if(!String(p.fullName||"").trim()) return null;
+  return normalizeImported(p);
+}
+function findExisting(p){
+  const ph = normPhone(p.phone), em = normEmail(p.email);
+  return DB.people.find(x => (ph && normPhone(x.phone)===ph) || (em && normEmail(x.email)===em)) || null;
+}
+
+/* הבדיקה עצמה. manual=true — בלחיצת כפתור (מותר לפתוח חלון התחברות לגוגל) */
+async function syncForm(manual, dryRun){
+  const cfg = formCfg();
+  if(!cfg.sheetId){ if(manual) toast("עדיין לא חובר טופס — הגדרה בעמוד ״גיבוי וניהול״"); return null; }
+  if(!driveCfg().clientId){ formStatus("כדי לקרוא את הגיליון צריך קודם להגדיר Client ID בהגדרות הדרייב (למעלה)", "var(--rose)"); if(manual) toast("צריך קודם להגדיר את החיבור לגוגל בהגדרות הדרייב"); return null; }
+  if(CRY.locked || FORM.busy) return null;
+  FORM.busy = true;
+  formStatus(dryRun ? "בודק את החיבור לגיליון…" : "בודק אם יש תשובות חדשות…");
+  try{
+    const token = await driveToken(!manual);
+    const {headers, rows} = await fetchFormRows(token);
+    if(!headers.length) throw new Error("הגיליון ריק — עוד אין בו תשובות");
+    if(!headers.some(h=>guessField(h)==="fullName"))
+      throw new Error("לא נמצאה בגיליון עמודת שם (למשל ״שם פרטי ומשפחה״) — האם זה הגיליון הנכון?");
+    const F = formDB(), seen = new Set(F.seen);
+    const fresh = rows.filter(r=>!seen.has(rowKey(headers,r)));
+    if(dryRun){
+      FORM.busy = false;
+      const msg = `החיבור תקין ✓ — בגיליון ${rows.length} תשובות, מתוכן ${fresh.length} חדשות שעוד לא נכנסו.`;
+      formStatus(msg, "var(--teal)");
+      return {total:rows.length, fresh:fresh.length};
+    }
+    let added = 0, pending = 0, similar = 0, skipped = 0;
+    fresh.forEach(r=>{
+      const key = rowKey(headers, r);
+      seen.add(key);
+      const p = rowToPerson(headers, r, key);
+      if(!p){ skipped++; return; }
+      const ex = findExisting(p);
+      if(ex){ F.pending.push({key, p, exId:ex.id, date:today()}); pending++; return; }
+      const nm = String(p.fullName).trim();
+      if(DB.people.some(x=>String(x.fullName||"").trim()===nm)){
+        p.tags = ["⚠ שם דומה קיים"]; similar++;
+      }
+      DB.people.push(p); added++;
+    });
+    F.seen = [...seen];
+    const c = formCfg();
+    c.last = new Date().toISOString(); c.total = rows.length;
+    c.lastMsg = added||pending ? `נוספו ${added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
+    formSave(c);
+    if(added || pending || skipped) save();
+    render();
+    renderForm();
+    if(added || pending){
+      toast(`📝 מהטופס: ${added ? `נוספו ${added} מועמדים חדשים` : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
+    }else if(manual) toast("אין תשובות חדשות בטופס");
+    FORM.busy = false;
+    return {added, pending, similar};
+  }catch(err){
+    FORM.busy = false;
+    formStatus(err.message, "var(--rose)");
+    if(manual) toast(err.message);
+    return null;
+  }
+}
+/* בכניסה לכלי — בדיקה שקטה, אם מופעל */
+function formAuto(){
+  const c = formCfg();
+  if(c.auto && c.sheetId && driveCfg().clientId) syncForm(false);
+}
+
+function formStatus(txt, color){
+  const el = $("#formStatus"); if(!el) return;
+  el.innerHTML = `<span style="color:${color||"var(--ink-soft)"}">${esc(txt)}</span>`;
+}
+function renderForm(){
+  const host = $("#formHost");
+  const c = formCfg(), pend = (DB.form && DB.form.pending || []).length;
+  const top = $("#btnFormSync"); if(top) top.classList.toggle("hidden", !c.sheetId);
+  if(!host) return;
+  host.innerHTML = `
+    <div class="form-grid" style="max-width:640px">
+      <div class="field wide">
+        <label for="formUrl">קישור לגיליון התשובות של הטופס</label>
+        <input id="formUrl" value="${esc(c.url)}" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" dir="ltr">
+      </div>
+      <div class="field wide">
+        <label class="todo"><input type="checkbox" id="formAuto" ${c.auto?"checked":""}>
+          <span>לבדוק תשובות חדשות אוטומטית בכל כניסה לכלי</span></label>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn sm pri" id="btnFormSave">שמירה ובדיקת חיבור</button>
+      <button class="btn sm" id="btnFormNow" ${c.sheetId?"":"disabled"}>בדיקת תשובות חדשות עכשיו</button>
+      ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ממתינים לבדיקה (${pend})</button>`:""}
+      ${c.sheetId?`<button class="btn ghost sm" id="btnFormOff">ניתוק הטופס</button>`:""}
+    </div>
+    <div id="formStatus" style="font-size:13px;margin-top:9px;min-height:20px">${
+      c.last ? `<span style="color:var(--ink-soft)">בדיקה אחרונה: ${esc(new Date(c.last).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}))} · ${esc(c.lastMsg||"")} · בגיליון ${c.total} תשובות</span>`
+             : (c.sheetId ? "" : `<span style="color:var(--ink-faint)">עדיין לא חובר טופס.</span>`)}</div>
+    <details style="margin-top:10px;max-width:640px">
+      <summary style="font-size:13.5px;color:var(--teal);cursor:pointer;font-weight:600">איך מחברים — הוראות צעד אחר צעד</summary>
+      <ol style="font-size:13.5px;color:var(--ink-soft);line-height:1.75;padding-inline-start:20px">
+        <li><b>הפעלת קריאת גיליונות בגוגל (פעם אחת):</b> נכנסים ל-console.cloud.google.com, לאותו פרויקט שממנו לקחתם את ה-Client ID של הדרייב.
+          בתפריט: APIs &amp; Services ← Library. מחפשים <b>Google Sheets API</b>, נכנסים ולוחצים <b>Enable</b> (הפעלה).</li>
+        <li><b>הקישור לגיליון:</b> בטופס הגוגל — לשונית <b>תשובות</b> ← הסמל הירוק <b>קישור לגיליון</b>. בגיליון שנפתח מעתיקים את הכתובת מהשורה למעלה, ומדביקים כאן.</li>
+        <li>לוחצים <b>שמירה ובדיקת חיבור</b>. בפעם הראשונה ייפתח חלון של גוגל לאישור ההרשאה לקריאת הגיליון — מאשרים.
+          אם מופיעה אזהרה ש״האפליקציה לא אומתה״ — זו האפליקציה שלכם: לוחצים <b>Advanced</b> (מתקדם) ואז <b>Go to…</b> (מעבר).</li>
+        <li>כשמופיע <b>״החיבור תקין ✓״</b> — לוחצים <b>בדיקת תשובות חדשות עכשיו</b>, וכל התשובות נכנסות לכרטסייה.</li>
+      </ol>
+      <p style="font-size:12.5px;color:var(--ink-faint);margin-top:0">הכלי מקבל הרשאת <b>קריאה בלבד</b> לגיליונות — הוא לא יכול לשנות או למחוק בהם כלום.</p>
+    </details>`;
+
+  $("#btnFormSave").addEventListener("click", async ()=>{
+    const r = parseSheetUrl($("#formUrl").value);
+    if(r.err){ formStatus(r.err, "var(--rose)"); return; }
+    const c2 = formCfg();
+    const changed = c2.sheetId && c2.sheetId !== r.id;
+    c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked;
+    if(changed){ c2.last = ""; c2.total = 0; }
+    formSave(c2);
+    renderForm();
+    const res = await syncForm(true, true);
+    if(res && res.fresh) formStatus(`החיבור תקין ✓ — בגיליון ${res.total} תשובות, מתוכן ${res.fresh} חדשות. לחצו ״בדיקת תשובות חדשות עכשיו״ כדי להכניס אותן.`, "var(--teal)");
+  });
+  $("#formAuto").addEventListener("change", e=>{ const c2 = formCfg(); c2.auto = e.target.checked; formSave(c2); toast("עודכן"); });
+  const now = $("#btnFormNow"); if(now) now.addEventListener("click", ()=>syncForm(true));
+  const off = $("#btnFormOff"); if(off) off.addEventListener("click", ()=>{
+    if(!confirm("לנתק את הטופס? הכרטיסים שכבר נכנסו נשארים בכרטסייה.")) return;
+    const c2 = formCfg(); c2.sheetId = ""; c2.url = ""; c2.last = ""; formSave(c2); renderForm(); toast("הטופס נותק");
+  });
+}
+
+/* ---------- בדיקת תשובות של מי שכבר קיים בכרטסייה ---------- */
+const FORM_SKIP_CMP = new Set(["status","notes","refs","openTo"]);
+function pendingDiff(it){
+  const ex = personById(it.exId), p = it.p;
+  if(!ex) return [];
+  return FIELDS.filter(f=>!FORM_SKIP_CMP.has(f.k) && p[f.k] && String(disp(p[f.k])).trim() !== String(disp(ex[f.k])||"").trim())
+    .map(f=>({k:f.k, l:f.l, cur:String(disp(ex[f.k])||""), nw:String(disp(p[f.k]))}));
+}
+function openFormReview(i){
+  const F = formDB();
+  F.pending = F.pending.filter(it=>personById(it.exId));       /* כרטיס שנמחק בינתיים — כבר לא רלוונטי */
+  if(!F.pending.length){ save(); render(); renderForm(); closeSheet(); toast("אין תשובות ממתינות"); return; }
+  if(i == null){
+    $("#sheetHead").innerHTML = `<div style="flex:1"><h3>📝 תשובות מהטופס — ממתינות לבדיקה</h3>
+      <div class="meta">הממלאים כבר קיימים בכרטסייה לפי טלפון או מייל. בחרו מה לעשות עם כל תשובה.</div></div>
+      <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+    $("#sheetBody").innerHTML = `<div class="win-col">${F.pending.map((it,j)=>{
+      const ex = personById(it.exId), d = pendingDiff(it);
+      const why = normPhone(it.p.phone) && normPhone(it.p.phone)===normPhone(ex.phone) ? "טלפון זהה" : "מייל זהה";
+      return `<button class="picker-item" onclick="openFormReview(${j})">
+        ${avatar(ex,32)}
+        <div style="min-width:0;flex:1"><div style="font-weight:600">${esc(it.p.fullName)} ${it.p.fullName.trim()!==String(ex.fullName).trim()?`<span style="color:var(--ink-faint);font-weight:400">← בכרטסייה: ${esc(ex.fullName)}</span>`:""}</div>
+        <div style="font-size:12px;color:var(--ink-faint)">${why} · ${d.length ? d.length+" פרטים שונים או חדשים" : "אין שינוי בפרטים"} · ${esc(it.date)}</div></div>
+        <span class="score">בדיקה ←</span></button>`; }).join("")}</div>`;
+    $("#sheetFoot").innerHTML = `
+      <button class="btn pri" onclick="bulkPending('fill')" title="רק שדות שריקים בכרטיס הקיים — שום דבר לא נדרס">השלמת שדות ריקים בכולם</button>
+      <button class="btn ghost" onclick="bulkPending('ignore')">התעלמות מכולם</button>
+      <button class="btn ghost" onclick="closeSheet()">אחר כך</button>`;
+    openSheet(); return;
+  }
+  const it = F.pending[i], ex = personById(it.exId), d = pendingDiff(it);
+  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>${esc(it.p.fullName)} מילא/ה שוב את הטופס</h3>
+    <div class="meta">כרטיס קיים: ${esc(ex.fullName)}${ex.phone?" · "+esc(ex.phone):""}. סמנו אילו פרטים לעדכן.</div></div>
+    <button class="x" onclick="openFormReview()" aria-label="חזרה">×</button>`;
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    ${d.length ? `<div class="card-hint">מסומנים מראש רק שדות שריקים בכרטיס הקיים. שדה שכבר מלא — לא יתעדכן אלא אם תסמנו אותו.</div>
+      <table class="maptable"><thead><tr><th></th><th>שדה</th><th>בכרטיס היום</th><th>בטופס החדש</th></tr></thead><tbody>
+      ${d.map((x,j)=>`<tr><td><input type="checkbox" data-pk="${x.k}" ${x.cur?"":"checked"}></td><td><b>${esc(x.l)}</b></td>
+        <td class="sample">${x.cur?esc(x.cur.slice(0,90)):'<span style="color:#c3cad1">— ריק —</span>'}</td>
+        <td class="sample" style="color:var(--ink)">${esc(x.nw.slice(0,90))}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="an-load">התשובה החדשה זהה לכרטיס הקיים — אין מה לעדכן.</div>`}
+  </div>`;
+  $("#sheetFoot").innerHTML = `
+    ${d.length?`<button class="btn pri" onclick="applyPending(${i},'update')">עדכון הפרטים המסומנים</button>`:""}
+    <button class="btn" onclick="applyPending(${i},'new')">זה אדם אחר — כרטיס חדש</button>
+    <button class="btn ghost" onclick="applyPending(${i},'ignore')">התעלמות</button>
+    <button class="btn ghost" onclick="openFormReview()">חזרה לרשימה</button>`;
+  openSheet();
+}
+function applyPending(i, mode){
+  const F = formDB(), it = F.pending[i]; if(!it) return;
+  const ex = personById(it.exId);
+  if(mode==="update" && ex){
+    const ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
+    ks.forEach(k=>{ ex[k] = it.p[k]; });
+    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(!ex.extra[k]) ex.extra[k] = v; });
+    ex.updated = today();
+    toast(ks.length ? `עודכנו ${ks.length} פרטים בכרטיס של ${ex.fullName}` : "לא סומנו פרטים — הכרטיס לא השתנה");
+  }else if(mode==="new"){
+    it.p.tags = ["⚠ שם/טלפון דומה קיים"];
+    DB.people.push(it.p); toast("נוסף כרטיס חדש");
+  }else toast("התשובה סומנה כטופלה");
+  F.pending.splice(i,1);
+  save(); render(); renderForm();
+  if(F.pending.length) openFormReview(); else { closeSheet(); }
+}
+function bulkPending(mode){
+  const F = formDB(); let n = 0;
+  if(mode==="ignore" && !confirm(`להתעלם מכל ${F.pending.length} התשובות הממתינות? הכרטיסים הקיימים לא ישתנו.`)) return;
+  if(mode==="fill") F.pending.forEach(it=>{
+    const ex = personById(it.exId); if(!ex) return;
+    pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; n++; });
+    if(n) ex.updated = today();
+  });
+  F.pending = [];
+  save(); render(); renderForm(); closeSheet();
+  toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
+}
+
 /* ============ גיבוי אוטומטי לגוגל דרייב ============ */
 const DRIVE = {token:null, exp:0, tc:null, busy:false};
 const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -3846,7 +4146,7 @@ function driveToken(silent){
     if(!DRIVE.tc){
       DRIVE.tc = google.accounts.oauth2.initTokenClient({
         client_id: cfg.clientId,
-        scope: "https://www.googleapis.com/auth/drive.file",
+        scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly",
         callback: resp=>{
           if(resp.error){ DRIVE._rej && DRIVE._rej(new Error("ההרשאה נדחתה: " + resp.error)); return; }
           DRIVE.token = resp.access_token;
@@ -4458,6 +4758,7 @@ $("#btnClearFilters").addEventListener("click",()=>{
 });
 $("#btnNew").addEventListener("click",()=>editPerson(""));
 $("#btnSmart").addEventListener("click", smartSearch);
+$("#btnFormSync").addEventListener("click", ()=>syncForm(true));
 $("#btnImportTop").addEventListener("click",()=>setView("import"));
 $("#scrim").addEventListener("click", closeSheet);
 document.addEventListener("keydown", e=>{
@@ -4551,11 +4852,12 @@ $("#btnWipe").addEventListener("click", async ()=>{
   });
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
-  DB = {people:[], matches:[], sessions:[], seq:1}; save(); setView("cards"); toast("כל הנתונים נמחקו");
+  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[]}}; save(); setView("cards"); toast("כל הנתונים נמחקו");
 });
 
 boot();
 renderDrive();
+renderForm();
 driveTick();
 setInterval(driveTick, 5 * 60 * 1000);
 </script>
