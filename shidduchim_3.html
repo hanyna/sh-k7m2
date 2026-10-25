@@ -3951,13 +3951,13 @@ async function syncForm(manual, dryRun){
     F.seen = [...seen];
     const c = formCfg();
     c.last = new Date().toISOString(); c.total = rows.length;
-    c.lastMsg = added||pending ? `נוספו ${added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
+    c.lastMsg = added||pending ? `${added===1?"נוסף 1":"נוספו "+added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
     formSave(c);
     if(added || pending || skipped) save();
     render();
     renderForm();
     if(added || pending){
-      toast(`📝 מהטופס: ${added ? `נוספו ${added} מועמדים חדשים` : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
+      toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
     }else if(manual) toast("אין תשובות חדשות בטופס");
     FORM.busy = false;
     return {added, pending, similar};
