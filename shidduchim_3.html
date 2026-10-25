@@ -914,7 +914,7 @@ const $  = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => "p" + (DB.seq++) + Date.now().toString(36).slice(-4);
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const disp = v => Array.isArray(v)
   ? v.map(x => (x && typeof x === "object")
       ? [x.name, x.role?`(${x.role})`:"", x.phone||""].filter(Boolean).join(" ")
@@ -947,10 +947,64 @@ function normSector(v){
 
 /* ============ כספת: הצפנה בפועל, לא רק מסך חסימה ============ */
 const VAULT = "shidduchim_vault_v1";   /* הנתונים המוצפנים */
+
+/* ---- אחסון הכספת ----
+   localStorage מוגבל לכ-5MB — כרטסייה גדולה (אלפי מועמדים, טקסטים ארוכים, תמונות) חורגת ממנו,
+   ואז השמירה נכשלת. לכן הכספת נשמרת ב-IndexedDB (מאות MB). כספת קיימת עוברת לשם אוטומטית;
+   אם IndexedDB לא זמין — חוזרים ל-localStorage. בזיכרון נשמר עותק, כך שהקריאה מיידית. */
+const VSTORE = {cache:null, idb:null, useLS:false};
+function idbOpen(){
+  return new Promise((res, rej)=>{
+    if(!window.indexedDB) return rej(new Error("no idb"));
+    const rq = indexedDB.open("shidduchim", 1);
+    rq.onupgradeneeded = ()=>rq.result.createObjectStore("kv");
+    rq.onsuccess = ()=>res(rq.result);
+    rq.onerror = ()=>rej(rq.error);
+    rq.onblocked = ()=>rej(new Error("idb blocked"));
+  });
+}
+function idbDo(mode, fn){
+  return new Promise((res, rej)=>{
+    const tx = VSTORE.idb.transaction("kv", mode), st = tx.objectStore("kv");
+    const rq = fn(st);
+    tx.oncomplete = ()=>res(rq ? rq.result : undefined);
+    tx.onerror = ()=>rej(tx.error); tx.onabort = ()=>rej(tx.error || new Error("idb abort"));
+  });
+}
+async function vaultLoad(){
+  try{
+    VSTORE.idb = await idbOpen();
+    let v = await idbDo("readonly", st=>st.get("vault"));
+    const ls = localStorage.getItem(VAULT);
+    if(!v && ls){ await idbDo("readwrite", st=>st.put(ls, "vault")); v = ls; }   /* מעבר חד-פעמי */
+    if(ls){ try{ localStorage.removeItem(VAULT); }catch(e){} }                     /* מפנה מקום */
+    VSTORE.cache = v || null;
+  }catch(e){
+    VSTORE.useLS = true; VSTORE.cache = localStorage.getItem(VAULT);
+  }
+}
+function vaultGet(){ return VSTORE.cache; }
+async function vaultSet(str){
+  if(!VSTORE.useLS && VSTORE.idb){
+    await idbDo("readwrite", st=>st.put(str, "vault"));
+  }else{
+    localStorage.setItem(VAULT, str);
+  }
+  VSTORE.cache = str;     /* רק אחרי שנשמר בפועל */
+}
+async function vaultDel(){
+  VSTORE.cache = null;
+  try{ if(VSTORE.idb) await idbDo("readwrite", st=>st.delete("vault")); }catch(e){}
+  try{ localStorage.removeItem(VAULT); }catch(e){}
+}
 const LEGACY = "shidduchim_db_v1";     /* נתונים גלויים מגרסאות קודמות */
 const CRY = {key:null, salt:null, locked:true, plain:false};
 const enc = new TextEncoder(), dec = new TextDecoder();
-const b64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+/* המרה לבסיס 64 במנות: פריסה של מערך ענק (...) לתוך fromCharCode קורסת בכרטסייה גדולה
+   ("Maximum call stack size exceeded") — ואז שום דבר לא נשמר. במנות של 32KB זה עובד בכל גודל. */
+const b64  = buf => { const u = new Uint8Array(buf); let s = "";
+  for(let i=0; i<u.length; i+=0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i+0x8000));
+  return btoa(s); };
 const unb64 = str => Uint8Array.from(atob(str), c=>c.charCodeAt(0));
 
 /* גזירת מפתח מסיסמה — ברירת המחדל כיום 600,000 סיבובים (המלצת OWASP),
@@ -969,8 +1023,10 @@ async function deriveKey(pass, salt, it){
 const rnd = n => crypto.getRandomValues(new Uint8Array(n));
 function normCode(c){ return String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
 function randomCode(groups){
-  const abc = "ACDEFGHJKLMNPQRTUVWXY3467869";   /* בלי תווים שקל לבלבל ביניהם */
-  const pick = n => Array.from({length:n}, ()=>abc[Math.floor(Math.random()*abc.length)]).join("");
+  const abc = "ACDEFGHJKLMNPQRTUVWXY346789";   /* בלי תווים שקל לבלבל ביניהם */
+  /* אקראיות קריפטוגרפית (לא Math.random), בלי הטיה: דוחים ערכים מעבר לכפולה האחרונה של אורך האלפבית */
+  const pick = n => { let out = ""; while(out.length < n){ const b = crypto.getRandomValues(new Uint8Array(1))[0];
+    if(b < 256 - (256 % abc.length)) out += abc[b % abc.length]; } return out; };
   return Array.from({length:groups||4}, ()=>pick(4)).join("-");
 }
 async function importDEK(raw){
@@ -1052,6 +1108,7 @@ function adoptDB(d){
 let saveTimer = null, saving = false, dirty = false;
 function save(){
   dirty = true;
+  try{ HAY.clear(); }catch(e){}   /* טקסט החיפוש יחושב מחדש — כך גם עריכה מאותו יום נמצאת בחיפוש */
   DRIVE.changed = true;   /* לגיבוי האוטומטי בסגירה */
   touchActivity();
   clearTimeout(saveTimer);
@@ -1062,14 +1119,14 @@ async function persist(){
   saving = true; dirty = false;
   try{
     const payload = CRY.plain ? JSON.stringify(DB) : await sealDB();
-    localStorage.setItem(CRY.plain ? LEGACY : VAULT, payload);
+    if(CRY.plain) localStorage.setItem(LEGACY, payload); else await vaultSet(payload);
     setSaveState(CRY.plain ? "נשמר ללא הצפנה" : "נשמר ומוצפן", CRY.plain ? "#d9a441" : "");
     if(CLOUD.auto && CLOUD.user) cloudPush(true);
   }catch(e){
     canPersist = false;
     const full = /quota|exceed/i.test(e.name + " " + e.message);
     setSaveState(full ? "האחסון מלא — ייצאו גיבוי" : "השמירה נכשלה", "#d9a441");
-    if(full) toast("אחסון הדפדפן מלא. ייצאו גיבוי והסירו תמונות כבדות.");
+    toast(full ? "אחסון הדפדפן מלא. ייצאו גיבוי והסירו תמונות כבדות." : "השמירה נכשלה — ייצאו גיבוי עכשיו ופנו אליי");
   }
   saving = false;
   if(dirty) persist();
@@ -1087,10 +1144,15 @@ function idleLimit(){ return (parseInt(localStorage.getItem("idle_min")||"20",10
 function hideLockOn(){ return localStorage.getItem("hide_lock") !== "0"; }   /* מופעל כברירת מחדל */
 
 function lock(){
-  CRY.key = null; CRY.locked = true;
+  /* שינוי שעוד לא נשמר (בתוך 250 אלפיות השנייה האחרונות) — נשמר לפני שהמפתח נמחק */
+  if(saveTimer && dirty && CRY.key && !CRY.plain){ clearTimeout(saveTimer); saveTimer = null; persist().finally(lock); return; }
+  const a = $("#ask"); if(a){ a.classList.add("hidden"); a.innerHTML = ""; }
+  CRY.key = null; CRY.rawDEK = null; CRY.locked = true;
   DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[]}};
   ui.openPerson = null;
+  EDIT.on = false; EDIT.dirty = false;
   closeSheet();
+  try{ ["#cardsHost","#matchesHost","#followupHost","#intakeHost","#stats","#stats2"].forEach(x=>{ const el=$(x); if(el) el.innerHTML=""; }); }catch(e){}
   $("#app").classList.add("blurred");
   showLock("unlock");
 }
@@ -1100,7 +1162,7 @@ const LOCK_BRAND = `<div class="lock-brand">
   <div class="lock-title">כרטסיית שידוכים</div>
   <div class="lock-tag">ניהול מועמדים והצעות — פרטי, מוצפן, אצלך בלבד</div>
 </div>`;
-const LOCK_FOOT = `<div class="lock-foot">הנתונים מוצפנים <b>במחשב הזה בלבד</b> ואינם נשלחים לשום שרת</div>`;
+const LOCK_FOOT = `<div class="lock-foot">הנתונים נשמרים <b>מוצפנים במחשב הזה</b> · גיבוי ובינה מלאכותית — רק לפי ההגדרות שלך</div>`;
 
 function showLock(mode, msg){
   const box = $("#lock");
@@ -1169,7 +1231,7 @@ function showLock(mode, msg){
         });
         if(!r) return;
         if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
-        localStorage.removeItem(VAULT); localStorage.removeItem("acct_user"); location.reload();
+        await vaultDel(); localStorage.removeItem("acct_user"); location.reload();
       });
     });
   }
@@ -1196,8 +1258,8 @@ async function setupPass(){
     const legacy = localStorage.getItem(LEGACY);
     if(legacy){ try{ adoptDB(JSON.parse(legacy)); }catch(e){} }
     const rec = await buildEnvelope(acctSecret(user, p1));
+    await vaultSet(await sealDB());
     localStorage.setItem("acct_user", user);
-    localStorage.setItem(VAULT, await sealDB());
     localStorage.removeItem(LEGACY);
     setSaveState("נשמר ומוצפן");
     showRecovery(rec, true);
@@ -1269,7 +1331,7 @@ async function tryUnlock(){
      (רווח נסתר, שינוי מצב מקלדת) לא ינעל בטעות, מנסים כמה גרסאות של השם:
      מה שהוקלד, מה ששמור, וגרסאות מנוקות. הסיסמה חייבת להיות מדויקת בכל מקרה. */
   const userForms = new Set();
-  [user, savedUser].forEach(u=>{
+  [user || savedUser].forEach(u=>{
     if(!u) return;
     userForms.add(u);
     userForms.add(u.trim());
@@ -1280,7 +1342,7 @@ async function tryUnlock(){
   candidates.push(pass);                              /* קוד שחזור / כספת ישנה ללא שם */
   let opened = null, viaSecret = null;
   for(const secret of candidates){
-    try{ opened = await openVault(localStorage.getItem(VAULT), secret); viaSecret = secret; break; }
+    try{ opened = await openVault(vaultGet(), secret); viaSecret = secret; break; }
     catch(e){}
   }
   /* אם נכנסו עם הסיסמה לבדה בעוד קיים שם משתמש שמור — זה קוד שחזור, לא כניסה רגילה.
@@ -1379,7 +1441,7 @@ async function reissue(withNewPass){
   }
   try{
     const rec = await buildEnvelope(acctVerify(pass), CRY.v === 1 ? null : CRY.rawDEK);
-    localStorage.setItem(VAULT, await sealDB());
+    await vaultSet(await sealDB());
     showRecovery(rec, false);
   }catch(e){ toast("שגיאה: " + e.message); }
 }
@@ -1393,14 +1455,43 @@ function acctVerify(pass){
 /* פתיחת גיבוי מוצפן (מהדרייב או מקובץ) — מנסה את הסיסמה גם עם שם המשתמש
    השמור וגם לבדה (קוד שחזור / גיבוי מחשבון אחר). */
 async function openSealed(raw, pass){
-  const tries = [...new Set([acctVerify(pass), pass])];
-  for(const s of tries){
-    try{ return await openVault(raw, s); }catch(e){}
-  }
-  throw new Error("הקוד שגוי — הגיבוי לא נפתח");
+  /* openVault מחליף את מפתחות ההצפנה הפעילים במפתחות של הגיבוי. כאן שומרים את המפתחות
+     הנוכחיים ומחזירים אותם בכל מקרה — כך שחזור גיבוי מכניס רק את הנתונים, והכניסה לכלי
+     נשארת עם הסיסמה הנוכחית. (בלי זה — גיבוי ישן יכול היה לנעול את החשבון לתמיד.) */
+  const keep = {key:CRY.key, salt:CRY.salt, rsalt:CRY.rsalt, rawDEK:CRY.rawDEK, wrapPass:CRY.wrapPass,
+                wrapRec:CRY.wrapRec, v:CRY.v, usedRec:CRY.usedRec, plain:CRY.plain, locked:CRY.locked};
+  try{
+    const tries = [...new Set([acctVerify(pass), pass])];
+    for(const s of tries){
+      try{ return sanitizeDB(await openVault(raw, s)); }catch(e){}
+    }
+    throw new Error("הקוד שגוי — הגיבוי לא נפתח");
+  }finally{ Object.assign(CRY, keep); }
 }
 
-function boot(){
+/* ניקוי נתונים שמגיעים מקובץ חיצוני (גיבוי/ייבוא): מזהים תקינים בלבד, תמונות רק כתמונה —
+   כדי שקובץ פגום או זדוני לא יוכל להריץ קוד בתוך הכלי */
+function sanitizeDB(d){
+  if(!d || typeof d!=="object") return d;
+  const okId = x => typeof x==="string" && /^[\w-]{1,64}$/.test(x);
+  const remap = {};
+  (d.people||[]).forEach(p=>{
+    if(!p || typeof p!=="object") return;
+    if(!okId(p.id)){ const n = "p"+Math.random().toString(36).slice(2,10); remap[p.id] = n; p.id = n; }
+    if(p.photo && !/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(String(p.photo))) delete p.photo;
+    if(p.tags && !Array.isArray(p.tags)) p.tags = [];
+  });
+  d.people = (d.people||[]).filter(p=>p && typeof p==="object");
+  const fix = x => remap[x] || x;
+  d.matches = (d.matches||[]).filter(m=>m && typeof m==="object").map(m=>{
+    m.a = fix(m.a); m.b = fix(m.b); if(!okId(m.id)) m.id = "m"+Math.random().toString(36).slice(2,10); return m; });
+  d.sessions = (d.sessions||[]).filter(x=>x && typeof x==="object").map(x=>{
+    x.pid = fix(x.pid); if(x.mid) x.mid = fix(x.mid); if(!okId(x.id)) x.id = "s"+Math.random().toString(36).slice(2,10); return x; });
+  return d;
+}
+
+async function boot(){
+  await vaultLoad();
   /* הצפנה זמינה רק בהקשר מאובטח — https או localhost. פתיחת הקובץ בלחיצה כפולה לא נחשבת. */
   if(!window.crypto || !crypto.subtle){
     $("#app").classList.add("blurred");
@@ -1423,13 +1514,13 @@ function boot(){
     });
     return;
   }
-  const hasVault = localStorage.getItem(VAULT);
+  const hasVault = vaultGet();
   $("#app").classList.add("blurred");
   showLock(hasVault ? "unlock" : "setup");
   setInterval(()=>{
     if(CRY.locked || CRY.plain) return;
     if(Date.now() - lastActivity > idleLimit()) lock();
-    else if(hideLockOn() && document.hidden && hiddenAt && Date.now() - hiddenAt > HIDE_GRACE) lock();
+    else if(hideLockOn() && document.hidden && hiddenAt && Date.now() - hiddenAt > HIDE_GRACE && !EDIT.dirty) lock();
   }, 20000);
   ["click","keydown","mousemove","touchstart"].forEach(ev=>
     document.addEventListener(ev, touchActivity, {passive:true}));
@@ -1437,7 +1528,7 @@ function boot(){
      כך מי שקם מהמחשב באמצע לא משאיר תיקים פתוחים מאחורי חלון אחר. */
   document.addEventListener("visibilitychange", ()=>{
     if(document.hidden){ hiddenAt = Date.now(); return; }
-    if(hideLockOn() && hiddenAt && Date.now() - hiddenAt > HIDE_GRACE && !CRY.locked && !CRY.plain) lock();
+    if(hideLockOn() && hiddenAt && Date.now() - hiddenAt > HIDE_GRACE && !CRY.locked && !CRY.plain && !EDIT.dirty) lock();
     hiddenAt = 0;
   });
 }
@@ -1521,13 +1612,14 @@ function render(){
 }
 
 function renderStats(){
-  const m = DB.people.filter(p=>p.gender==="בן").length;
-  const f = DB.people.filter(p=>p.gender==="בת").length;
-  const free = DB.people.filter(p=>p.status==="פנוי").length;
+  const vis = DB.people.filter(p=>!p.hold);      /* פניות מושהות — לא נספרות עד אישור */
+  const m = vis.filter(p=>p.gender==="בן").length;
+  const f = vis.filter(p=>p.gender==="בת").length;
+  const free = vis.filter(p=>p.status==="פנוי").length;
   const open = DB.matches.filter(x=>["הוצע","בבירור","נפגשו"].includes(x.status)).length;
   const eng = DB.matches.filter(x=>x.status==="התארסו").length;
   const html = [
-    ["סה\u05F4כ מועמדים", DB.people.length],
+    ["סה\u05F4כ מועמדים", vis.length],
     ["בנים", m], ["בנות", f], ["פנויים", free],
     ["הצעות פתוחות", open], ["התארסו", eng]
   ].map(([l,v])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
@@ -1540,7 +1632,7 @@ function renderStats(){
   const photos = DB.people.filter(p=>p.photo).length;
   $("#storageLine").innerHTML =
     `נפח הנתונים כרגע: <b>${storageMB()} MB</b> · ${photos} תמונות · ${DB.sessions.length} פגישות מתועדות.
-     מגבלת הדפדפן היא כ-5 MB, ותמונות הן החלק הכבד.`;
+     ${VSTORE.useLS ? "מגבלת הדפדפן כאן היא כ-5 MB — ותמונות הן החלק הכבד." : "הנתונים שמורים במאגר הגדול של הדפדפן — יש מקום לאלפי כרטיסים."}`;
 }
 
 const HAY = new Map();   /* מטמון טקסט חיפוש לכל כרטיס */
@@ -1682,7 +1774,15 @@ function renderMatches(){
 
 /* ============ sheet ============ */
 function openSheet(){ $("#scrim").classList.add("on"); $("#sheet").classList.add("on"); }
+/* טופס עריכה פתוח עם שינויים שלא נשמרו — לא נסגר בלי לשאול */
+const EDIT = {on:false, dirty:false};
+function leaveEdit(fn){
+  if(EDIT.on && EDIT.dirty && !confirm("יש שינויים שלא נשמרו. לצאת בלי לשמור?")) return;
+  EDIT.on = false; EDIT.dirty = false;
+  fn();
+}
 function closeSheet(){
+  EDIT.on = false; EDIT.dirty = false;
   $("#scrim").classList.remove("on"); $("#sheet").classList.remove("on");
   $("#sheet").classList.remove("wide"); cardMode="edit"; ui.openPerson=null;
 }
@@ -1737,7 +1837,7 @@ function openPerson(id, tab){
   /* תוויות אישיות — סינון וזיהוי מהיר */
   body += `<div class="sect">תוויות</div>
     <div class="tag-edit" id="tagEdit">
-      ${(p.tags||[]).map(t=>`<span class="ptag">${esc(t)}<button onclick="removeTag('${id}','${esc(t).replace(/'/g,"")}')">×</button></span>`).join("")}
+      ${(p.tags||[]).map((t,ti)=>`<span class="ptag">${esc(t)}<button onclick="removeTagAt('${id}',${ti})">×</button></span>`).join("")}
       <button class="ptag-add" onclick="addTag('${id}')">+ תווית</button>
     </div>`;
 
@@ -1806,7 +1906,7 @@ function editPerson(id){
   $("#sheetHead").innerHTML = `<div style="flex:1">
       <h3>${isNew?"מועמד חדש":"עריכת כרטיס"}</h3>
       <div class="meta">${isNew?"מילוי הפרטים הבסיסיים מספיק להתחלה":esc(p.fullName||"")}</div>
-    </div><button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+    </div><button class="x" onclick="leaveEdit(closeSheet)" aria-label="סגירה">×</button>`;
 
   let html = `<div class="sect">תמונה</div>
     <div class="photo-block">
@@ -1876,8 +1976,9 @@ function editPerson(id){
   $("#sheetFoot").innerHTML = `
     <button class="btn pri" onclick="savePerson('${id||""}','finish')" title="שמירה, ניסוח כרטיס לקבוצות וחיפוש הצעות מתאימות">✓ סיימתי</button>
     <button class="btn" onclick="savePerson('${id||""}')">שמירה</button>
-    <button class="btn ghost" onclick="${id?`openPerson('${id}')`:"closeSheet()"}">ביטול</button>`;
+    <button class="btn ghost" onclick="leaveEdit(()=>${id?`openPerson('${id}')`:"closeSheet()"})">ביטול</button>`;
   openSheet();
+  EDIT.on = true; EDIT.dirty = false;
 }
 
 let photoBuf = null;
@@ -1899,6 +2000,8 @@ function refRow(r){
 function addRefRow(){ $("#refsBox").insertAdjacentHTML("beforeend", refRow()); }
 
 function savePerson(id, after){
+  const nmEl = $("#f_fullName");
+  if(nmEl && !nmEl.value.trim()){ toast("צריך למלא שם מלא"); nmEl.focus(); return; }
   const p = id ? personById(id) : {id:uid(), created:today(), extra:{}};
   FIELDS.forEach(f=>{
     if(f.t==="multi"){
@@ -1935,6 +2038,7 @@ function savePerson(id, after){
   const pic = $("#photoInCard"); if(pic) p.photoInCard = pic.checked;
   p.updated = today();
   if(!id){ p.source = p.source || "ידני"; p.reviewed = true; DB.people.push(p); }
+  EDIT.on = false; EDIT.dirty = false;
   save(); render();
   if(after === "finish"){ finishFlow(p.id); }
   else openPerson(p.id);
@@ -1944,8 +2048,11 @@ function savePerson(id, after){
 function delPerson(id){
   const p = personById(id);
   if(!confirm(`למחוק את הכרטיס של ${p.fullName}? גם ההצעות המשויכות אליו יימחקו.`)) return;
+  const gone = new Set(DB.matches.filter(m=>m.a===id || m.b===id).map(m=>m.id));
   DB.people = DB.people.filter(x=>x.id!==id);
   DB.matches = DB.matches.filter(m=>m.a!==id && m.b!==id);
+  DB.sessions = DB.sessions.filter(x=>x.pid!==id && !gone.has(x.mid));
+  if(DB.form && DB.form.pending) DB.form.pending = DB.form.pending.filter(it=>it.exId!==id);
   save(); closeSheet(); render(); toast("הכרטיס נמחק");
 }
 
@@ -2146,6 +2253,11 @@ async function addTag(id){
   if(!p.tags.includes(t)) p.tags.push(t);
   save(); openPerson(id, "details");
 }
+function removeTagAt(id, i){
+  const p = personById(id); if(!p) return;
+  p.tags = (p.tags||[]).filter((t,j)=>j!==i);
+  p.updated = today(); save(); openPerson(id, "details");
+}
 function removeTag(id, tag){
   const p = personById(id);
   p.tags = (p.tags||[]).filter(t=>t!==tag);
@@ -2210,7 +2322,8 @@ function normalizeImported(p){
     if(/^(ז|זכר|בן|גבר|m|male)$/i.test(g)) p.gender="בן";
     else if(/^(נ|נקבה|בת|אישה|f|female)$/i.test(g)) p.gender="בת";
   }
-  if(p.age){ const n = String(p.age).match(/\d+/); if(n) p.age = n[0]; }
+  if(p.age){ const n = String(p.age).match(/\d+/);
+    if(n){ let a = +n[0]; if(a > 1900 && a <= new Date().getFullYear()) a = new Date().getFullYear() - a; p.age = String(a); } }
   if(p.community){
     const n = normSector(p.community);
     if(n !== p.community) p.extra["חוג (כפי שנרשם בקובץ)"] = p.community;
@@ -2338,7 +2451,10 @@ function handleFile(file){
       if(name.endsWith(".json") || name.endsWith(".shbk")){ importJson(e.target.result); return; }
       let rows;
       if(name.endsWith(".csv")){
-        rows = parseCSV(e.target.result);
+        const buf = new Uint8Array(e.target.result);
+        let text = new TextDecoder("utf-8").decode(buf);
+        if(text.includes("\uFFFD")){ try{ text = new TextDecoder("windows-1255").decode(buf); }catch(err){} }
+        rows = parseCSV(text.replace(/^\uFEFF/,""));
       }else{
         if(typeof XLSX==="undefined"){ toast("טעינת קורא האקסל נכשלה — נסו לשמור כ-CSV"); return; }
         const wb = XLSX.read(new Uint8Array(e.target.result), {type:"array"});
@@ -2351,7 +2467,7 @@ function handleFile(file){
       showMapping();
     }catch(err){ toast("שגיאה בקריאת הקובץ: "+err.message); }
   };
-  if(name.endsWith(".csv")||name.endsWith(".json")||name.endsWith(".shbk")) reader.readAsText(file,"UTF-8");
+  if(name.endsWith(".json")||name.endsWith(".shbk")) reader.readAsText(file,"UTF-8");
   else reader.readAsArrayBuffer(file);
 }
 
@@ -2367,7 +2483,7 @@ async function importJson(text){
       if(!r || !r[0]) return;
       const opened = await openSealed(text, r[0]);
       if(DB.people.length && !confirm(`הגיבוי מכיל ${(opened.people||[]).length} מועמדים ויחליף את הנתונים הקיימים. ` +
-        `הכניסה לכלי תהיה מעתה עם הסיסמה של הגיבוי. להמשיך?`)) return;
+        `הכניסה לכלי נשארת עם הסיסמה הנוכחית. להמשיך?`)) return;
       adoptDB(opened);
       save(); setView("cards"); toast("הגיבוי המוצפן נטען: "+DB.people.length+" מועמדים");
       return;
@@ -2375,6 +2491,7 @@ async function importJson(text){
 
     if(!d.people) throw new Error("קובץ גיבוי לא תקין");
     if(DB.people.length && !confirm("לטעון את הגיבוי במקום הנתונים הקיימים?")) return;
+    sanitizeDB(d);
     DB = {people:d.people, matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1, form:d.form||{seen:[], pending:[]}};
     save(); setView("cards"); toast("הגיבוי נטען: "+DB.people.length+" מועמדים");
   }catch(err){ toast("שגיאה: "+err.message); }
@@ -2605,10 +2722,10 @@ function renderDossier(p){
 }
 
 function analysisHtml(an){
-  const block = (title, arr) => (arr && arr.length)
-    ? `<div class="an-block"><b>${title}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const block = (title, arr) => { arr = asList(arr); return arr.length
+    ? `<div class="an-block"><b>${title}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; };
   return `<div class="analysis">
-    <div class="an-date">הופק ב-${esc(an.date)} · מבוסס על ${an.basedOn||"?"} פגישות${an.anon?" · נשלח ללא פרטים מזהים":""}</div>
+    <div class="an-date">הופק ב-${esc(an.date)} · מבוסס על ${esc(an.basedOn||"?")} פגישות${an.anon?" · נשלח ללא פרטים מזהים":""}</div>
     ${an.summary?`<p class="an-sum">${esc(an.summary)}</p>`:""}
     ${block("חוזקות ומשאבים", an.strengths)}
     ${block("מה עולה בעקביות", an.wants)}
@@ -2633,7 +2750,7 @@ function sessionForm(pid, sid, matchId){
   $("#sheetHead").innerHTML = `<div style="flex:1">
       <h3>${sid?"עריכת פגישה":"רישום פגישה"}</h3>
       <div class="meta">${esc(p.fullName)}</div>
-    </div><button class="x" onclick="openPerson('${pid}','file')" aria-label="חזרה">×</button>`;
+    </div><button class="x" onclick="leaveEdit(()=>openPerson('${pid}','file'))" aria-label="חזרה">×</button>`;
 
   const linkedMatches = DB.matches.filter(m=>m.a===pid||m.b===pid);
   $("#sheetBody").innerHTML = `<div class="win-col">
@@ -2661,12 +2778,14 @@ function sessionForm(pid, sid, matchId){
 
   $("#sheetFoot").innerHTML = `
     <button class="btn pri" onclick="saveSession('${pid}','${sid||""}')">שמירת הפגישה</button>
-    <button class="btn ghost" onclick="openPerson('${pid}')">ביטול</button>
+    <button class="btn ghost" onclick="leaveEdit(()=>openPerson('${pid}'))">ביטול</button>
     ${sid?`<button class="btn danger sm" style="margin-inline-start:auto" onclick="delSession('${sid}','${pid}')">מחיקה</button>`:""}`;
   openSheet();
+  EDIT.on = true; EDIT.dirty = false;
 }
 
 function saveSession(pid, sid){
+  EDIT.on = false; EDIT.dirty = false;
   const s = sid ? DB.sessions.find(x=>x.id===sid) : {id:"s"+(DB.seq++)+Date.now().toString(36).slice(-3), pid};
   s.date = $("#s_date").value || today();
   s.type = $("#s_type").value;
@@ -2735,8 +2854,8 @@ async function callAI(prompt){
     /* שולח בקשה. thinkOff=true מוסיף thinkingBudget:0 (מהיר), אבל חלק מהמודלים
        לא מכירים את הפרמטר ומחזירים 400 — לכן ננסה שוב אוטומטית בלעדיו. */
     async function send(thinkOff){
-      const gen = {temperature:0.4, maxOutputTokens:2000};
-      if(thinkOff){ gen.thinkingConfig = {thinkingBudget:0}; gen.responseMimeType = "application/json"; }
+      const gen = {temperature:0.4, maxOutputTokens:4096};
+      if(thinkOff){ gen.thinkingConfig = {thinkingBudget:0}; if(/החזר JSON|JSON בלבד/.test(prompt)) gen.responseMimeType = "application/json"; }
       const ctl = new AbortController();
       const timer = setTimeout(()=>ctl.abort(), 45000);
       try{
@@ -2768,7 +2887,8 @@ async function callAI(prompt){
       let detail = "";
       try{ const j = await res.clone().json(); detail = (j.error && j.error.message) || ""; }
       catch(e){ try{ detail = (await res.clone().text()).slice(0,200); }catch(e2){} }
-      const hint = res.status===400
+      const hint = res.status===401 ? " (המפתח שגוי או בוטל — בדקו את מפתח ה-API בעמוד גיבוי וניהול ← שירות הניתוח)"
+        : res.status===400
         ? " (בדקו שם מודל, ולחצו 'טעינת המודלים הזמינים')"
         : res.status===403 ? " (ודאו ש-Generative Language API מופעל ושהמפתח תקף)"
         : res.status===429 ? " (חריגה ממכסה — נסו מאוחר יותר)" : "";
@@ -2779,7 +2899,13 @@ async function callAI(prompt){
       const why = (d.promptFeedback && d.promptFeedback.blockReason) || "";
       throw new Error("לא התקבלה תשובה" + (why ? " (חסימה: " + why + ")" : " — ייתכן שהתוכן ארוך מדי או נחסם") + ".");
     }
-    return (d.candidates[0].content.parts || []).map(x=>x.text).filter(Boolean).join("\n");
+    const parts = ((d.candidates[0] || {}).content || {}).parts || [];
+    const out = parts.map(x=>x.text).filter(Boolean).join("\n");
+    if(!out){
+      const why = (d.candidates[0]||{}).finishReason || "";
+      throw new Error(why==="MAX_TOKENS" ? "התשובה ארוכה מדי ונקטעה — נסו שוב" : why==="SAFETY" ? "השירות סירב לענות על התוכן הזה" : "התקבלה תשובה ריקה — נסו שוב");
+    }
+    return out;
   }
 
   const headers = {"Content-Type":"application/json"};
@@ -2790,7 +2916,7 @@ async function callAI(prompt){
   }
   const res = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST", headers,
-    body: JSON.stringify({model: cfg.model || "claude-sonnet-4-6", max_tokens:2000,
+    body: JSON.stringify({model: cfg.model || "claude-sonnet-4-6", max_tokens:4096,
                           messages:[{role:"user", content:prompt}]})
   });
   if(!res.ok) throw new Error(aiError(res.status, "anthropic"));
@@ -2882,7 +3008,7 @@ function scrubForAI(text, p){
   const alias = p && p.gender==="בת" ? "המועמדת" : "המועמד";
   if(p && p.fullName){
     const names = [String(p.fullName).trim(),
-      ...String(p.fullName).trim().split(/\s+/).filter(w=>w.length>2)];
+      ...String(p.fullName).trim().split(/\s+/).filter(w=>w.length>=2)];
     /* מילה שלמה בלבד (עם עד שתי אותיות שימוש: ו/ה/ב/ל/מ/ש/כ) — כדי ששם כמו "אור" לא ייפגע בתוך "אורח" */
     const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     names.forEach(n=>{
@@ -2890,7 +3016,9 @@ function scrubForAI(text, p){
       t = t.replace(new RegExp(`(^|[^א-ת])([והבלמשכ]{0,2})${escRe(n)}(?![א-ת])`, "g"), (m0,pre,pfx)=>pre+pfx+alias);
     });
   }
-  return t.replace(/0\d[\d\-\s]{7,}/g, "[טלפון]")
+  return t.replace(/(\+?972[\s\-.]?|\b0)\(?\d{1,2}\)?[\s\-.]?\d{3}[\s\-.]?\d{3,4}\b/g, "[טלפון]")
+          .replace(/\(0\d{1,2}\)[\s\-.]?\d{3}[\s\-.]?\d{3,4}/g, "[טלפון]")
+          .replace(/0\d[\d\-\s.]{7,}/g, "[טלפון]")
           .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[מייל]");
 }
 
@@ -2946,7 +3074,7 @@ async function runAnalysis(pid){
     let parsed = null;
     try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
     p.analysis = parsed
-      ? Object.assign({date:today(), basedOn:ss.length, anon:aiAnon()}, parsed)
+      ? Object.assign({}, parsed, {date:today(), basedOn:ss.length, anon:aiAnon()})
       : {date:today(), basedOn:ss.length, anon:aiAnon(), summary:"", raw};
     p.updated = today();
     save(); openPerson(pid); toast("הניתוח הופק");
@@ -3222,9 +3350,9 @@ function renderCardTab(p){
 }
 
 const CARD_THEMES = {
-  classic: {name:"קלאסי ומכובד", accent:"#7a5c26", head:'"Frank Ruhl Libre", serif', frame:"double"},
-  modern:  {name:"מודרני ונקי",  accent:"#0f5f5c", head:'"Assistant", sans-serif',   frame:"line"},
-  warm:    {name:"חם ומשפחתי",   accent:"#8c3a4a", head:'"Frank Ruhl Libre", serif', frame:"soft"}
+  classic: {name:"קלאסי ומכובד", accent:"#7a5c26", head:"'Frank Ruhl Libre', serif", frame:"double"},
+  modern:  {name:"מודרני ונקי",  accent:"#0f5f5c", head:"'Assistant', sans-serif",   frame:"line"},
+  warm:    {name:"חם ומשפחתי",   accent:"#8c3a4a", head:"'Frank Ruhl Libre', serif", frame:"soft"}
 };
 const SECTOR_TINT = {"דתי לייט":"#5a7a8a","דתי לאומי":"#2f6d5a","חרדל״ני":"#7a5c26","חרדי":"#3a4a6b"};
 
@@ -3365,7 +3493,7 @@ async function composeCard(pid){
   const p = personById(pid);
   const ss = sessionsOf(pid);
   const an = p.analysis;
-  const skipF = aiAnon() ? AI_PII : ["refs"];
+  const skipF = aiAnon() ? AI_PII.concat("notes") : ["refs"];
   const facts = FIELDS.filter(f=>p[f.k] && !skipF.includes(f.k)).map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
   const log = ss.map(s=>`[${s.date} · ${s.type}] ${s.notes||""}`).join("\n");
   const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
@@ -3581,6 +3709,9 @@ function suggestListHtml(pid, limit){
    עקרון הפרטיות: לשירות נשלח רק תוכן. שמות, טלפונים, מיילים וממליצים מוסרים,
    ובהשוואה בין כמה מועמדים כל אחד מקבל קוד (C1, C2…) שמתורגם בחזרה רק במחשב. */
 
+/* שדה מתשובת ה-AI שאמור להיות רשימה — תמיד מוחזר כרשימת מחרוזות */
+const asList = v => Array.isArray(v) ? v.filter(x=>x!=null && x!=="").map(x=>typeof x==="object" ? Object.values(x).join(" — ") : String(x))
+                 : (v==null || v==="" ? [] : [String(v)]);
 function aiParse(raw){
   const t = String(raw||"").replace(/```json|```/g,"").trim();
   try{ return JSON.parse(t); }catch(e){}
@@ -3640,7 +3771,7 @@ ${codes.map(o=>`--- ${o.code} ---\n${aiProfile(o.x)}`).join("\n")}
     const d = aiParse(await callAI(prompt));
     const items = (d.ranked||[]).map(r=>{
       const o = codes.find(c=>c.code===String(r.id).trim()); if(!o) return null;
-      return {pid:o.x.id, fit:r.fit||"", why:r.why||[], gaps:r.gaps||[]};
+      return {pid:o.x.id, fit:String(r.fit||""), why:asList(r.why), gaps:asList(r.gaps)};
     }).filter(Boolean);
     if(!items.length) throw new Error("לא התקבלו התאמות — נסו שוב");
     p.aiMatch = {date:today(), items};
@@ -3699,14 +3830,14 @@ ${p.analysis&&p.analysis.summary?"\nתמצית ניתוח קודם: "+p.analysis
  "ask":["שאלות מומלצות לפגישה הזו"],
  "watch":["נקודות רגישות לשים לב אליהן"]}`;
   try{
-    const d = aiParse(await callAI(prompt));
-    p.prep = Object.assign({date:today()}, d);
+    const d = aiParse(await callAI(scrubForAI(prompt, p)));
+    p.prep = Object.assign({}, d, {date:today()});
     save();
     box.innerHTML = prepHtml(p.prep);
   }catch(err){ aiFail(box, err); }
 }
 function prepHtml(d){
-  const block = (t, arr) => (arr&&arr.length) ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const block = (t, arr) => { arr = asList(arr); return arr.length ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; };
   return `<div class="analysis">
     <div class="an-date">📋 הכנה לפגישה · ${esc(d.date||"")}</div>
     ${d.where?`<p class="an-sum">${esc(d.where)}</p>`:""}
@@ -3752,14 +3883,14 @@ ${linked.map(s=>`[${s.date} · ${side(s)}] ${scrub2(s.notes||"")}`).join("\n")}
  "next":["צעדים מוצעים להמשך"],
  "recommendation":"המשך / בירור נוסף / עצירה — ובמשפט אחד למה"}`;
   try{
-    const d = aiParse(await callAI(prompt));
-    m.aiDebrief = Object.assign({date:today()}, d);
+    const d = aiParse(await callAI(scrub2(prompt)));
+    m.aiDebrief = Object.assign({}, d, {date:today()});
     save();
     box.innerHTML = debriefHtml(m.aiDebrief);
   }catch(err){ aiFail(box, err); }
 }
 function debriefHtml(d){
-  const block = (t, arr) => (arr&&arr.length) ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const block = (t, arr) => { arr = asList(arr); return arr.length ? `<div class="an-block"><b>${t}</b><ul>${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""; };
   return `<div class="analysis">
     <div class="an-date">🧭 תחקיר זוגי · ${esc(d.date||"")}</div>
     ${d.summary?`<p class="an-sum">${esc(d.summary)}</p>`:""}
@@ -3873,7 +4004,7 @@ const KEY_FIELDS = [
   [["lookingTraits","looking"],"מה מחפשים"], ["height","גובה"], ["refs","ממליצים לבירור"]
 ];
 const hasVal = v => Array.isArray(v) ? v.length>0 : !!String(v==null?"":v).trim();
-function intakeCheck(p){
+function intakeCheck(p, phoneMap){
   const missing = KEY_FIELDS.filter(([k])=> !(Array.isArray(k) ? k.some(x=>hasVal(p[x])) : hasVal(p[k]))).map(([,l])=>l);
   const sus = [];
   const nm = String(p.fullName||"").trim();
@@ -3885,14 +4016,15 @@ function intakeCheck(p){
     const d = String(p.phone).replace(/\D/g,"");
     if(!normPhone(p.phone) || !/^0[2-9]\d{7,8}$/.test(normPhone(p.phone)) || /^(\d)\1+$/.test(d.slice(-7))) sus.push("מספר טלפון לא תקין");
     else{
-      const others = DB.people.filter(x=>x.id!==p.id && normPhone(x.phone)===normPhone(p.phone) && String(x.fullName||"").trim()!==nm);
+      const same = phoneMap ? (phoneMap.get(normPhone(p.phone))||[]) : DB.people.filter(x=>normPhone(x.phone)===normPhone(p.phone));
+      const others = same.filter(x=>x.id!==p.id && String(x.fullName||"").trim()!==nm);
       if(others.length) sus.push(`אותו טלפון אצל ${others[0].fullName}`);
     }
   }
   if(p.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(p.email).trim())) sus.push("כתובת מייל לא תקינה");
   if(p.age){ const a = parseFloat(p.age); if(!a || a<17 || a>90) sus.push("גיל לא סביר"); }
   const txt = [p.character,p.looking,p.lookingTraits,p.hobbies].filter(Boolean).join(" ");
-  if(txt && /(.)\1{4,}|^[a-z\s]{3,}$/i.test(txt.trim())) sus.push("תשובות שנראות לא אמיתיות");
+  if(txt && /(.)\1{4,}/.test(txt.trim())) sus.push("תשובות שנראות לא אמיתיות");
   const filled = KEY_FIELDS.length - missing.filter(m=>m!=="שם משפחה").length;
   return {missing, sus: p.flagOk ? [] : sus, pct: Math.round(filled/KEY_FIELDS.length*100)};
 }
@@ -3905,7 +4037,9 @@ function intakeBadge(){
 if(!ui.intake) ui.intake = "held";
 function renderIntake(){
   const host = $("#intakeHost"); if(!host) return;
-  const all = DB.people.map(p=>({p, c:intakeCheck(p)}));
+  const phoneMap = new Map();
+  DB.people.forEach(x=>{ const k = normPhone(x.phone); if(!k) return; if(!phoneMap.has(k)) phoneMap.set(k, []); phoneMap.get(k).push(x); });
+  const all = DB.people.map(p=>({p, c:intakeCheck(p, phoneMap)}));
   const isNew = o => !o.p.reviewed && !!o.p.source && !o.p.hold;
   const lists = {
     held: all.filter(o=>o.p.hold),
@@ -4210,7 +4344,7 @@ function renderForm(){
     const c2 = formCfg();
     const changed = c2.sheetId && c2.sheetId !== r.id;
     c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked;
-    if(changed){ c2.last = ""; c2.total = 0; }
+    if(changed){ c2.last = ""; c2.total = 0; const F = formDB(); F.baselined = false; F.pending = []; save(); }
     formSave(c2);
     renderForm();
     const res = await syncForm(true, true);
@@ -4324,6 +4458,12 @@ function driveStatus(txt, color){
 /* קבלת אסימון גישה. silent=true מנסה בלי להטריד את המשתמשת —
    עובד כל עוד היא מחוברת לחשבון גוגל בדפדפן. */
 function driveToken(silent){
+  if(DRIVE.token && Date.now() < DRIVE.exp - 60000) return Promise.resolve(DRIVE.token);
+  if(DRIVE.inflight) return DRIVE.inflight;      /* בקשה כבר בדרך — מחכים לאותה תשובה */
+  DRIVE.inflight = driveTokenReq(silent).finally(()=>{ DRIVE.inflight = null; });
+  return DRIVE.inflight;
+}
+function driveTokenReq(silent){
   const cfg = driveCfg();
   return new Promise((resolve, reject)=>{
     if(!cfg.clientId) return reject(new Error("לא הוגדר Client ID"));
@@ -4452,6 +4592,11 @@ async function driveUpload(token, folder, name, mime, data){
 async function driveBackup(silent){
   if(DRIVE.busy) return;
   if(CRY.locked){ if(!silent) toast("הכלי נעול — פתחו אותו לפני גיבוי"); return; }   /* אחרי נעילה הנתונים ריקים בזיכרון */
+  const lc = driveCfg().lastCount || 0;
+  if(silent && lc >= 10 && DB.people.length < lc * 0.5){
+    driveStatus(`הגיבוי האוטומטי דולג: מספר המועמדים ירד מ-${lc} ל-${DB.people.length}. אם זה מכוון — לחצו "גיבוי עכשיו".`, "var(--rose)");
+    return;
+  }
   DRIVE.busy = true;
   driveStatus("מגבה לדרייב…");
   try{
@@ -4487,6 +4632,7 @@ async function driveBackup(silent){
     if(!made.length) throw new Error("לא הועלה דבר — סמנו לפחות סוג גיבוי אחד (מוצפן / אקסל)");
     const cfg = driveCfg();
     cfg.last = new Date().toISOString();
+    cfg.lastCount = DB.people.length;
     driveSave(cfg);
     markBackup();
     DRIVE.changed = false;
@@ -4532,7 +4678,7 @@ async function driveRestore(){
     const raw = await res.text();
     const d = await openSealed(raw, pass);
     if(!confirm(`הגיבוי "${files[idx].name}" מכיל ${(d.people||[]).length} מועמדים.\n` +
-                `הוא יחליף את הנתונים הנוכחיים במחשב, והכניסה לכלי תהיה מעתה עם הסיסמה של הגיבוי. להמשיך?`)){
+                `הוא יחליף את הנתונים הנוכחיים במחשב. הכניסה לכלי נשארת עם הסיסמה הנוכחית. להמשיך?`)){
       driveStatus(""); return;
     }
     adoptDB(d);
@@ -4675,6 +4821,7 @@ function renderFollowup(){
   const tasks = DB.sessions.filter(s=>s.actions && !s.done)
     .sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const stale = DB.people.filter(p=>{
+    if(p.hold) return false;
     if((p.status||"פנוי")!=="פנוי") return false;
     const ss = sessionsOf(p.id);
     if(!ss.length) return true;
@@ -4789,13 +4936,13 @@ async function cloudPull(){
     const snap = await CLOUD.fs.getDoc(CLOUD.fs.doc(CLOUD._db, "vaults", CLOUD.user.uid));
     if(!snap.exists()){ toast("אין גיבוי בענן"); return; }
     const data = snap.data();
-    if(!confirm(`הגיבוי בענן מ-${(data.updated||"").slice(0,16).replace("T"," ")} מכיל ${data.people} מועמדים ו-${data.sessions} פגישות.\\nהוא יחליף את מה שנמצא כרגע במחשב. להמשיך?`)) return;
+    if(!confirm(`הגיבוי בענן מ-${(data.updated||"").slice(0,16).replace("T"," ")} מכיל ${data.people} מועמדים ו-${data.sessions} פגישות.\nהוא יחליף את מה שנמצא כרגע במחשב. להמשיך?`)) return;
     const r = await ask({title:"שחזור מהענן",
       note:"הגיבוי מוצפן. הזינו את קוד הכניסה שאיתו הוא נוצר (או קוד שחזור).",
       fields:[{label:"קוד כניסה", type:"password"}]});
     if(!r || !r[0]) return;
     const pass = r[0];
-    const d = await openVault(data.blob, pass);
+    const d = await openSealed(data.blob, pass);
     adoptDB(d);
     save(); render(); setView("cards");
     toast("הגיבוי שוחזר מהענן");
@@ -4890,13 +5037,12 @@ async function changePass(){
   if(!r) return;
   const [cur, newUserRaw, n1, n2] = r;
   if(!cur) return;
-  try{ await openVault(localStorage.getItem(VAULT), acctVerify(cur)); }
+  try{ await openVault(vaultGet(), acctVerify(cur)); }
   catch(e){ toast("הסיסמה הנוכחית שגויה"); return; }
   const pol2 = passPolicy(n1 || "");
   if(pol2){ toast(pol2); return; }
   if(n1 !== n2){ toast("הסיסמאות אינן זהות"); return; }
   const newUser = (newUserRaw || curUser).trim() || curUser;
-  localStorage.setItem("acct_user", newUser);
   const secret = acctSecret(newUser, n1);
   if(CRY.v === 2 && CRY.rawDEK){
     CRY.salt = rnd(16);
@@ -4906,7 +5052,9 @@ async function changePass(){
     CRY.salt = rnd(16);
     CRY.key = await deriveKey(secret, CRY.salt, KDF_IT_OLD);
   }
-  save();
+  try{ await vaultSet(await sealDB()); }
+  catch(e){ toast("ההחלפה לא נשמרה — " + e.message); return; }
+  localStorage.setItem("acct_user", newUser);
   toast("פרטי הכניסה הוחלפו. קוד השחזור הקיים ממשיך לעבוד.");
 }
 
@@ -4948,9 +5096,14 @@ $("#btnNew").addEventListener("click",()=>editPerson(""));
 $("#btnSmart").addEventListener("click", smartSearch);
 $("#btnFormSync").addEventListener("click", ()=>syncForm(true));
 $("#btnImportTop").addEventListener("click",()=>setView("import"));
-$("#scrim").addEventListener("click", closeSheet);
+$("#scrim").addEventListener("click", ()=>leaveEdit(closeSheet));
+$("#sheetBody").addEventListener("input", ()=>{ if(EDIT.on) EDIT.dirty = true; });
+$("#sheetBody").addEventListener("change", ()=>{ if(EDIT.on) EDIT.dirty = true; });
 document.addEventListener("keydown", e=>{
-  if(e.key==="Escape") closeSheet();
+  if(e.key==="Escape"){
+    const t = e.target, askOpen = $("#ask") && !$("#ask").classList.contains("hidden");
+    if(!askOpen && !(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) leaveEdit(closeSheet);
+  }
   /* Ctrl+L — נעילה מיידית (גם במקלדת עברית); Ctrl+K — קפיצה לחיפוש */
   if(e.ctrlKey && !e.altKey && (e.key==="l" || e.key==="L" || e.code==="KeyL")){
     if(!CRY.plain && !CRY.locked){ e.preventDefault(); lock(); }
@@ -5040,7 +5193,8 @@ $("#btnWipe").addEventListener("click", async ()=>{
   });
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
-  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[]}}; save(); setView("cards"); toast("כל הנתונים נמחקו");
+  const keepForm = {seen:(DB.form&&DB.form.seen)||[], pending:[], baselined:!!(DB.form&&DB.form.baselined)};
+  DB = {people:[], matches:[], sessions:[], seq:1, form:keepForm}; save(); setView("cards"); toast("כל הנתונים נמחקו");
 });
 
 boot();
