@@ -1297,6 +1297,8 @@ async function tryUnlock(){
     touchActivity(); render(); setView("cards");
     setTimeout(backupNudge, 1500);
     setTimeout(()=>{ renderForm(); formAuto(); }, 2500);
+    alertShown = false;   /* בכל כניסה מחדש — מזכירים שוב אם יש פניות מושהות */
+    setTimeout(()=>{ if(!alertShown) reviewAlert(0,0); }, 6500);
     if(CRY.usedRec){
       setTimeout(async ()=>{
         alert("נכנסתם באמצעות קוד השחזור. כעת יש לקבוע סיסמה חדשה, ויונפק קוד שחזור חדש במקומו.");
@@ -1546,6 +1548,7 @@ const SMART_SCORE = new Map();
 function filtered(){
   const q = ui.q.trim().toLowerCase();
   let list = DB.people.filter(p=>{
+    if(p.hold) return false;                    /* פנייה מושהית — עד אישור השדכנית */
     if(ui.gender && p.gender!==ui.gender) return false;
     if(ui.status && (p.status||"פנוי")!==ui.status) return false;
     if(ui.sector && p.community!==ui.sector) return false;
@@ -1970,7 +1973,7 @@ function suggestScore(a,b){
 function openSuggest(id){
   const p = personById(id);
   const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
-  let pool = DB.people.filter(x=>x.id!==id && (!want || x.gender===want));
+  let pool = DB.people.filter(x=>x.id!==id && !x.hold && (!want || x.gender===want));
   pool = pool.map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s);
 
   $("#sheetHead").innerHTML = `<div style="flex:1">
@@ -3554,7 +3557,7 @@ function editGcardSign(pid){
 function suggestListHtml(pid, limit){
   const p = personById(pid);
   const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
-  const pool = DB.people.filter(x=>x.id!==pid && (!want || x.gender===want))
+  const pool = DB.people.filter(x=>x.id!==pid && !x.hold && (!want || x.gender===want))
     .map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s);
   const strong = pool.filter(o=>o.s>=45);
   const show = (strong.length?strong:pool).slice(0, limit||8);
@@ -3607,7 +3610,7 @@ async function smartMatch(id){
   const p = personById(id);
   const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
   const pool = DB.people
-    .filter(x=>x.id!==id && (!want || x.gender===want) && (x.status||"פנוי")!=="נסגר")
+    .filter(x=>x.id!==id && !x.hold && (!want || x.gender===want) && (x.status||"פנוי")!=="נסגר")
     .filter(x=>!DB.matches.some(m=>(m.a===id&&m.b===x.id)||(m.b===id&&m.a===x.id)))
     .map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s).slice(0,8);
   if(!pool.length){ toast("אין מועמדים פנויים להשוואה"); return; }
@@ -3896,15 +3899,16 @@ function intakeCheck(p){
 function daysAgo(d){ if(!d) return 999; return Math.floor((Date.now()-new Date(d).getTime())/86400000); }
 function intakeBadge(){
   const b = $("#intakeBadge"); if(!b) return;
-  const n = DB.people.filter(p=>!p.reviewed && p.source).length + (DB.form&&DB.form.pending||[]).length;
+  const n = DB.people.filter(p=>p.hold).length + (DB.form&&DB.form.pending||[]).length;
   b.textContent = n; b.classList.toggle("hidden", !n);
 }
-if(!ui.intake) ui.intake = "new";
+if(!ui.intake) ui.intake = "held";
 function renderIntake(){
   const host = $("#intakeHost"); if(!host) return;
   const all = DB.people.map(p=>({p, c:intakeCheck(p)}));
-  const isNew = o => !o.p.reviewed && !!o.p.source;
+  const isNew = o => !o.p.reviewed && !!o.p.source && !o.p.hold;
   const lists = {
+    held: all.filter(o=>o.p.hold),
     new:  all.filter(isNew),
     week: all.filter(o=>daysAgo(o.p.created)<=7),
     sus:  all.filter(o=>o.c.sus.length),
@@ -3914,14 +3918,14 @@ function renderIntake(){
   const pend = (DB.form&&DB.form.pending||[]).length;
   const fc = formCfg();
   const tiles = [
-    ["new","חדשים — טרם נבדקו", lists.new.length, lists.new.length?"hot":""],
+    ["held","מושהות — ממתינות לאישורך", lists.held.length, lists.held.length?"warn":""],
     ["week","הצטרפו השבוע", lists.week.length, ""],
     ["sus","פניות חשודות", lists.sus.length, lists.sus.length?"warn":""],
     ["part","פניות חלקיות", lists.part.length, ""],
   ];
-  const cur = lists[ui.intake] ? ui.intake : "new";
+  const cur = lists[ui.intake] ? ui.intake : "held";
   const list = lists[cur].slice().sort((a,b)=>(b.p.created||"").localeCompare(a.p.created||""));
-  const titles = {new:"חדשים שטרם נבדקו", week:"הצטרפו בשבוע האחרון", sus:"פניות חשודות", part:"פניות חלקיות (חסרים 3 פרטים חשובים או יותר)", all:"כל המועמדים"};
+  const titles = {held:"פניות חריגות שהושהו — לא מופיעות בכרטסייה עד שתאשרי", new:"חדשים שטרם נבדקו", week:"הצטרפו בשבוע האחרון", sus:"פניות חשודות", part:"פניות חלקיות (חסרים 3 פרטים חשובים או יותר)", all:"כל המועמדים"};
 
   host.innerHTML = `
     <div class="dash-stats">${tiles.map(([k,l,n,cls])=>
@@ -3932,7 +3936,7 @@ function renderIntake(){
         <button class="btn sm" onclick="syncForm(true)">בדיקת תשובות חדשות</button>` : `<span style="font-size:13px;color:var(--ink-faint)">הטופס עוד לא מחובר</span>`}
       ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ${pend} מילאו שוב — ממתינים לבדיקה</button>`:""}
       <button class="btn ghost sm" style="margin-inline-start:auto" onclick="ui.intake='all';renderIntake()">הצגת כולם</button>
-      ${cur==="new"&&list.length?`<button class="btn ghost sm" onclick="markAllReviewed()">סימון כל החדשים כנבדקו</button>`:""}
+      <span style="font-size:12.5px;color:var(--ink-faint)">פניות רגילות מהטופס מאושרות אוטומטית; חריגות מושהות כאן.</span>
     </div>
     <div class="sect">${titles[cur]} (${list.length})</div>
     ${list.length ? list.slice(0,300).map(({p,c})=>{
@@ -3945,7 +3949,7 @@ function renderIntake(){
           <div class="in-meta">${[p.gender,p.age&&("גיל "+p.age),p.city].filter(Boolean).map(esc).join(" · ")||"—"}
             · ${esc(p.source||"ידני")} · ${p.created?esc(p.created):""}${p.phone?` · <a href="tel:${esc(normPhone(p.phone)||p.phone)}" style="color:inherit">${esc(p.phone)}</a>`:""}</div>
           <div class="in-flags">
-            ${!p.reviewed&&p.source?`<span class="flag n">חדש</span>`:""}
+            ${p.hold?`<span class="flag s">⏸ מושהה</span>`:p.autoOk?`<span class="flag n">✓ אושר אוטומטית</span>`:(!p.reviewed&&p.source?`<span class="flag n">חדש</span>`:"")}
             ${c.sus.map(x=>`<span class="flag s">⚠ ${esc(x)}</span>`).join("")}
             ${c.missing.map(x=>`<span class="flag m">חסר: ${esc(x)}</span>`).join("")}
           </div>
@@ -3953,15 +3957,35 @@ function renderIntake(){
             שלמות הפרטים <div class="in-bar"><i style="width:${c.pct}%"></i></div> ${c.pct}%</div>
         </div>
         <div class="in-acts">
-          ${!p.reviewed&&p.source?`<button class="btn sm pri" onclick="markReviewed('${p.id}')">✓ נבדק</button>`:""}
-          ${c.sus.length?`<button class="btn sm" onclick="markOk('${p.id}')">זה תקין</button>`:""}
+          ${p.hold?`<button class="btn sm pri" onclick="approveHeld('${p.id}')">✓ אישור</button>`:""}
+          ${!p.hold&&!p.reviewed&&p.source?`<button class="btn sm pri" onclick="markReviewed('${p.id}')">✓ נבדק</button>`:""}
+          ${!p.hold&&c.sus.length?`<button class="btn sm" onclick="markOk('${p.id}')">זה תקין</button>`:""}
           ${miss.length?`<button class="btn sm" onclick="askCompletion('${p.id}')">בקשת השלמה</button>`:""}
           <button class="btn ghost sm" onclick="editPerson('${p.id}')">עריכה</button>
           <button class="btn danger sm" onclick="delPerson('${p.id}');renderIntake()">מחיקה</button>
         </div>
       </div>`; }).join("") + (list.length>300?`<div class="an-load">מוצגים 300 הראשונים מתוך ${list.length}</div>`:"")
-    : `<div class="empty"><h3>${cur==="new"?"אין חדשים שממתינים לבדיקה":cur==="sus"?"אין פניות חשודות":cur==="part"?"אין פניות חלקיות":"אין מועמדים להצגה"}</h3><p>${cur==="new"?"כל מי שהצטרף כבר נבדק. ✓":""}</p></div>`}`;
+    : `<div class="empty"><h3>${cur==="held"?"אין פניות מושהות ✓":cur==="new"?"אין חדשים שממתינים לבדיקה":cur==="sus"?"אין פניות חשודות":cur==="part"?"אין פניות חלקיות":"אין מועמדים להצגה"}</h3><p>${cur==="new"?"כל מי שהצטרף כבר נבדק. ✓":""}</p></div>`}`;
   intakeBadge();
+}
+/* חלון התראה — כשנכנסו פניות שדורשות בדיקה (בסנכרון, ופעם אחת בכל כניסה לכלי) */
+let alertShown = false;
+async function reviewAlert(newHeld, newPending){
+  const held = DB.people.filter(p=>p.hold).length, pend = (DB.form&&DB.form.pending||[]).length;
+  if(!held && !pend) return;
+  if($("#ask") && !$("#ask").classList.contains("hidden")) return;   /* דיאלוג אחר פתוח */
+  alertShown = true;
+  const parts = [];
+  if(held) parts.push(`${held} ${held===1?"פנייה חריגה מושהית":"פניות חריגות מושהות"} — חשודות או חסרות פרטים. הן לא מופיעות בכרטסייה ולא מוצעות לשידוך עד שתאשרי.`);
+  if(pend) parts.push(`${pend} ${pend===1?"מועמד מילא":"מועמדים מילאו"} שוב את הטופס — ממתינים להחלטה אם לעדכן את הכרטיס.`);
+  const r = await ask({title: (newHeld||newPending) ? "⚠ נכנסו פניות שדורשות בדיקה" : "⚠ יש פניות שממתינות לבדיקה",
+    note: parts.join("  ·  "), fields: [], ok: "לבדיקה עכשיו"});
+  if(r){ ui.intake = held ? "held" : "new"; setView("intake"); if(!held && pend) openFormReview(); }
+}
+function approveHeld(id){
+  const p = personById(id); if(!p) return;
+  p.hold = false; p.reviewed = true; p.flagOk = true; p.updated = today();
+  save(); render(); renderIntake(); toast(`${p.fullName} אושר/ה ונכנס/ה לכרטסייה`);
 }
 function markReviewed(id){ const p = personById(id); if(!p) return; p.reviewed = true; save(); renderIntake(); toast("סומן כנבדק"); }
 function markOk(id){ const p = personById(id); if(!p) return; p.flagOk = true; p.reviewed = true; save(); renderIntake(); toast("סומן כתקין — האזהרות הוסרו"); }
@@ -4086,7 +4110,7 @@ async function syncForm(manual, dryRun){
       formStatus(msg, "var(--teal)");
       return {total:rows.length, fresh:fresh.length};
     }
-    let added = 0, pending = 0, similar = 0, skipped = 0, already = 0;
+    let added = 0, pending = 0, similar = 0, skipped = 0, already = 0, held = 0;
     const firstRun = !F.baselined;
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
@@ -4103,6 +4127,10 @@ async function syncForm(manual, dryRun){
       if(DB.people.some(x=>String(x.fullName||"").trim()===nm)){
         p.tags = ["⚠ שם דומה קיים"]; similar++;
       }
+      const chk = intakeCheck(p);
+      if(chk.sus.length || chk.missing.filter(m=>m!=="שם משפחה").length >= 3){
+        p.hold = true; p.holdWhy = chk.sus.concat(chk.missing.length ? ["חסרים פרטים"] : []); held++;
+      }else{ p.reviewed = true; p.autoOk = true; }
       DB.people.push(p); added++;
     });
     F.seen = [...seen];
@@ -4119,7 +4147,8 @@ async function syncForm(manual, dryRun){
       toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
     }else if(manual) toast("אין תשובות חדשות בטופס");
     FORM.busy = false;
-    return {added, pending, similar};
+    if(held || pending) setTimeout(()=>reviewAlert(held, pending), 700);
+    return {added, pending, similar, held};
   }catch(err){
     FORM.busy = false;
     formStatus(err.message, "var(--rose)");
