@@ -372,6 +372,18 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .an-block ul{margin:0;padding-inline-start:18px;font-size:13.5px;color:var(--ink-soft)}
 .an-block li{margin-bottom:3px}
 .an-load{font-size:13.5px;color:var(--ink-soft);padding:10px 0}
+.nav-badge{background:var(--rose);color:#fff;border-radius:99px;font-size:11px;padding:1px 7px;margin-inline-start:6px;font-weight:700}
+.in-row{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:9px}
+.in-row.sus{border-inline-start:4px solid var(--rose)} .in-row.part{border-inline-start:4px solid var(--brass)}
+.in-main{flex:1;min-width:0}
+.in-name{font-weight:700;font-size:15.5px;cursor:pointer} .in-name:hover{color:var(--teal)}
+.in-meta{font-size:12.5px;color:var(--ink-faint);margin-top:2px}
+.in-flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.flag{font-size:12px;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.flag.s{background:#f3e6e9;color:var(--rose)} .flag.m{background:var(--brass-light);color:#7a5c26} .flag.n{background:var(--teal-light);color:var(--teal)}
+.in-bar{height:6px;border-radius:9px;background:var(--line-soft);overflow:hidden;width:120px;margin-top:4px}
+.in-bar i{display:block;height:100%;background:var(--teal)}
+.in-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:330px}
 .ai-hint{font-size:13px;color:var(--ink-soft);background:var(--teal-light);border:1px solid #cde3e1;border-radius:9px;padding:9px 12px;margin-bottom:12px;line-height:1.55}
 .smart-item{border-top:1px solid #dde9e8;padding:10px 0}
 .smart-item:first-of-type{border-top:0}
@@ -519,6 +531,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <button data-view="cards" class="on"><span class="ic">▤</span> כרטסייה</button>
       <button data-view="matches"><span class="ic">◇</span> שידוכים</button>
       <button data-view="followup"><span class="ic">◷</span> מעקב ולוח בקרה</button>
+      <button data-view="intake"><span class="ic">⚑</span> קליטה וניהול <b class="nav-badge hidden" id="intakeBadge"></b></button>
       <button data-view="import"><span class="ic">↧</span> ייבוא קובץ</button>
       <button data-view="backup"><span class="ic">⛭</span> גיבוי וניהול</button>
     </nav>
@@ -596,6 +609,13 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <h2>מעקב ולוח בקרה</h2>
       <div class="sub">תמונת מצב במבט אחד, ומה מחכה לטיפול: פגישות היום, משימות פתוחות, ומי שלא דיברתם איתו מזמן.</div>
       <div id="followupHost"></div>
+    </section>
+
+    <!-- ===== INTAKE ===== -->
+    <section class="page hidden" id="view-intake">
+      <h2>קליטה וניהול</h2>
+      <div class="sub">מי הצטרף לאחרונה, אילו פניות נראות חשודות, ואילו חסרות פרטים חשובים — וכל אחת מטופלת בלחיצה.</div>
+      <div id="intakeHost"></div>
     </section>
 
     <!-- ===== IMPORT ===== -->
@@ -1477,7 +1497,7 @@ function openMatchesOf(id){
 function setView(v){
   ui.view = v;
   $$(".nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
-  ["cards","matches","followup","import","backup"].forEach(x=>{
+  ["cards","matches","followup","intake","import","backup"].forEach(x=>{
     $("#view-"+x).classList.toggle("hidden", x!==v);
   });
   render();
@@ -1494,6 +1514,8 @@ function render(){
   if(ui.view==="cards") renderCards();
   if(ui.view==="matches") renderMatches();
   if(ui.view==="followup") renderFollowup();
+  if(ui.view==="intake") renderIntake();
+  intakeBadge();
 }
 
 function renderStats(){
@@ -1909,7 +1931,7 @@ function savePerson(id, after){
   }
   const pic = $("#photoInCard"); if(pic) p.photoInCard = pic.checked;
   p.updated = today();
-  if(!id) DB.people.push(p);
+  if(!id){ p.source = p.source || "ידני"; p.reviewed = true; DB.people.push(p); }
   save(); render();
   if(after === "finish"){ finishFlow(p.id); }
   else openPerson(p.id);
@@ -2401,7 +2423,7 @@ function runImport(){
   pending.rows.forEach(r=>{
     const key = rowKey(pending.headers, r.map(c=>String(c==null?"":c).trim()));
     seen.add(key);
-    const p = {id:uid(), created:today(), updated:today(), extra:{}, formKey:key};
+    const p = {id:uid(), created:today(), updated:today(), extra:{}, formKey:key, source:"ייבוא קובץ", reviewed:true};
     pending.headers.forEach((h,i)=>{
       const target = map[i]; const val = String(r[i]==null?"":r[i]).trim();
       if(!val || target==="__skip") return;
@@ -3838,6 +3860,125 @@ function smartHit(p, hay){
   if(!S.keywords.length) return 1;
   const hits = S.keywords.filter(k=>hay.includes(k)).length;
   return hits ? hits : null;
+}
+
+/* ============ קליטה וניהול: מי הצטרף, פניות חשודות, פניות חלקיות ============ */
+/* שדות שבלעדיהם קשה להתחיל לעבוד עם מועמד */
+const KEY_FIELDS = [
+  ["gender","מין"], ["age","גיל"], ["phone","טלפון"], ["city","מקום מגורים"],
+  [["hashkafa","community"],"השקפה"], ["study","מקום לימודים"], ["character","תיאור אופי"],
+  [["lookingTraits","looking"],"מה מחפשים"], ["height","גובה"], ["refs","ממליצים לבירור"]
+];
+const hasVal = v => Array.isArray(v) ? v.length>0 : !!String(v==null?"":v).trim();
+function intakeCheck(p){
+  const missing = KEY_FIELDS.filter(([k])=> !(Array.isArray(k) ? k.some(x=>hasVal(p[x])) : hasVal(p[k]))).map(([,l])=>l);
+  const sus = [];
+  const nm = String(p.fullName||"").trim();
+  /* שימו לב: \W לא מתאים לעברית (אותיות עבריות נחשבות בו "לא-אות"), ולכן בודקים טווח אותיות מפורש */
+  if(/בדיקה|ניסיון|טסט|test|asdf|qwe/i.test(nm) || /^[^א-תa-z]+$/i.test(nm) || /(.)\1{3,}/.test(nm)) sus.push("שם שנראה כמו בדיקה");
+  if(/\d/.test(nm)) sus.push("ספרות בתוך השם");
+  if(nm && nm.split(/\s+/).length<2) missing.push("שם משפחה");
+  if(p.phone){
+    const d = String(p.phone).replace(/\D/g,"");
+    if(!normPhone(p.phone) || !/^0[2-9]\d{7,8}$/.test(normPhone(p.phone)) || /^(\d)\1+$/.test(d.slice(-7))) sus.push("מספר טלפון לא תקין");
+    else{
+      const others = DB.people.filter(x=>x.id!==p.id && normPhone(x.phone)===normPhone(p.phone) && String(x.fullName||"").trim()!==nm);
+      if(others.length) sus.push(`אותו טלפון אצל ${others[0].fullName}`);
+    }
+  }
+  if(p.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(p.email).trim())) sus.push("כתובת מייל לא תקינה");
+  if(p.age){ const a = parseFloat(p.age); if(!a || a<17 || a>90) sus.push("גיל לא סביר"); }
+  const txt = [p.character,p.looking,p.lookingTraits,p.hobbies].filter(Boolean).join(" ");
+  if(txt && /(.)\1{4,}|^[a-z\s]{3,}$/i.test(txt.trim())) sus.push("תשובות שנראות לא אמיתיות");
+  const filled = KEY_FIELDS.length - missing.filter(m=>m!=="שם משפחה").length;
+  return {missing, sus: p.flagOk ? [] : sus, pct: Math.round(filled/KEY_FIELDS.length*100)};
+}
+function daysAgo(d){ if(!d) return 999; return Math.floor((Date.now()-new Date(d).getTime())/86400000); }
+function intakeBadge(){
+  const b = $("#intakeBadge"); if(!b) return;
+  const n = DB.people.filter(p=>!p.reviewed && p.source).length + (DB.form&&DB.form.pending||[]).length;
+  b.textContent = n; b.classList.toggle("hidden", !n);
+}
+if(!ui.intake) ui.intake = "new";
+function renderIntake(){
+  const host = $("#intakeHost"); if(!host) return;
+  const all = DB.people.map(p=>({p, c:intakeCheck(p)}));
+  const isNew = o => !o.p.reviewed && !!o.p.source;
+  const lists = {
+    new:  all.filter(isNew),
+    week: all.filter(o=>daysAgo(o.p.created)<=7),
+    sus:  all.filter(o=>o.c.sus.length),
+    part: all.filter(o=>o.c.missing.filter(m=>m!=="שם משפחה").length>=3),
+    all:  all
+  };
+  const pend = (DB.form&&DB.form.pending||[]).length;
+  const fc = formCfg();
+  const tiles = [
+    ["new","חדשים — טרם נבדקו", lists.new.length, lists.new.length?"hot":""],
+    ["week","הצטרפו השבוע", lists.week.length, ""],
+    ["sus","פניות חשודות", lists.sus.length, lists.sus.length?"warn":""],
+    ["part","פניות חלקיות", lists.part.length, ""],
+  ];
+  const cur = lists[ui.intake] ? ui.intake : "new";
+  const list = lists[cur].slice().sort((a,b)=>(b.p.created||"").localeCompare(a.p.created||""));
+  const titles = {new:"חדשים שטרם נבדקו", week:"הצטרפו בשבוע האחרון", sus:"פניות חשודות", part:"פניות חלקיות (חסרים 3 פרטים חשובים או יותר)", all:"כל המועמדים"};
+
+  host.innerHTML = `
+    <div class="dash-stats">${tiles.map(([k,l,n,cls])=>
+      `<button class="dash-stat ${cls} ${cur===k?"on":""}" style="cursor:pointer;${cur===k?"outline:2px solid var(--teal)":""}" onclick="ui.intake='${k}';renderIntake()"><b>${n}</b><span>${l}</span></button>`).join("")}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 12px">
+      ${fc.sheetId ? `<span style="font-size:13px;color:var(--ink-soft)">📝 טופס: ${fc.last?`בדיקה אחרונה ${esc(new Date(fc.last).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}))}`:"מחובר — טרם אושר מול גוגל"}</span>
+        <button class="btn sm" onclick="syncForm(true)">בדיקת תשובות חדשות</button>` : `<span style="font-size:13px;color:var(--ink-faint)">הטופס עוד לא מחובר</span>`}
+      ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ${pend} מילאו שוב — ממתינים לבדיקה</button>`:""}
+      <button class="btn ghost sm" style="margin-inline-start:auto" onclick="ui.intake='all';renderIntake()">הצגת כולם</button>
+      ${cur==="new"&&list.length?`<button class="btn ghost sm" onclick="markAllReviewed()">סימון כל החדשים כנבדקו</button>`:""}
+    </div>
+    <div class="sect">${titles[cur]} (${list.length})</div>
+    ${list.length ? list.slice(0,300).map(({p,c})=>{
+      const miss = c.missing.filter(m=>m!=="שם משפחה");
+      const cls = c.sus.length ? "sus" : miss.length>=3 ? "part" : "";
+      return `<div class="in-row ${cls}">
+        ${avatar(p,38)}
+        <div class="in-main">
+          <div class="in-name" onclick="openPerson('${p.id}')">${esc(p.fullName||"ללא שם")}</div>
+          <div class="in-meta">${[p.gender,p.age&&("גיל "+p.age),p.city].filter(Boolean).map(esc).join(" · ")||"—"}
+            · ${esc(p.source||"ידני")} · ${p.created?esc(p.created):""}${p.phone?` · <a href="tel:${esc(normPhone(p.phone)||p.phone)}" style="color:inherit">${esc(p.phone)}</a>`:""}</div>
+          <div class="in-flags">
+            ${!p.reviewed&&p.source?`<span class="flag n">חדש</span>`:""}
+            ${c.sus.map(x=>`<span class="flag s">⚠ ${esc(x)}</span>`).join("")}
+            ${c.missing.map(x=>`<span class="flag m">חסר: ${esc(x)}</span>`).join("")}
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--ink-faint);margin-top:6px">
+            שלמות הפרטים <div class="in-bar"><i style="width:${c.pct}%"></i></div> ${c.pct}%</div>
+        </div>
+        <div class="in-acts">
+          ${!p.reviewed&&p.source?`<button class="btn sm pri" onclick="markReviewed('${p.id}')">✓ נבדק</button>`:""}
+          ${c.sus.length?`<button class="btn sm" onclick="markOk('${p.id}')">זה תקין</button>`:""}
+          ${miss.length?`<button class="btn sm" onclick="askCompletion('${p.id}')">בקשת השלמה</button>`:""}
+          <button class="btn ghost sm" onclick="editPerson('${p.id}')">עריכה</button>
+          <button class="btn danger sm" onclick="delPerson('${p.id}');renderIntake()">מחיקה</button>
+        </div>
+      </div>`; }).join("") + (list.length>300?`<div class="an-load">מוצגים 300 הראשונים מתוך ${list.length}</div>`:"")
+    : `<div class="empty"><h3>${cur==="new"?"אין חדשים שממתינים לבדיקה":cur==="sus"?"אין פניות חשודות":cur==="part"?"אין פניות חלקיות":"אין מועמדים להצגה"}</h3><p>${cur==="new"?"כל מי שהצטרף כבר נבדק. ✓":""}</p></div>`}`;
+  intakeBadge();
+}
+function markReviewed(id){ const p = personById(id); if(!p) return; p.reviewed = true; save(); renderIntake(); toast("סומן כנבדק"); }
+function markOk(id){ const p = personById(id); if(!p) return; p.flagOk = true; p.reviewed = true; save(); renderIntake(); toast("סומן כתקין — האזהרות הוסרו"); }
+function markAllReviewed(){
+  const n = DB.people.filter(p=>!p.reviewed && p.source).length;
+  if(!confirm(`לסמן את כל ${n} החדשים כנבדקו?`)) return;
+  DB.people.forEach(p=>{ if(p.source) p.reviewed = true; }); save(); renderIntake(); toast("כל החדשים סומנו כנבדקו");
+}
+/* נוסח מוכן לבקשת השלמת פרטים — להעתקה לוואטסאפ, SMS או מייל */
+function askCompletion(id){
+  const p = personById(id); if(!p) return;
+  const miss = intakeCheck(p).missing.filter(m=>m!=="שם משפחה");
+  const first = String(p.fullName||"").trim().split(/\s+/)[0] || "";
+  const txt = `שלום ${first},\nתודה שמילאת את טופס כרטיס השידוכים!\nכדי שאוכל להתחיל לחפש עבורך הצעות מתאימות, חסרים לי עוד כמה פרטים:\n${miss.map(m=>"• "+m).join("\n")}\n\nאפשר לשלוח לי אותם בתשובה להודעה הזו.\nבברכה,\n${gcardSign()}`;
+  navigator.clipboard.writeText(txt).then(()=>toast("נוסח בקשת ההשלמה הועתק — אפשר להדביק בוואטסאפ או במייל"))
+    .catch(()=>{ ask({title:"בקשת השלמת פרטים", note:txt, fields:[]}); });
+  p.log = p.log || []; p.askedAt = today(); save();
 }
 
 /* ============ חיבור לטופס הגוגל — תשובות נכנסות אוטומטית ============
