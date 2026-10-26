@@ -883,6 +883,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
           <button class="btn sm" id="btnTestAI">בדיקת חיבור</button>
           <button class="btn sm" id="btnListModels">טעינת המודלים הזמינים</button>
           <button class="btn ghost sm" id="btnClearKey">מחיקת המפתח</button>
+          <button class="btn ghost sm" type="button" onclick="copyErrLog()" title="להעתיק את כל השגיאות האחרונות — כדי לשלוח למי שמטפל בכלי">📋 העתקת יומן השגיאות</button>
         </div>
         <div id="aiStatus" style="font-size:13px;margin-top:9px;min-height:20px"></div>
         <p style="font-size:12.5px;color:var(--ink-faint)">שגיאה 401 פירושה כמעט תמיד שהמפתח שייך לספק אחר מזה שנבחר למעלה.</p>
@@ -989,15 +990,18 @@ const FIELDS = [
   {k:"dealBreaker",l:"שובר עסקה — קו אדום",t:"text",   sec:"שאלות עומק"},
   {k:"compromise",l:"על מה מוכנ/ה להתפשר",t:"text",    sec:"שאלות עומק"},
   {k:"challenge",l:"אתגר מרכזי בפגישות עד כה",t:"textarea",sec:"שאלות עומק"},
+  /* היסטוריית שידוכים — פנימי לשדכנית, לא נכנס לכרטיס שנשלח */
+  {k:"datingStory",l:"סיפור דייטים — עם מי נפגש/ה, כמה פעמים, ולמה לא התקדם",t:"textarea",sec:"היסטוריית שידוכים"},
   /* בחור ישיבה */
   {k:"yeshivaPlans",l:"ללמוד כל החיים או לצאת לעבוד?",t:"textarea",sec:"בחור ישיבה"},
   {k:"afterYeshiva",l:"המשך אחרי הישיבה",t:"text",     sec:"בחור ישיבה"},
   /* הערות */
   {k:"notes",    l:"הערות השדכנית",      t:"textarea", sec:"הערות"}
 ];
-const SECTIONS = ["זיהוי","קשר","רקע","מראה חיצוני","אופי והשקפה","משפחה","מה מחפשים","שאלות עומק","בחור ישיבה","הערות"];
+const SECTIONS = ["זיהוי","קשר","רקע","מראה חיצוני","אופי והשקפה","משפחה","מה מחפשים","שאלות עומק","היסטוריית שידוכים","בחור ישיבה","הערות"];
 
 const SYN = {
+  datingStory:["סיפור דייטים","סיפור הדייטים","היסטוריית דייטים","היסטוריית שידוכים","דייטים","דייטים קודמים","פגישות קודמות","הצעות קודמות","עם מי נפגש","עם מי נפגשה","שידוכים קודמים"],
   fullName:["שם","שם מלא","שם המועמד","שם פרטי ומשפחה","שם מועמד","name","full name"],
   prayerName:["שם לתפילה","בונוס! שם לתפילה"],
   gender:["מין","מגדר","בן/בת","זכר/נקבה","gender"],
@@ -1250,7 +1254,7 @@ async function openVault(raw, secret){
 
 function adoptDB(d){
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
-        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || []};
+        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || [], extraFields: d.extraFields || []};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
@@ -1723,9 +1727,25 @@ async function boot(){
   });
 }
 
+const ERRLOG = [];
+const ERR_RX = /שגיאה|נכשל|לא הגיב|אין חיבור|Gemini החזירה|השירות החזיר|לא התקבל|עמוס|תקלה זמנית|error/i;
 function toast(msg){
-  const t = $("#toast"); t.classList.remove("undo"); t.textContent = msg; t.classList.add("on");
+  const t = $("#toast"); msg = String(msg==null?"":msg);
+  if(ERR_RX.test(msg) && !/מנסה שוב|עובר למודל/.test(msg)){
+    /* הודעת שגיאה: נשארת יותר זמן, אפשר להעתיק אותה, והיא נשמרת ביומן השגיאות */
+    ERRLOG.push(new Date().toLocaleString("he-IL") + " · " + msg); if(ERRLOG.length > 30) ERRLOG.shift();
+    t.innerHTML = `<span style="user-select:text">${esc(msg)}</span><button class="tu" type="button">📋 העתקה</button>`;
+    t.classList.add("on","undo");
+    t.querySelector(".tu").onclick = ()=>{ copyText(msg, "השגיאה הועתקה — אפשר להדביק ולשלוח"); };
+    clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on","undo"), 12000);
+    return;
+  }
+  t.classList.remove("undo"); t.textContent = msg; t.classList.add("on");
   clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 2600);
+}
+function copyErrLog(){
+  if(!ERRLOG.length) return toast("אין שגיאות ביומן מאז שהכלי נפתח");
+  copyText(ERRLOG.join("\n"), `${ERRLOG.length} השגיאות האחרונות הועתקו`);
 }
 /* "בלי פחד לטעות": הודעה עם כפתור ביטול לכמה שניות */
 function toastUndo(msg, undoFn){
@@ -2041,10 +2061,10 @@ function openPerson(id, tab){
     }).join("") + `</dl>`;
   });
 
-  const extraKeys = Object.keys(p.extra||{});
+  const extraKeys = allExtraKeys();
   if(extraKeys.length){
-    body += `<div class="sect">שדות נוספים מהקובץ</div><dl style="margin:0">` +
-      extraKeys.map(k=>`<div class="fieldrow"><dt>${esc(k)}</dt><dd>${esc(p.extra[k])}</dd></div>`).join("") + `</dl>`;
+    body += `<div class="sect">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)</div><dl style="margin:0">` +
+      extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}</dd></div>`; }).join("") + `</dl>`;
   }
 
   const ms = DB.matches.filter(m=>m.a===id||m.b===id);
@@ -2178,12 +2198,14 @@ function editPerson(id){
     });
     html += `</div>`;
   });
-  const extraKeys = Object.keys(p.extra||{});
-  if(extraKeys.length){
-    html += `<div class="sect">שדות נוספים מהקובץ</div><div class="form-grid">` +
-      extraKeys.map((k,i)=>`<div class="field"><label>${esc(k)}</label>
-        <input id="x_${i}" data-xkey="${esc(k)}" value="${esc(p.extra[k])}"></div>`).join("") + `</div>`;
-  }
+  const extraKeys = allExtraKeys();
+  html += `<div class="sect" style="display:flex;align-items:center;gap:8px">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)
+      <button class="btn ghost sm" style="margin-inline-start:auto" onclick="addExtraField('${p.id}')">+ שדה חדש לכל הכרטיסים</button></div>
+    <div class="form-grid">` +
+    extraKeys.map((k,i)=>{ const v = String((p.extra||{})[k]==null?"":(p.extra||{})[k]);
+      return `<div class="field${v.length>60?" wide":""}"><label>${esc(k)}</label>${v.length>60
+        ? `<textarea id="x_${i}" data-xkey="${esc(k)}">${esc(v)}</textarea>`
+        : `<input id="x_${i}" data-xkey="${esc(k)}" value="${esc(v)}">`}</div>`; }).join("") + `</div>`;
   $("#sheetBody").innerHTML = `<div class="win-col">${html}</div>`;
   photoBuf = null;
   $("#photoFile").addEventListener("change", e=>{
@@ -2251,7 +2273,8 @@ function savePerson(id, after){
   }
   if(!p.status) p.status = "פנוי";
   p.extra = p.extra || {};
-  $$("[data-xkey]").forEach(el=>{ p.extra[el.dataset.xkey] = el.value; });
+  p.extra = p.extra || {};
+  $$("[data-xkey]").forEach(el=>{ const k = el.dataset.xkey, v = el.value.trim(); if(v || k in p.extra) p.extra[k] = v; });
   if(photoBuf !== null){
     if(photoBuf) p.photo = photoBuf; else delete p.photo;
     photoBuf = null;
@@ -2883,6 +2906,21 @@ function runImport(){
   else if(items.length) setTimeout(()=>openImportReport(), 600);
 }
 
+/* שדות נוספים: כל עמודה מהאקסל/הטופס שאין לה שדה קבוע, וכל שדה שהשדכנית הוסיפה — מופיעים בכל הכרטיסים */
+function allExtraKeys(){
+  const set = new Set(DB.extraFields || []);
+  DB.people.forEach(p=>Object.keys(p.extra||{}).forEach(k=>set.add(k)));
+  return [...set];
+}
+async function addExtraField(pid){
+  const r = await ask({title:"שדה חדש לכל הכרטיסים", note:"למשל: \"מקום עבודה\", \"שנת עלייה\", \"הערות מהאקסל\". השדה יופיע בכל הכרטיסים, וגם בייצוא לאקסל.",
+    fields:[{label:"שם השדה", type:"text"}], ok:"הוספה"});
+  if(!r || !String(r[0]||"").trim()) return;
+  const name = String(r[0]).trim().slice(0,80);
+  DB.extraFields = [...new Set((DB.extraFields||[]).concat(name))];
+  save(); editPerson(pid); toast(`השדה "${name}" נוסף לכל הכרטיסים`);
+}
+
 /* ============ שלמות הייבוא: אף שורה לא הולכת לאיבוד ============ */
 const normName = v => String(v||"").replace(/["'״׳`]/g,"").replace(/\s+/g," ").trim();
 /* אם אין עמודת "שם מלא" — מחפשים שם בעמודות אחרות (שם פרטי + שם משפחה, "שם המועמד" וכו') */
@@ -2990,13 +3028,20 @@ function openHistory(){
     ${log.length ? `<dl class="fields">${log.map(([k,h],j)=>`<div class="fieldrow" style="align-items:center">
         <dt style="min-width:120px">${esc(fmtWhen(h.date))}</dt>
         <dd style="flex:1">${esc(handledText(k))}</dd>
-        ${h.act!=="deleted" && h.p && !h.restored ? `<button class="btn sm" onclick="historyReAdd(${j})">➕ הוספה ככרטיס</button>` : ""}</div>`).join("")}</dl>`
+        ${h.act==="update" && h.prev && Object.keys(h.prev).length && !h.reverted && personById(h.exId) ? `<button class="btn sm" onclick="historyRevert(${j})">↩ החזרת הערכים הישנים</button>`
+          : h.act!=="deleted" && h.act!=="update" && h.p && !h.restored ? `<button class="btn sm" onclick="historyReAdd(${j})">➕ הוספה ככרטיס</button>` : ""}</div>`).join("")}</dl>`
       : `<div style="color:var(--ink-faint);font-size:13px">עוד לא נרשמו פעולות. מעכשיו כל אישור, התעלמות ומחיקה נרשמים כאן.</div>`}
   </div>`;
   $("#sheetFoot").innerHTML = `<button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
   openSheet();
 }
 let HIST_KEYS = [];
+function historyRevert(j){
+  const k = HIST_KEYS[j], h = (formDB().handled||{})[k]; if(!h || !h.prev) return;
+  const ex = personById(h.exId); if(!ex) return toast("הכרטיס כבר לא קיים");
+  Object.assign(ex, h.prev); if(h.prevExtra) ex.extra = h.prevExtra; ex.updated = today();
+  h.reverted = new Date().toISOString(); save(); render(); openHistory(); toast(`הערכים הקודמים של ${ex.fullName} הוחזרו ✓`);
+}
 function historyReAdd(j){
   const k = HIST_KEYS[j];
   const F = formDB(), h = (F.handled||{})[k]; if(!h || !h.p) return;
@@ -3698,7 +3743,7 @@ async function callAI(prompt){
       if(wantJson && mode!=="plain") gen.responseMimeType = "application/json";
       const url = urlOf(model);
       const ctl = new AbortController();
-      const timer = setTimeout(()=>ctl.abort(), 45000);
+      const timer = setTimeout(()=>ctl.abort(), 90000);
       try{
         const r = await fetch(url,{
           method:"POST",
@@ -3724,7 +3769,31 @@ async function callAI(prompt){
       for(const mode of order){ r = await send(mode); if(r.status !== 400) break; }
       return r;
     }
-    let res = await attempt();
+    /* שרת עמוס (503/500/502/504) או שלא הגיב בזמן — מנסים שוב אוטומטית: אחרי 2 שניות ואחרי 6,
+       ואם עדיין עמוס — עוברים לבד למודל זמין אחר */
+    const BUSY = st => [500,502,503,504].includes(st);
+    const sleep = ms => new Promise(r=>setTimeout(r, ms));
+    async function attemptRetry(){
+      let r = null, err = null;
+      for(let i=0;i<3;i++){
+        try{ r = await attempt(); err = null; }
+        catch(e){ err = e; r = null; if(!/לא הגיב בזמן/.test(e.message)) throw e; }
+        if(r && !BUSY(r.status) && !(r.status===429 && i===0)) return r;
+        if(i < 2){ toast(`השרת של גוגל עמוס — מנסה שוב (${i+2}/3)…`); await sleep(i===0 ? 2000 : 6000); }
+      }
+      if(err) throw err;
+      return r;
+    }
+    let res, timeoutErr = null;
+    try{ res = await attemptRetry(); }catch(e){ if(!/לא הגיב בזמן/.test(e.message)) throw e; timeoutErr = e; }
+    if(timeoutErr || (res && BUSY(res.status))){
+      try{
+        const avail = await fetchGeminiModels(cfg.key);
+        const pick = avail.find(m=>m!==model);
+        if(pick){ toast("עובר למודל חלופי: " + pick); model = pick; res = await attemptRetry(); timeoutErr = null; }
+      }catch(e){ if(!res) throw timeoutErr || e; }
+      if(timeoutErr) throw timeoutErr;
+    }
     if(res.status === 404 || (res.status === 400 && !cfg.model)){
       /* המודל לא קיים / הוצא משימוש — בוחרים לבד מודל זמין מהרשימה של גוגל ושומרים אותו */
       try{
@@ -3742,6 +3811,7 @@ async function callAI(prompt){
         : res.status===400 || res.status===404
         ? " (המודל " + model + " לא זמין — לחצו 'טעינת המודלים הזמינים' בעמוד גיבוי וניהול)"
         : res.status===403 ? " (ודאו ש-Generative Language API מופעל ושהמפתח תקף)"
+        : BUSY(res.status) ? " (השרת של גוגל עמוס כרגע — ניסינו 3 פעמים וגם מודל חלופי. נסו שוב בעוד דקה-שתיים)"
         : res.status===429 ? " (חריגה ממכסה — נסו מאוחר יותר)" : "";
       throw new Error(`Gemini החזירה שגיאה ${res.status}${hint}` + (detail ? " · " + detail.slice(0,180) : ""));
     }
@@ -4451,7 +4521,7 @@ async function composeCard(pid){
   const prevCard = JSON.parse(JSON.stringify(p.card||{}));
   const ss = sessionsOf(pid);
   const an = p.analysis;
-  const skipF = aiAnon() ? AI_PII.concat("notes") : ["refs"];
+  const skipF = (aiAnon() ? AI_PII.concat("notes") : ["refs"]).concat("datingStory");
   const facts = caseMaterial(p, skipF, {sessions:true, ownCard:false});
   const log = "";
   const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
@@ -4516,7 +4586,7 @@ function gcardSign(){
 }
 
 /* שדות שלא נכנסים לכרטיס לקבוצה: פרטים מזהים, רגישים או כאלה שעלולים להביך */
-const GCARD_SKIP = AI_PII.concat(["notes","health","dealBreaker","compromise","challenge",
+const GCARD_SKIP = AI_PII.concat(["notes","datingStory","health","dealBreaker","compromise","challenge",
   "familyStatus","status","glasses","skinTone","hairColor"]);
 
 /* ניסוח כרטיס קצר לקבוצות — בתבנית המקובלת אצל שדכניות, מהחומר שבתיק בלבד */
@@ -4732,7 +4802,7 @@ async function reviseCardAI(pid, kind){
   }
   if(!want) return toast("כתבו קודם מה לשנות");
   const g = p.gender==="בת" ? "בחורה" : "בחור";
-  const facts = caseMaterial(p, kind==="group" ? GCARD_SKIP : (aiAnon() ? AI_PII.concat("notes") : ["refs"]), {sessions: kind!=="group"});
+  const facts = caseMaterial(p, kind==="group" ? GCARD_SKIP : (aiAnon() ? AI_PII.concat("notes") : ["refs"]).concat("datingStory"), {sessions: kind!=="group"});
   const first = String(p.fullName||"").trim().split(/\s+/)[0] || "";
   const sign = gcardSign();
   let cur, prompt;
@@ -5662,7 +5732,8 @@ function openFormReview(i){
         <div style="font-size:12px;color:var(--ink-faint)">${esc(why)} · ${d.length ? d.length+" פרטים שונים או חדשים" : "אין שינוי בפרטים"} · ${esc(it.date)}</div></div>
         <span class="score">בדיקה ←</span></button>`; }).join("")}</div>`;
     $("#sheetFoot").innerHTML = `
-      <button class="btn pri" onclick="bulkPending('fill')" title="רק שדות שריקים בכרטיס הקיים — שום דבר לא נדרס">השלמת שדות ריקים בכולם</button>
+      <button class="btn pri" onclick="bulkPending('newer')" title="התשובה החדשה דורסת את הישנה בכל הכרטיסים — הערכים הישנים נשמרים להחזרה">עדכון כולם — החדש גובר</button>
+      <button class="btn" onclick="bulkPending('fill')" title="רק שדות שריקים בכרטיס הקיים — שום דבר לא נדרס">השלמת שדות ריקים בלבד</button>
       <button class="btn ghost" onclick="bulkPending('ignore')">התעלמות מכולם</button>
       <button class="btn ghost" onclick="closeSheet()">אחר כך</button>`;
     openSheet(); return;
@@ -5672,9 +5743,9 @@ function openFormReview(i){
     <div class="meta">כרטיס קיים: ${esc(ex.fullName)}${ex.phone?" · "+esc(ex.phone):""}. סמנו אילו פרטים לעדכן.</div></div>
     <button class="x" onclick="openFormReview()" aria-label="חזרה">×</button>`;
   $("#sheetBody").innerHTML = `<div class="win-col">
-    ${d.length ? `<div class="card-hint">מסומנים מראש רק שדות שריקים בכרטיס הקיים. שדה שכבר מלא — לא יתעדכן אלא אם תסמנו אותו.</div>
+    ${d.length ? `<div class="card-hint">התשובה החדשה גוברת: כל הפרטים השונים מסומנים מראש לעדכון. אפשר להוריד סימון ממה שלא רוצים לשנות. הערכים הישנים נשמרים בהיסטוריה וניתנים להחזרה.</div>
       <table class="maptable"><thead><tr><th></th><th>שדה</th><th>בכרטיס היום</th><th>בטופס החדש</th></tr></thead><tbody>
-      ${d.map((x,j)=>`<tr><td><input type="checkbox" data-pk="${x.k}" ${x.cur?"":"checked"}></td><td><b>${esc(x.l)}</b></td>
+      ${d.map((x,j)=>`<tr><td><input type="checkbox" data-pk="${x.k}" checked></td><td><b>${esc(x.l)}</b></td>
         <td class="sample">${x.cur?esc(x.cur.slice(0,90)):'<span style="color:#c3cad1">— ריק —</span>'}</td>
         <td class="sample" style="color:var(--ink)">${esc(x.nw.slice(0,90))}</td></tr>`).join("")}
       </tbody></table>` : `<div class="an-load">התשובה החדשה זהה לכרטיס הקיים — אין מה לעדכן.</div>`}
@@ -5695,7 +5766,7 @@ function logHandled(key, info){
 const HANDLED_TXT = {
   deleted:  h=>`הכרטיס של ${h.name||"המועמד"} נמחק ב-${fmtWhen(h.date)}`,
   ignore:   h=>`בחרת "התעלמות" בתשובה החוזרת של ${h.name||""} ב-${fmtWhen(h.date)} — הכרטיס הקיים לא השתנה`,
-  update:   h=>`התשובה עודכנה לתוך הכרטיס הקיים של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}${h.fields&&h.fields.length?` (${h.fields.length} פרטים)`:" (לא סומנו פרטים לעדכון)"}`,
+  update:   h=>`התשובה החדשה עודכנה לתוך הכרטיס של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}${h.fields&&h.fields.length?` (${h.fields.length} פרטים)`:" (לא סומנו פרטים לעדכון)"}${h.reverted?` · ↩ הערכים הישנים הוחזרו ב-${fmtWhen(h.reverted)}`:""}`,
   fill:     h=>`"השלמת שדות ריקים בכולם" — הושלמו פרטים בכרטיס של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}`,
   bulkIgnore: h=>`"התעלמות מכולם" ב-${fmtWhen(h.date)} — התשובה החוזרת של ${h.name||""} לא נכנסה`,
   pendOfDeleted: h=>`חיכתה לאישור, והכרטיס של ${h.exName||""} נמחק ב-${fmtWhen(h.date)}`
@@ -5732,8 +5803,9 @@ function applyPending(i, mode){
   let ks = [];
   if(mode==="update" && ex){
     ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
-    ks.forEach(k=>{ ex[k] = it.p[k]; });
-    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(!ex.extra[k]) ex.extra[k] = v; });
+    var prevVals = {}; ks.forEach(k=>{ prevVals[k] = ex[k]; ex[k] = it.p[k]; });
+    var prevExtra = Object.assign({}, ex.extra||{});
+    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });   /* החדש גובר */
     ex.updated = today();
     toast(ks.length ? `עודכנו ${ks.length} פרטים בכרטיס של ${ex.fullName}` : "לא סומנו פרטים — הכרטיס לא השתנה");
   }else if(mode==="new"){
@@ -5742,7 +5814,8 @@ function applyPending(i, mode){
   }else toast("התשובה סומנה כטופלה");
   if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key);   /* טופלה — לא תחזור שוב */
   if(mode==="ignore" || mode==="update"){ F.ignored = F.ignored || []; if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key);
-    logHandled(it.key, {act: mode, name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, fields: ks, p: it.p}); }
+    logHandled(it.key, {act: mode, name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, fields: ks, p: it.p,
+      prev: mode==="update" ? prevVals : undefined, prevExtra: mode==="update" ? prevExtra : undefined}); }
   F.pending.splice(i,1);
   save(); render(); renderForm();
   if(F.pending.length) openFormReview(); else { closeSheet(); }
@@ -5750,6 +5823,15 @@ function applyPending(i, mode){
 function bulkPending(mode){
   const F = formDB(); let n = 0;
   if(mode==="ignore" && !confirm(`להתעלם מכל ${F.pending.length} התשובות הממתינות? הכרטיסים הקיימים לא ישתנו.`)) return;
+  if(mode==="newer" && !confirm(`לעדכן את כל ${F.pending.length} הכרטיסים לפי התשובה החדשה? (הערכים הישנים נשמרים וניתנים להחזרה)`)) return;
+  const undoList = [];
+  if(mode==="newer") F.pending.forEach(it=>{
+    const ex = personById(it.exId); if(!ex) return;
+    const prev = {}, prevExtra = Object.assign({}, ex.extra||{});
+    pendingDiff(it).forEach(x=>{ prev[x.k] = ex[x.k]; ex[x.k] = it.p[x.k]; n++; });
+    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });
+    ex.updated = today(); it.__prev = prev; it.__prevExtra = prevExtra; undoList.push({ex, prev, prevExtra});
+  });
   if(mode==="fill") F.pending.forEach(it=>{
     const ex = personById(it.exId); if(!ex) return;
     pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; n++; });
@@ -5757,10 +5839,11 @@ function bulkPending(mode){
   });
   F.ignored = F.ignored || [];
   F.pending.forEach(it=>{ if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key); if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key);
-    const ex = personById(it.exId); logHandled(it.key, {act: mode==="fill" ? "fill" : "bulkIgnore", name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, p: it.p}); });
+    const ex = personById(it.exId); logHandled(it.key, {act: mode==="fill" ? "fill" : mode==="newer" ? "update" : "bulkIgnore", name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, p: it.p, prev: it.__prev, prevExtra: it.__prevExtra, fields: it.__prev ? Object.keys(it.__prev) : undefined}); });
   F.pending = [];
   save(); render(); renderForm(); closeSheet();
-  toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
+  if(mode==="newer") toastUndo(`עודכנו ${undoList.length} כרטיסים — התשובה החדשה גברה (${n} פרטים)`, ()=>{ undoList.forEach(u=>{ Object.assign(u.ex, u.prev); u.ex.extra = u.prevExtra; }); save(); render(); toast("הערכים הישנים הוחזרו ✓"); });
+  else toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
 }
 
 /* ============ גיבוי אוטומטי לגוגל דרייב ============ */
