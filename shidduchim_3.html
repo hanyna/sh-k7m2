@@ -190,7 +190,8 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .pcard.g-m .mono{background:#e8eff6;color:#2f5d8a}
 .pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
 /* כל כרטיס באותו גובה ורוחב — גם כשמהטופס הגיע טקסט ארוך (שם, חוג, עדה, תגיות): שורה אחת לכל פרט, והשאר נחתך ב"…" */
-.pcard{display:flex;flex-direction:column;min-width:0;height:186px}
+.pcard{display:flex;flex-direction:column;min-width:0;height:204px}
+.fdate{display:inline-block;margin-inline-start:8px;font-size:11px;color:var(--ink-faint);background:var(--soft2);border-radius:99px;padding:0 7px;vertical-align:middle;white-space:nowrap}
 .pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:52px}
 .pcard-head>div:not(.mono){min-width:0;flex:1}
 .pcard-head>.mono{flex:none}
@@ -729,6 +730,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
           <option value="name">מיון: שם</option>
           <option value="age">מיון: גיל</option>
           <option value="updated">מיון: עודכן לאחרונה</option>
+          <option value="filled">מיון: מילא/ה את הטופס (חדש קודם)</option>
+          <option value="created">מיון: נקלט/ה (חדש קודם)</option>
           <option value="city">מיון: עיר</option>
         </select>
       </div>
@@ -1895,6 +1898,8 @@ function filtered(){
   list.sort((a,b)=>{
     if(s==="age") return (parseFloat(a.age)||999)-(parseFloat(b.age)||999);
     if(s==="updated") return (b.updated||"").localeCompare(a.updated||"");
+    if(s==="filled") return String(b.filledAt||"").localeCompare(String(a.filledAt||""));
+    if(s==="created") return String(b.created||"").localeCompare(String(a.created||""));
     if(s==="city") return String(a.city||"").localeCompare(String(b.city||""),"he");
     return String(a.fullName||"").localeCompare(String(b.fullName||""),"he");
   });
@@ -1949,7 +1954,8 @@ function renderCards(keepLimit){
     const rows = [
       p.city ? "⌂ " + esc(p.city) : "",
       p.study ? "✦ " + esc(p.study) : (p.occupation ? "✦ " + esc(p.occupation) : ""),
-      p.phone ? "☏ " + esc(p.phone) : ""
+      p.phone ? "☏ " + esc(p.phone) : "",
+      (p.filledAt || p.created) ? `<span style="color:var(--ink-faint);font-size:12px">📅 ${p.filledAt?"מילא/ה ":"נקלט/ה "}${esc(fmtDay(p.filledAt || p.created).split(" · ")[0])}</span>` : ""
     ].filter(Boolean).map(x=>`<div>${x}</div>`).join("");
     const st = p.status || "פנוי";
     return `<button class="pcard ${gclass(p)}" onclick="openPerson('${p.id}')">
@@ -2036,6 +2042,7 @@ function openPerson(id, tab){
       <div style="min-width:0">
         <h3>${esc(p.fullName||"ללא שם")}</h3>
         <div class="meta">${esc(st)}${p.age?" · "+esc(p.age):""}${p.city?" · "+esc(p.city):""}${p.community?" · "+esc(p.community):""}</div>
+        <div class="meta" style="font-size:11.5px">${[p.filledAt?"מילא/ה את הטופס: "+fmtDay(p.filledAt):"", p.created?"נקלט/ה: "+fmtDay(p.created):"", p.updated?"עודכן/ה: "+fmtDay(p.updated):""].filter(Boolean).map(esc).join(" · ")}</div>
       </div>
       <button class="btn sm pri" onclick="openCall('${id}')" title="שיחה עם המועמד — רושמים תוך כדי, הכול נשמר לבד">📞 שיחה</button>
       <button class="btn ghost sm" id="btnFocus" onclick="toggleFocus()" title="החלון על כל המסך — בלי הסחות">${$("#sheet").classList.contains("full")?"⤡ יציאה ממצב ריכוז":"⛶ מצב ריכוז"}</button>
@@ -2057,14 +2064,14 @@ function openPerson(id, tab){
       const shown = !v ? "—"
         : f.t==="tel" ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g,""))}" style="color:inherit">${esc(v)}</a>`
         : esc(v);
-      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}</dd></div>`;
+      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
     }).join("") + `</dl>`;
   });
 
   const extraKeys = allExtraKeys();
   if(extraKeys.length){
     body += `<div class="sect">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)</div><dl style="margin:0">` +
-      extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}</dd></div>`; }).join("") + `</dl>`;
+      extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; }).join("") + `</dl>`;
   }
 
   const ms = DB.matches.filter(m=>m.a===id||m.b===id);
@@ -2194,7 +2201,7 @@ function editPerson(id){
         const ty = f.t==="number" ? `text" inputmode="decimal` : f.t;
         input = `<input id="f_${f.k}" type="${ty}" value="${esc(v)}">`;
       }
-      html += `<div class="field${wide}"><label for="f_${f.k}">${f.l}</label>${input}</div>`;
+      html += `<div class="field${wide}"><label for="f_${f.k}">${f.l}${(p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</label>${input}</div>`;
     });
     html += `</div>`;
   });
@@ -2246,6 +2253,7 @@ function savePerson(id, after){
   const nmEl = $("#f_fullName");
   if(nmEl && !nmEl.value.trim()){ toast("צריך למלא שם מלא"); nmEl.focus(); return; }
   const p = id ? personById(id) : {id:uid(), created:today(), extra:{}};
+  const before = JSON.parse(JSON.stringify(p));   /* לתאריך עדכון לכל שדה שהשתנה */
   FIELDS.forEach(f=>{
     if(f.t==="multi"){
       const boxes = $$(`input[data-multi="${f.k}"]`);
@@ -2280,6 +2288,7 @@ function savePerson(id, after){
     photoBuf = null;
   }
   const pic = $("#photoInCard"); if(pic) p.photoInCard = pic.checked;
+  markFieldDates(p, before);
   p.updated = today();
   if(!id){ p.source = p.source || "ידני"; p.reviewed = true; DB.people.push(p); }
   EDIT.on = false; EDIT.dirty = false;
@@ -2847,6 +2856,8 @@ function runImport(){
   const items = [];
 
   const F = formDB(), seen = new Set(F.seen);
+  registerExtraHeaders(pending.headers, (h,i)=>map[i]==="__extra");
+  const tsCol = pending.headers.findIndex(h=>/חותמת זמן|timestamp|תאריך מילוי/i.test(String(h||"")));
   pending.rows.forEach((r, idx)=>{
     const rowNo = idx + 2;   /* מספר השורה כפי שרואים אותה באקסל (שורה 1 = כותרות) */
     const key = rowKey(pending.headers, r.map(c=>String(c==null?"":c).trim()));
@@ -2860,6 +2871,7 @@ function runImport(){
       else p.extra[xk()] = val;
     });
     nameFallback(p);
+    if(tsCol >= 0 && String(r[tsCol]||"").trim()){ p.filledAt = tsToDate(r[tsCol]) || String(r[tsCol]).trim(); }
     const kc = keyCanon(key);
     if(DB.people.some(x=>personKeys(x).includes(kc))){ already++; items.push({row:rowNo, name:p.fullName||"", why:"השורה הזו כבר בכרטסייה", done:true}); return; }
     if(F.pending.some(it=>keyCanon(it.key)===kc)){ already++; items.push({row:rowNo, name:p.fullName||"", why:"כבר ממתינה לאישורך מייבוא קודם", done:true, act:"pend"}); return; }
@@ -2906,6 +2918,43 @@ function runImport(){
   else if(items.length) setTimeout(()=>openImportReport(), 600);
 }
 
+/* ============ תאריכים על הכול ============
+   לכל שדה נשמר מתי עודכן לאחרונה (p.fieldDates), ולכל כרטיס — מתי מילא את הטופס (p.filledAt), מתי נקלט ומתי עודכן */
+function markFieldDates(p, before){
+  const d = today(); p.fieldDates = p.fieldDates || {};
+  const norm = v => JSON.stringify(v==null ? "" : v);
+  FIELDS.forEach(f=>{ if(norm(p[f.k]) !== norm(before[f.k]) && (hasVal(p[f.k]) || hasVal(before[f.k]))) p.fieldDates[f.k] = d; });
+  const ax = Object.assign({}, before.extra||{}), bx = p.extra||{};
+  Object.keys(Object.assign({}, ax, bx)).forEach(k=>{ if(String(ax[k]||"") !== String(bx[k]||"")) p.fieldDates["x:"+k] = d; });
+}
+function fmtDay(d){
+  if(!d) return "";
+  const dt = new Date(String(d).length===10 ? d + "T12:00:00" : d);
+  if(isNaN(dt)) return String(d);
+  return dt.toLocaleDateString("he-IL") + " · " + hebDate(dt);
+}
+function dateChip(d, title){ return d ? `<span class="fdate" title="${esc(title||"עודכן")}">${esc(fmtDay(d))}</span>` : ""; }
+/* חותמת הזמן מהטופס/האקסל → תאריך (גם 1.9.2026, 2026/09/01, 9/1/26 10:00) */
+function tsToDate(v){
+  const str = String(v||"").trim(); if(!str) return "";
+  let m = str.match(/(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  m = str.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+  if(m){ let y = +m[3]; if(y < 100) y += 2000; let a = +m[1], b = +m[2];
+    /* גוגל בעברית: יום/חודש. אם הראשון גדול מ-12 — בטוח יום; אם השני גדול מ-12 — הסדר הפוך (אמריקאי) */
+    let day = a, mon = b; if(b > 12 && a <= 12){ day = b; mon = a; }
+    return `${y}-${String(mon).padStart(2,"0")}-${String(day).padStart(2,"0")}`; }
+  return "";
+}
+/* שורת הכותרות של האקסל/הגיליון: כל עמודה שאין לה שדה קבוע נרשמת כשדה בכל הכרטיסים — גם אם ריקה */
+function registerExtraHeaders(headers, isExtra){
+  const add = headers.map(h=>String(h||"").trim()).filter((h,i)=>h && isExtra(h, i) && !/חותמת זמן|timestamp|תאריך מילוי/i.test(h));
+  if(!add.length) return 0;
+  const before = new Set(DB.extraFields||[]);
+  DB.extraFields = [...new Set((DB.extraFields||[]).concat(add))];
+  return DB.extraFields.length - before.size;
+}
+
 /* שדות נוספים: כל עמודה מהאקסל/הטופס שאין לה שדה קבוע, וכל שדה שהשדכנית הוסיפה — מופיעים בכל הכרטיסים */
 function allExtraKeys(){
   const set = new Set(DB.extraFields || []);
@@ -2919,6 +2968,85 @@ async function addExtraField(pid){
   const name = String(r[0]).trim().slice(0,80);
   DB.extraFields = [...new Set((DB.extraFields||[]).concat(name))];
   save(); editPerson(pid); toast(`השדה "${name}" נוסף לכל הכרטיסים`);
+}
+
+/* ============ מיזוג: פנייה (למשל חשודה/מושהית) שהיא בעצם אותו אדם כמו כרטיס קיים ============
+   בוחרים את הכרטיס הקיים, מסמנים אילו פרטים לקחת מהפנייה (החדש גובר כברירת מחדל),
+   והפנייה מתאחדת לתוכו: הפגישות וההצעות עוברות, הפנייה עצמה נשמרת בסל המחזור — ואפשר לבטל. */
+function openMergePick(srcId){
+  const src = personById(srcId); if(!src) return;
+  const nm = normName(src.fullName), ph = normPhone(src.phone), em = normEmail(src.email);
+  const score = x => (normName(x.fullName)===nm ? 3 : 0) + (ph && normPhone(x.phone)===ph ? 3 : 0) + (em && normEmail(x.email)===em ? 2 : 0)
+    + (String(x.fullName||"").split(/\s+/).some(w=>w.length>1 && String(src.fullName||"").includes(w)) ? 1 : 0);
+  const draw = q => {
+    q = String(q||"").trim().toLowerCase();
+    const list = DB.people.filter(x=>x.id!==srcId && (!q || String(x.fullName||"").toLowerCase().includes(q) || String(x.phone||"").replace(/\D/g,"").includes(q.replace(/\D/g,"")||"~")))
+      .map(x=>({x, s:score(x)})).sort((a,b)=>b.s-a.s || String(a.x.fullName).localeCompare(String(b.x.fullName))).slice(0,20);
+    $("#mergeList").innerHTML = list.length ? list.map(({x,s})=>`<button class="picker-item" onclick="openMergeDiff('${srcId}','${x.id}')">${avatar(x,30)}
+        <div style="min-width:0;flex:1"><div style="font-weight:600">${esc(x.fullName||"")} ${s>=3?`<span class="tag" style="background:var(--teal-light);color:var(--teal)">כנראה אותו אדם</span>`:""}</div>
+        <div style="font-size:12px;color:var(--ink-faint)">${[x.age,x.city,x.phone].filter(Boolean).map(esc).join(" · ")||"—"}</div></div>
+        <span class="score">בחירה ←</span></button>`).join("") : `<div class="an-load">לא נמצא</div>`;
+  };
+  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>⇄ מיזוג "${esc(src.fullName||"")}" לכרטיס קיים</h3>
+      <div class="meta">בחרו את הכרטיס הקיים של אותו אדם. בשלב הבא תבחרו אילו פרטים לקחת.</div></div>
+    <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+  $("#sheetBody").innerHTML = `<div class="win-col">
+      <input id="mergeQ" placeholder="חיפוש לפי שם או טלפון…" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:10px" autocomplete="off">
+      <div id="mergeList"></div></div>`;
+  $("#sheetFoot").innerHTML = `<button class="btn ghost" onclick="closeSheet()">ביטול</button>`;
+  openSheet(); draw("");
+  $("#mergeQ").addEventListener("input", e=>draw(e.target.value)); $("#mergeQ").focus();
+}
+function openMergeDiff(srcId, dstId){
+  const src = personById(srcId), dst = personById(dstId); if(!src || !dst) return;
+  const rows = FIELDS.filter(f=>!["refs","status"].includes(f.k) && hasVal(src[f.k]) && String(disp(src[f.k])).trim() !== String(disp(dst[f.k])||"").trim())
+    .map(f=>({k:f.k, l:f.l, cur:String(disp(dst[f.k])||""), nw:String(disp(src[f.k]))}));
+  const xr = Object.keys(src.extra||{}).filter(k=>String(src.extra[k]||"").trim() && String(src.extra[k]) !== String((dst.extra||{})[k]||""))
+    .map(k=>({k:"x:"+k, l:k, cur:String((dst.extra||{})[k]||""), nw:String(src.extra[k])}));
+  const all = rows.concat(xr);
+  const ns = sessionsOf(srcId).length, nm = DB.matches.filter(m=>m.a===srcId||m.b===srcId).length;
+  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>⇄ מיזוג לתוך "${esc(dst.fullName||"")}"</h3>
+      <div class="meta">מסומן מראש: הפרטים מהפנייה גוברים. הורידו סימון ממה שרוצים להשאיר כמו בכרטיס הקיים.</div></div>
+    <button class="x" onclick="openMergePick('${srcId}')" aria-label="חזרה">×</button>`;
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    ${all.length ? `<table class="maptable"><thead><tr><th></th><th>שדה</th><th>בכרטיס הקיים</th><th>בפנייה</th></tr></thead><tbody>
+      ${all.map(x=>`<tr><td><input type="checkbox" data-mk="${esc(x.k)}" checked></td><td><b>${esc(x.l)}</b></td>
+        <td class="sample">${x.cur?esc(x.cur.slice(0,90)):'<span style="color:#c3cad1">— ריק —</span>'}</td>
+        <td class="sample" style="color:var(--ink)">${esc(x.nw.slice(0,90))}</td></tr>`).join("")}</tbody></table>`
+      : `<div class="an-load">כל הפרטים בפנייה כבר קיימים בכרטיס — המיזוג רק יאחד את שתי הרשומות.</div>`}
+    ${ns||nm ? `<div class="card-hint" style="margin-top:10px">יעברו לכרטיס הקיים: ${ns?`${ns} פגישות`:""}${ns&&nm?" ו":""}${nm?`${nm} הצעות`:""}.</div>` : ""}
+  </div>`;
+  $("#sheetFoot").innerHTML = `<button class="btn pri" onclick="applyMerge('${srcId}','${dstId}')">⇄ מיזוג</button>
+    <button class="btn" onclick="openMergePick('${srcId}')">כרטיס אחר</button>
+    <button class="btn ghost" onclick="closeSheet()">ביטול</button>`;
+}
+function applyMerge(srcId, dstId){
+  const src = personById(srcId), dst = personById(dstId); if(!src || !dst) return;
+  const snapDst = JSON.parse(JSON.stringify(dst)), snapSrc = JSON.parse(JSON.stringify(src));
+  const movedS = [], movedM = [];
+  dst.fieldDates = dst.fieldDates || {}; dst.extra = dst.extra || {};
+  $$("[data-mk]").filter(b=>b.checked).forEach(b=>{
+    const k = b.dataset.mk;
+    if(k.startsWith("x:")){ dst.extra[k.slice(2)] = src.extra[k.slice(2)]; dst.fieldDates[k] = today(); }
+    else { dst[k] = src[k]; dst.fieldDates[k] = today(); }
+  });
+  dst.tags = [...new Set((dst.tags||[]).concat((src.tags||[]).filter(t=>!/^⚠/.test(t))))];
+  dst.formKeys = [...new Set((dst.formKeys||[]).concat(personKeys(src)))];
+  if(src.filledAt && (!dst.filledAt || String(src.filledAt) > String(dst.filledAt))) dst.filledAt = src.filledAt;
+  DB.sessions.forEach(x=>{ if(x.pid===srcId){ x.pid = dstId; movedS.push(x.id); } });
+  DB.matches.forEach(m=>{ if(m.a===srcId){ m.a = dstId; movedM.push([m.id,"a"]); } if(m.b===srcId){ m.b = dstId; movedM.push([m.id,"b"]); } });
+  dst.updated = today();
+  DB.people = DB.people.filter(x=>x.id!==srcId);
+  personKeys(src).forEach(k=>logHandled(k, {act:"merged", name: src.fullName, exName: dst.fullName, exId: dstId}));
+  save(); closeSheet(); render(); if(ui.view==="intake") renderIntake();
+  toastUndo(`"${src.fullName}" מוזג/ה לתוך הכרטיס של ${dst.fullName}`, ()=>{
+    Object.keys(dst).forEach(k=>delete dst[k]); Object.assign(dst, snapDst);
+    if(!personById(srcId)) DB.people.push(snapSrc);
+    DB.sessions.forEach(x=>{ if(movedS.includes(x.id)) x.pid = srcId; });
+    movedM.forEach(([id,side])=>{ const m = DB.matches.find(x=>x.id===id); if(m) m[side] = srcId; });
+    personKeys(snapSrc).forEach(k=>{ const h = (formDB().handled||{})[k]; if(h && h.act==="merged") delete formDB().handled[k]; });
+    save(); render(); if(ui.view==="intake") renderIntake(); toast("המיזוג בוטל ✓");
+  });
 }
 
 /* ============ שלמות הייבוא: אף שורה לא הולכת לאיבוד ============ */
@@ -3093,7 +3221,8 @@ async function formReconcile(){
         else B.cards++;
         return;
       }
-      if(extraKey.has(key)){ B.twice++; items.push({row, name:extraKey.get(key).fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
+      if(extraKey.has(key)){ B.twice++; const hm = (F.handled||{})[key];
+        items.push({row, name:extraKey.get(key).fullName, why: hm && hm.act==="merged" ? handledText(key) : "מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
       if(pendKey.has(key)){ B.pend++; items.push({row, name:pendKey.get(key).p.fullName||nm0, why:"מילא/ה שוב עם פרטים שונים — ממתין/ה לאישור שלך (עדכון / כרטיס חדש / התעלמות)", done:true, act:"pend"}); return; }
       if(ignored.has(key)){
         B.deleted++;
@@ -5318,6 +5447,7 @@ function renderIntake(){
           ${!p.hold&&c.sus.length?`<button class="btn sm" onclick="markOk('${p.id}')">זה תקין</button>`:""}
           ${miss.length?`<button class="btn sm" onclick="askCompletion('${p.id}')">בקשת השלמה</button>`:""}
           <button class="btn ghost sm" onclick="editPerson('${p.id}')">עריכה</button>
+          <button class="btn sm" onclick="openMergePick('${p.id}')" title="זה אותו אדם כמו כרטיס קיים — לאחד אליו">⇄ מיזוג</button>
           <button class="btn danger sm" onclick="delPerson('${p.id}');renderIntake()">מחיקה</button>
         </div>
       </div>`; }).join("") + (list.length>300?`<div class="an-load">מוצגים 300 הראשונים מתוך ${list.length}</div>`:"")
@@ -5518,7 +5648,8 @@ function rowToPerson(headers, r, key, allowNameless){
   const p = {id:uid(), created:today(), updated:today(), extra:{}, source:"טופס", formKey:key};
   headers.forEach((h,i)=>{
     const val = String(r[i]==null?"":r[i]).trim();
-    if(!val || /חותמת זמן|timestamp|תאריך מילוי/i.test(h)) return;
+    if(val && /חותמת זמן|timestamp|תאריך מילוי/i.test(h)){ p.filledAt = tsToDate(val) || val; return; }
+    if(!val) return;
     const k = guessField(h);
     const xk = ()=>{ const base = h || ("עמודה "+(i+1)); return p.extra[base]==null ? base : base + " (" + (i+1) + ")"; };   /* כותרות כפולות — לא דורסים */
     if(k==="__extra") p.extra[xk()] = val;
@@ -5550,6 +5681,7 @@ async function syncForm(manual, dryRun){
     const token = await driveToken(!manual);
     const {headers, rows, counts, tabCount} = await fetchFormRows(token);
     if(CRY.locked){ FORM.busy = false; return null; }   /* ננעל בזמן הקריאה — לא נוגעים בנתונים */
+    if(!dryRun && registerExtraHeaders(headers, h=>guessField(h)==="__extra")) save();
     if(!headers.length) throw new Error("הגיליון ריק — עוד אין בו תשובות");
     if(!headers.some(h=>guessField(h)==="fullName"))
       throw new Error("לא נמצאה בגיליון עמודת שם (למשל ״שם פרטי ומשפחה״) — האם זה הגיליון הנכון?");
@@ -5769,7 +5901,8 @@ const HANDLED_TXT = {
   update:   h=>`התשובה החדשה עודכנה לתוך הכרטיס של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}${h.fields&&h.fields.length?` (${h.fields.length} פרטים)`:" (לא סומנו פרטים לעדכון)"}${h.reverted?` · ↩ הערכים הישנים הוחזרו ב-${fmtWhen(h.reverted)}`:""}`,
   fill:     h=>`"השלמת שדות ריקים בכולם" — הושלמו פרטים בכרטיס של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}`,
   bulkIgnore: h=>`"התעלמות מכולם" ב-${fmtWhen(h.date)} — התשובה החוזרת של ${h.name||""} לא נכנסה`,
-  pendOfDeleted: h=>`חיכתה לאישור, והכרטיס של ${h.exName||""} נמחק ב-${fmtWhen(h.date)}`
+  pendOfDeleted: h=>`חיכתה לאישור, והכרטיס של ${h.exName||""} נמחק ב-${fmtWhen(h.date)}`,
+  merged:   h=>`"${h.name||""}" מוזג/ה ידנית לתוך הכרטיס של ${h.exName||""} ב-${fmtWhen(h.date)}`
 };
 function fmtWhen(iso){ try{ const d = new Date(iso); return d.toLocaleDateString("he-IL") + " " + d.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso||""; } }
 function handledText(key){
@@ -5803,7 +5936,9 @@ function applyPending(i, mode){
   let ks = [];
   if(mode==="update" && ex){
     ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
-    var prevVals = {}; ks.forEach(k=>{ prevVals[k] = ex[k]; ex[k] = it.p[k]; });
+    var prevVals = {}; ex.fieldDates = ex.fieldDates || {};
+    ks.forEach(k=>{ prevVals[k] = ex[k]; ex[k] = it.p[k]; ex.fieldDates[k] = today(); });
+    if(it.p.filledAt) ex.filledAt = it.p.filledAt;
     var prevExtra = Object.assign({}, ex.extra||{});
     Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });   /* החדש גובר */
     ex.updated = today();
@@ -5828,7 +5963,9 @@ function bulkPending(mode){
   if(mode==="newer") F.pending.forEach(it=>{
     const ex = personById(it.exId); if(!ex) return;
     const prev = {}, prevExtra = Object.assign({}, ex.extra||{});
-    pendingDiff(it).forEach(x=>{ prev[x.k] = ex[x.k]; ex[x.k] = it.p[x.k]; n++; });
+    ex.fieldDates = ex.fieldDates || {};
+    pendingDiff(it).forEach(x=>{ prev[x.k] = ex[x.k]; ex[x.k] = it.p[x.k]; ex.fieldDates[x.k] = today(); n++; });
+    if(it.p.filledAt) ex.filledAt = it.p.filledAt;
     Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });
     ex.updated = today(); it.__prev = prev; it.__prevExtra = prevExtra; undoList.push({ex, prev, prevExtra});
   });
