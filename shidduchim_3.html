@@ -319,6 +319,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .chip.on{background:var(--teal-light);border-color:var(--teal);color:var(--teal)}
 @media (max-width:820px){ .call-wrap{grid-template-columns:1fr} .call-ref{position:static} }
 @media (max-width:820px){
+  .toast{bottom:auto;top:12px;left:12px;right:12px;max-width:none}
+  .maptable td,.maptable th{padding:6px 8px;font-size:12.5px}
   .win-title{flex-wrap:wrap;row-gap:6px}
   .win-title h3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .win-title > div[style*="min-width:0"]{flex:1 1 140px}
@@ -1256,6 +1258,7 @@ async function openVault(raw, secret){
 }
 
 function adoptDB(d){
+  (d.people||[]).forEach(p=>{ if(p && p.gender){ const g = normGender(p.gender); if(g !== p.gender) p.gender = g; } });
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
         form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || [], extraFields: d.extraFields || []};
 }
@@ -1300,6 +1303,8 @@ function idleLimit(){ return (parseInt(localStorage.getItem("idle_min")||"20",10
 function hideLockOn(){ return localStorage.getItem("hide_lock") !== "0"; }   /* מופעל כברירת מחדל */
 
 function lock(){
+  if(CRY.plain){ toast("אין חשבון עם סיסמה — אין מה לנעול. אפשר להגדיר סיסמה ברענון העמוד."); return; }
+  try{ syncCardEditors(); }catch(e){}   /* טקסט שהוקלד בכרטיס — נשמר לפני הנעילה */
   /* שיחה פתוחה — מה שנכתב נשמר לפני הנעילה */
   if(typeof CALL!=="undefined" && CALL){ try{ callSave(); }catch(e){} closeCallTimer(); CALL = null; }
   /* שינוי שעוד לא נשמר (בתוך 250 אלפיות השנייה האחרונות) — נשמר לפני שהמפתח נמחק */
@@ -1509,6 +1514,7 @@ async function tryUnlock(){
      כניסה רגילה חייבת לעבור דרך acctSecret עם השם הנכון. */
   if(opened && savedUser && viaSecret === pass && !CRY.usedRec){
     opened = null;   /* סיסמה נכונה אך ללא/עם שם שגוי — חוסמים */
+    CRY.key = null; CRY.rawDEK = null; CRY.wrapPass = null;
   }
   if(opened){
     adoptDB(opened);
@@ -1818,7 +1824,8 @@ function setView(v){
 }
 
 function render(){
-  $("#railCount").textContent = DB.people.length + " מועמדים";
+  { const held = DB.people.filter(p=>p.hold).length;
+    $("#railCount").textContent = (DB.people.length - held) + " מועמדים" + (held ? ` (+${held} לבדיקה)` : ""); }
   const acct = $("#acctLine");
   if(acct){
     const u = localStorage.getItem("acct_user");
@@ -2207,8 +2214,8 @@ function editPerson(id){
   });
   const extraKeys = allExtraKeys();
   html += `<div class="sect" style="display:flex;align-items:center;gap:8px">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)
-      <button class="btn ghost sm" style="margin-inline-start:auto" onclick="addExtraField('${p.id}')">+ שדה חדש לכל הכרטיסים</button></div>
-    <div class="form-grid">` +
+      <button class="btn ghost sm" style="margin-inline-start:auto" onclick="addExtraField()">+ שדה חדש לכל הכרטיסים</button></div>
+    <div class="form-grid" id="xFields">` +
     extraKeys.map((k,i)=>{ const v = String((p.extra||{})[k]==null?"":(p.extra||{})[k]);
       return `<div class="field${v.length>60?" wide":""}"><label>${esc(k)}</label>${v.length>60
         ? `<textarea id="x_${i}" data-xkey="${esc(k)}">${esc(v)}</textarea>`
@@ -2313,7 +2320,9 @@ function delPerson(id){
   DB.people = DB.people.filter(x=>x.id!==id);
   DB.matches = DB.matches.filter(m=>m.a!==id && m.b!==id);
   DB.sessions = DB.sessions.filter(x=>x.pid!==id);
-  DB.sessions.forEach(x=>{ if(gone.has(x.mid)) delete x.mid; });   /* התחקיר של הצד השני נשאר בתיק שלו */
+  const unlinked = [];
+  DB.sessions.forEach(x=>{ if(gone.has(x.mid)){ unlinked.push([x.id, x.mid]); delete x.mid; } });   /* התחקיר של הצד השני נשאר בתיק שלו */
+  { const t = DB.trash[DB.trash.length-1]; if(t && t.id===tid){ t.unlinked = unlinked; t.pendItems = pendOf; } }
   { const F = formDB(); F.ignored = F.ignored || [];
     /* נמחק בכוונה — גם התשובות שלו שחיכו לאישור לא ייובאו שוב מהגיליון */
     personKeys(p).concat(F.pending.filter(it=>it.exId===id).map(it=>keyCanon(it.key))).forEach(k=>{ if(!F.ignored.includes(k)) F.ignored.push(k); });
@@ -2629,14 +2638,20 @@ function parseProfileText(text){
 }
 
 /* נרמול משותף לכל מסלולי הייבוא */
+/* "בחורה", "נקבה", "אישה", "בת 22"… → בת ;  "בחור", "זכר", "גבר", "בן"… → בן  (נקבה נבדקת קודם — "בחורה" מכילה "בחור") */
+function normGender(g){
+  g = String(g==null?"":g).trim(); if(!g) return "";
+  if(/בחור[הת]|נקבה|אישה|אשה|גברת|^בת(?![א-ת])|^נ$|female|^f$/i.test(g)) return "בת";
+  if(/בחור|זכר|גבר|^בן(?![א-ת])|^ז$|^male|^m$/i.test(g)) return "בן";
+  return g;
+}
 function normalizeImported(p){
-  if(p.gender){
-    const g = String(p.gender).trim();
-    if(/^(ז|זכר|בן|גבר|m|male)$/i.test(g)) p.gender="בן";
-    else if(/^(נ|נקבה|בת|אישה|f|female)$/i.test(g)) p.gender="בת";
-  }
+  if(p.gender) p.gender = normGender(p.gender);
   if(p.age){ const n = String(p.age).match(/\d+/);
-    if(n){ let a = +n[0]; if(a > 1900 && a <= new Date().getFullYear()) a = new Date().getFullYear() - a; p.age = String(a); } }
+    if(n && !/^\s*\d{1,3}(\.\d)?\s*$/.test(String(p.age))){ p.extra = p.extra || {}; p.extra["גיל (כפי שנרשם בקובץ)"] = String(p.age); }
+    const dm = String(p.age).match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);   /* תאריך לידה → גיל לפי השנה */
+    if(dm){ let y = +dm[3]; if(y < 100) y += y > 30 ? 1900 : 2000; p.age = String(new Date().getFullYear() - y); }
+    else if(n){ let a = +n[0]; if(a > 1900 && a <= new Date().getFullYear()) a = new Date().getFullYear() - a; p.age = String(a); } }
   if(p.community){
     const n = normSector(p.community);
     if(n !== p.community) p.extra["חוג (כפי שנרשם בקובץ)"] = p.community;
@@ -2681,6 +2696,7 @@ function normalizeImported(p){
     }).filter(r=>r.name || r.phone);
     if(!p.refs.length){ p.extra["בירורים (כפי שנרשם)"] = raw; p.refs = []; }
   }
+  if(p.status && !STATUSES.includes(p.status)){ p.extra = p.extra || {}; p.extra["סטטוס (כפי שנרשם בקובץ)"] = String(p.status); }
   if(!p.status || !STATUSES.includes(p.status)) p.status = "פנוי";
   return p;
 }
@@ -2721,6 +2737,7 @@ function guessField(header){
   const h = String(header||"").trim().toLowerCase().replace(/\s+/g," ");
   /* "שם משפחה" לבדו = שם המשפחה של המועמד (לא רקע המשפחה) — נשמר בצד ומצורף לשם המלא */
   if(/^שם (ה)?משפחה[:?]?$/.test(h)) return "__extra";
+  if(/^(נקלט\/ה|עודכן\/ה)$/.test(h)) return "__skip";   /* עמודות תאריך מהייצוא של הכלי עצמו */
   for(const k in SYN){
     if(SYN[k].some(s=>h===s.toLowerCase())) return k;
   }
@@ -2753,7 +2770,7 @@ function handleFile(file){
           showMapping();
           toast("זוהתה טבלה במסמך");
         }else{
-          importProfile(doc.body.textContent || "");
+          importProfile([...doc.body.querySelectorAll("p,li,h1,h2,h3,h4,h5,h6")].map(x=>x.textContent.trim()).filter(Boolean).join("\n") || doc.body.textContent || "");
         }
       }).catch(err=>toast("שגיאה בקריאת מסמך הוורד: "+err.message));
     };
@@ -2865,6 +2882,7 @@ function runImport(){
     pending.headers.forEach((h,i)=>{
       const target = map[i]; const val = String(r[i]==null?"":r[i]).trim();
       if(!val || target==="__skip") return;
+      if(i === tsCol) return;   /* חותמת הזמן היא תאריך המילוי — לא שדה */
       const xk = ()=>{ const base = h || ("עמודה "+(i+1)); return p.extra[base]==null ? base : base + " (" + (i+1) + ")"; };   /* כותרות כפולות — לא דורסים */
       if(target==="__extra") p.extra[xk()] = val;
       else if(!p[target]) p[target] = val;
@@ -2956,18 +2974,26 @@ function registerExtraHeaders(headers, isExtra){
 }
 
 /* שדות נוספים: כל עמודה מהאקסל/הטופס שאין לה שדה קבוע, וכל שדה שהשדכנית הוסיפה — מופיעים בכל הכרטיסים */
+const TS_KEY = /חותמת זמן|timestamp|תאריך מילוי/i;
 function allExtraKeys(){
   const set = new Set(DB.extraFields || []);
   DB.people.forEach(p=>Object.keys(p.extra||{}).forEach(k=>set.add(k)));
-  return [...set];
+  return [...set].filter(k=>!TS_KEY.test(k));
 }
-async function addExtraField(pid){
+async function addExtraField(){
   const r = await ask({title:"שדה חדש לכל הכרטיסים", note:"למשל: \"מקום עבודה\", \"שנת עלייה\", \"הערות מהאקסל\". השדה יופיע בכל הכרטיסים, וגם בייצוא לאקסל.",
     fields:[{label:"שם השדה", type:"text"}], ok:"הוספה"});
   if(!r || !String(r[0]||"").trim()) return;
   const name = String(r[0]).trim().slice(0,80);
+  if(allExtraKeys().includes(name)) return toast(`השדה "${name}" כבר קיים`);
   DB.extraFields = [...new Set((DB.extraFields||[]).concat(name))];
-  save(); editPerson(pid); toast(`השדה "${name}" נוסף לכל הכרטיסים`);
+  save();
+  /* מוסיפים את השדה לטופס הפתוח בלי לבנות אותו מחדש — כדי לא לאבד מה שכבר הוקלד */
+  const host = $("#xFields");
+  if(host){ const d = document.createElement("div"); d.className = "field";
+    d.innerHTML = `<label>${esc(name)}</label><input id="x_new_${Date.now()}" data-xkey="${esc(name)}" value="">`;
+    host.appendChild(d); d.querySelector("input").focus(); }
+  toast(`השדה "${name}" נוסף לכל הכרטיסים`);
 }
 
 /* ============ מיזוג: פנייה (למשל חשודה/מושהית) שהיא בעצם אותו אדם כמו כרטיס קיים ============
@@ -3009,10 +3035,10 @@ function openMergeDiff(srcId, dstId){
       <div class="meta">מסומן מראש: הפרטים מהפנייה גוברים. הורידו סימון ממה שרוצים להשאיר כמו בכרטיס הקיים.</div></div>
     <button class="x" onclick="openMergePick('${srcId}')" aria-label="חזרה">×</button>`;
   $("#sheetBody").innerHTML = `<div class="win-col">
-    ${all.length ? `<table class="maptable"><thead><tr><th></th><th>שדה</th><th>בכרטיס הקיים</th><th>בפנייה</th></tr></thead><tbody>
+    ${all.length ? `<div style="overflow-x:auto;max-width:100%"><table class="maptable"><thead><tr><th></th><th>שדה</th><th>בכרטיס הקיים</th><th>בפנייה</th></tr></thead><tbody>
       ${all.map(x=>`<tr><td><input type="checkbox" data-mk="${esc(x.k)}" checked></td><td><b>${esc(x.l)}</b></td>
         <td class="sample">${x.cur?esc(x.cur.slice(0,90)):'<span style="color:#c3cad1">— ריק —</span>'}</td>
-        <td class="sample" style="color:var(--ink)">${esc(x.nw.slice(0,90))}</td></tr>`).join("")}</tbody></table>`
+        <td class="sample" style="color:var(--ink)">${esc(x.nw.slice(0,90))}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="an-load">כל הפרטים בפנייה כבר קיימים בכרטיס — המיזוג רק יאחד את שתי הרשומות.</div>`}
     ${ns||nm ? `<div class="card-hint" style="margin-top:10px">יעברו לכרטיס הקיים: ${ns?`${ns} פגישות`:""}${ns&&nm?" ו":""}${nm?`${nm} הצעות`:""}.</div>` : ""}
   </div>`;
@@ -3035,9 +3061,17 @@ function applyMerge(srcId, dstId){
   if(src.filledAt && (!dst.filledAt || String(src.filledAt) > String(dst.filledAt))) dst.filledAt = src.filledAt;
   DB.sessions.forEach(x=>{ if(x.pid===srcId){ x.pid = dstId; movedS.push(x.id); } });
   DB.matches.forEach(m=>{ if(m.a===srcId){ m.a = dstId; movedM.push([m.id,"a"]); } if(m.b===srcId){ m.b = dstId; movedM.push([m.id,"b"]); } });
+  if(Array.isArray(src.refs) && src.refs.length){ const seenR = new Set((dst.refs||[]).map(r=>normPhone(r.phone)||r.name)); dst.refs = (dst.refs||[]).concat(src.refs.filter(r=>!seenR.has(normPhone(r.phone)||r.name))); }
+  if(src.photo && !dst.photo) dst.photo = src.photo;
+  if(src.card && !dst.card) dst.card = src.card;
+  const pendMoved = [];
+  formDB().pending.forEach(it=>{ if(it.exId===srcId){ it.exId = dstId; pendMoved.push(it); } });
   dst.updated = today();
+  /* הפנייה עצמה נשמרת בסל המחזור — אפשר לשחזר אותה גם אחרי שהביטול המהיר נעלם */
+  const tid = uid();
+  DB.trash = (DB.trash||[]).concat({id: tid, date: new Date().toISOString(), p: snapSrc, matches: [], sessions: [], mergedInto: dstId}).slice(-1000);
   DB.people = DB.people.filter(x=>x.id!==srcId);
-  personKeys(src).forEach(k=>logHandled(k, {act:"merged", name: src.fullName, exName: dst.fullName, exId: dstId}));
+  personKeys(src).forEach(k=>logHandled(k, {act:"merged", name: src.fullName, exName: dst.fullName, exId: dstId, trashId: tid}));
   save(); closeSheet(); render(); if(ui.view==="intake") renderIntake();
   toastUndo(`"${src.fullName}" מוזג/ה לתוך הכרטיס של ${dst.fullName}`, ()=>{
     Object.keys(dst).forEach(k=>delete dst[k]); Object.assign(dst, snapDst);
@@ -3045,6 +3079,8 @@ function applyMerge(srcId, dstId){
     DB.sessions.forEach(x=>{ if(movedS.includes(x.id)) x.pid = srcId; });
     movedM.forEach(([id,side])=>{ const m = DB.matches.find(x=>x.id===id); if(m) m[side] = srcId; });
     personKeys(snapSrc).forEach(k=>{ const h = (formDB().handled||{})[k]; if(h && h.act==="merged") delete formDB().handled[k]; });
+    pendMoved.forEach(it=>{ it.exId = srcId; });
+    DB.trash = (DB.trash||[]).filter(t=>t.id!==tid);
     save(); render(); if(ui.view==="intake") renderIntake(); toast("המיזוג בוטל ✓");
   });
 }
@@ -3082,6 +3118,10 @@ function samePersonGuess(a, b){
    לא משנים שום נתון: רק מקשרים את הכרטיס לשורה בגיליון, כדי שלא תוצע שוב */
 function sameRowAs(ex, p, key){
   if(pendingDiff({p, exId:ex.id}).length) return false;
+  /* גם הערות, ממליצים, חוגים ושדות נוספים — אם משהו השתנה, זו לא אותה תשובה */
+  const n = v => JSON.stringify(v==null || (Array.isArray(v) && !v.length) ? "" : v).replace(/\s+/g," ");
+  if(["notes","refs","openTo"].some(k=>hasVal(p[k]) && n(p[k]) !== n(ex[k]))) return false;
+  if(Object.entries(p.extra||{}).some(([k,v])=>!TS_KEY.test(k) && String(v||"").trim() && String(v).trim() !== String((ex.extra||{})[k]||"").trim())) return false;
   if(!personKeys(ex).includes(keyCanon(key))){ ex.formKeys = (ex.formKeys||[]).concat(key); }
   return true;
 }
@@ -3307,9 +3347,10 @@ async function exportSealed(){
 /* בניית חוברת העבודה — משותפת להורדה ידנית ולגיבוי לדרייב */
 function buildWorkbook(db){
   db = db || DB;
-  const extraKeys = [...new Set(db.people.flatMap(p=>Object.keys(p.extra||{})))];
-  const head = FIELDS.map(f=>f.l).concat(extraKeys);
-  const body = db.people.map(p=>FIELDS.map(f=>disp(p[f.k])).concat(extraKeys.map(k=>(p.extra||{})[k]||"")));
+  const extraKeys = [...new Set((db.extraFields||[]).concat(db.people.flatMap(p=>Object.keys(p.extra||{}))))].filter(k=>!/חותמת זמן|timestamp|תאריך מילוי/i.test(k));
+  /* חותמת זמן בראש — כך ייבוא חוזר של הקובץ מזהה כל שורה ולא מכפיל */
+  const head = ["חותמת זמן"].concat(FIELDS.map(f=>f.l), extraKeys, ["נקלט/ה", "עודכן/ה"]);
+  const body = db.people.map(p=>[p.filledAt||""].concat(FIELDS.map(f=>disp(p[f.k])), extraKeys.map(k=>(p.extra||{})[k]||""), [p.created||"", p.updated||""]));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head,...body]), "מועמדים");
 
@@ -4065,10 +4106,16 @@ async function testAI(){
    מוחלפים בכינוי לפני השליחה. הניתוח לא צריך אותם — רק את התוכן. */
 function aiAnon(){ return localStorage.getItem("ai_anon") !== "0"; }
 const AI_PII = ["fullName","prayerName","email","phone","contact","contactPhone","refs"];
-function scrubForAI(text, p){
+/* החלפת מילה שלמה בלבד (עם אותיות שימוש) — כדי ש"אור" לא יפגע ב"אורח", ו"המועמד" לא ב"המועמדים" */
+function replaceWord(text, word, repl){
+  if(!word) return String(text);
+  const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(text).replace(new RegExp(`(^|[^א-ת])([והבלמשכ]{0,2})${escRe(word)}(?![א-ת])`, "g"), (m0,pre,pfx)=>pre+pfx+repl);
+}
+function scrubForAI(text, p, aliasOverride){
   if(!aiAnon()) return String(text);
   let t = String(text);
-  const alias = p && p.gender==="בת" ? "המועמדת" : "המועמד";
+  const alias = aliasOverride || (p && p.gender==="בת" ? "המועמדת" : "המועמד");
   if(p && p.fullName){
     const names = [String(p.fullName).trim(),
       ...String(p.fullName).trim().split(/\s+/).filter(w=>w.length>=2)];
@@ -4585,7 +4632,7 @@ const CARD_STYLE = {
 /* ============ כל החומר שבתיק — לניסוח כרטיס ============ */
 /* מאחד את כל מה שידוע על המועמד: שדות הטופס, שדות נוספים מהטופס/הקובץ (extra), מה שהשדכנית
    כבר כתבה בכרטיס, תמצית הניתוח וסיכומי הפגישות — כדי שה-AI ינסח מכל הפרטים ולא רק מחלקם. */
-const EXTRA_PII = /טלפון|נייד|פלאפון|מייל|אימייל|e-?mail|דוא"?ל|ת\.?ז|תעודת|כתובת מגורים|רחוב|שם משפחה|שם פרטי|שם מלא|חותמת זמן|timestamp|ממליצ|ממליץ|בריאות|רפואי|מחל|תרופ/i;
+const EXTRA_PII = /טלפון|נייד|פלאפון|מייל|אימייל|e-?mail|דוא["״]?ל|ת["״.]?ז|תעודת|מספר זהות|כתובת|רחוב|מיקוד|שם משפחה|שם פרטי|שם מלא|שם ה?(אב|אם|הורה|הורים|אבא|אמא)|חותמת זמן|timestamp|ממליצ|ממליץ|בריאות|רפואי|מחל|תרופ/i;
 function caseMaterial(p, skip, opt){
   opt = opt || {};
   const lines = [];
@@ -4593,7 +4640,7 @@ function caseMaterial(p, skip, opt){
   const ex = p.extra || {};
   Object.keys(ex).forEach(k=>{
     const v = String(ex[k]==null?"":ex[k]).trim();
-    if(!v || EXTRA_PII.test(k) || /@|\d{3}[-\s]?\d{6,7}/.test(v)) return;
+    if(!v || EXTRA_PII.test(k) || /@|\d{3}[-\s]?\d{6,7}|(?<!\d)\d{8,9}(?!\d)/.test(v)) return;
     lines.push(`${k}: ${v.slice(0,400)}`);
   });
   const c = p.card || {};
@@ -4620,7 +4667,7 @@ function checkCardText(text, p, kind){
   if(/\b0\d{1,2}[-\s]?\d{3}[-\s]?\d{4}\b|\+972/.test(t.replace(gcardSign(),""))) w.push("מופיע מספר טלפון בגוף הכרטיס");
   if(/[\w.-]+@[\w-]+\.\w+/.test(t)) w.push("מופיעה כתובת מייל בכרטיס");
   const last = String(p.fullName||"").trim().split(/\s+/).slice(1).join(" ");
-  if(kind==="group" && last && last.length>1 && t.includes(last)) w.push("מופיע שם המשפחה — בכרטיס לקבוצות לא כותבים אותו");
+  if(kind==="group" && last && last.length>1 && replaceWord(t, last, "\u0000") !== t) w.push("מופיע שם המשפחה — בכרטיס לקבוצות לא כותבים אותו");
   const age = parseInt(p.age,10);
   const m = t.match(/גיל[:\s*]*(\d{2})/);
   if(age && m && Math.abs(parseInt(m[1],10)-age)>1) w.push(`הגיל בכרטיס (${m[1]}) לא תואם לגיל בתיק (${age})`);
@@ -4763,8 +4810,7 @@ ${facts}
   const first = String(p.fullName||"").trim().split(/\s+/)[0] || "";
   let text = raw.replace(/```/g,"").trim();
   if(first){
-    text = text.split("[שם]").join(first)
-               .split("המועמדת").join(first).split("המועמד").join(first);
+    text = replaceWord(replaceWord(text.split("[שם]").join(first), "המועמדת", first), "המועמד", first);
   }
   text += `\n\n*לפרטים ויצירת קשר:*\n${gcardSign()}`;
   p.groupCard = {text, date:today(), warn: checkCardText(text, p, "group")};
@@ -4938,7 +4984,7 @@ async function reviseCardAI(pid, kind){
   if(kind==="group"){
     cur = String(($("#gcardText")&&$("#gcardText").value) || (p.groupCard&&p.groupCard.text) || "");
     cur = cur.split("*לפרטים ויצירת קשר:*")[0].trim();
-    if(first) cur = cur.split(first).join("[שם]");
+    if(first) cur = replaceWord(cur, first, "[שם]");
     prompt = `לפניך כרטיס שידוכים של ${g} לשליחה בקבוצות וואטסאפ. תקן אותו לפי הבקשה של השדכנית.
 
 הבקשה: ${want}
@@ -4981,7 +5027,7 @@ ${facts}
     const raw = await callAI(scrubForAI(prompt, p));
     if(kind==="group"){
       let text = raw.replace(/```/g,"").trim().split("*לפרטים ויצירת קשר:*")[0].trim();
-      if(first) text = text.split("[שם]").join(first).split("המועמדת").join(first).split("המועמד").join(first);
+      if(first) text = replaceWord(replaceWord(text.split("[שם]").join(first), "המועמדת", first), "המועמד", first);
       text += `\n\n*לפרטים ויצירת קשר:*\n${sign}`;
       p.groupCard = {text, date:today(), warn: checkCardText(text, p, "group"), revised: want};
       save();
@@ -5177,7 +5223,7 @@ ${p.analysis&&p.analysis.summary?"\nתמצית ניתוח קודם: "+p.analysis
   try{
     let safe = scrubForAI(prompt, p);
     /* גם שמות הצד השני בהצעות לא יוצאים החוצה */
-    DB.matches.filter(m=>m.a===pid||m.b===pid).forEach(m=>{ const o = personById(m.a===pid?m.b:m.a); if(o) safe = scrubForAI(safe, o).replace(/המועמד(ת)?(?=[^א-ת]|$)/g, "הצד השני"); });
+    DB.matches.filter(m=>m.a===pid||m.b===pid).forEach(m=>{ const o = personById(m.a===pid?m.b:m.a); if(o) safe = scrubForAI(safe, o, "הצד השני"); });
     const d = aiParse(await callAI(safe));
     p.prep = Object.assign({}, d, {date:today()});
     save();
@@ -5312,7 +5358,7 @@ keywords: מילות מפתח לחיפוש בטקסט החופשי של הכרט
     const d = aiParse(await callAI(prompt));
     ui.smart = {
       label:q,
-      gender: ["בן","בת"].includes(d.gender) ? d.gender : "",
+      gender: ["בן","בת"].includes(normGender(d.gender)) ? normGender(d.gender) : "",
       ageMin: parseFloat(d.ageMin)||null, ageMax: parseFloat(d.ageMax)||null,
       sectors: (d.sectors||[]).filter(x=>SECTORS.includes(x)),
       openTo:  (d.openTo||[]).filter(x=>SECTORS.includes(x)),
@@ -5324,24 +5370,36 @@ keywords: מילות מפתח לחיפוש בטקסט החופשי של הכרט
 }
 function clearSmart(){ ui.smart = null; renderCards(); }
 /* ציון חיפוש חכם לכרטיס: null = לא עובר את הסינון */
+/* חיפוש חכם: רק מה שידוע בוודאות פוסל (מין, גיל או חוג שכתובים בכרטיס ולא מתאימים).
+   מה שחסר בכרטיס לא פוסל — רק מוריד בדירוג. מילות המפתח מדרגות, ומושוות לפי שורש
+   ("רגועה" = "רגוע", "וטבע" = "טבע"), כך שאין "אפס תוצאות" בגלל צורת כתיבה. */
+const STEMS = new Map();
 function smartHit(p, hay){
   const S = ui.smart; if(!S) return 0;
-  if(S.gender && p.gender!==S.gender) return null;
+  let score = 1;
+  const g = normGender(p.gender);
+  if(S.gender){ if(g && g!==S.gender) return null; if(!g) score -= 0.5; }
   const age = parseFloat(p.age);
-  if(S.ageMin && (!age || age < S.ageMin)) return null;
-  if(S.ageMax && (!age || age > S.ageMax)) return null;
+  if(S.ageMin || S.ageMax){
+    if(age){ if(S.ageMin && age < S.ageMin) return null; if(S.ageMax && age > S.ageMax) return null; score += 1; }
+    else score -= 0.5;
+  }
   if(S.sectors.length){
     const sec = p.community || normSector(p.hashkafa);
-    if(!S.sectors.includes(sec)) return null;
+    if(sec){ if(!S.sectors.includes(sec) && !S.sectors.some(x=>(p.openTo||[]).includes(x))) return null; score += 1; }
   }
-  if(S.openTo.length && !S.openTo.some(x=>(p.openTo||[]).includes(x))) return null;
+  if(S.openTo.length && S.openTo.some(x=>(p.openTo||[]).includes(x))) score += 1;
   if(S.cities.length){
-    const where = (String(p.city||"")+" "+String(p.preferredLocation||"")).toLowerCase();
-    if(!S.cities.some(c=>where.includes(c.toLowerCase()))) return null;
+    const where = (String(p.city||"")+" "+String(p.preferredLocation||"")+" "+String(p.parentsHome||"")).toLowerCase();
+    if(S.cities.some(c=>{ c = c.toLowerCase().trim(); return c && (where.includes(c) || (where.trim() && c.includes(String(p.city||"").toLowerCase().trim()||"~"))); })) score += 3;
   }
-  if(!S.keywords.length) return 1;
-  const hits = S.keywords.filter(k=>hay.includes(k)).length;
-  return hits ? hits : null;
+  if(S.keywords.length){
+    let st = STEMS.get(p.id);
+    if(!st || st.hay !== hay){ st = {hay, set: new Set(heWords(hay).keys())}; STEMS.set(p.id, st); }
+    const hits = S.keywords.filter(k=>(k.length >= 3 && hay.includes(k)) || [...heWords(k).keys()].some(w=>st.set.has(w))).length;
+    score += hits * 2;
+  }
+  return score;
 }
 
 /* ============ קליטה וניהול: מי הצטרף, פניות חשודות, פניות חלקיות ============ */
@@ -5606,17 +5664,27 @@ async function fetchFormRows(token){
   const isResp = p => p.headers.some(h=>/חותמת זמן|timestamp/i.test(h)) && p.headers.some(h=>guessField(h)==="fullName");
   if(!cfg.gid){ const resp = parts.filter(isResp); parts = resp.length ? resp : parts.slice(0,1); }
   /* איחוד: כותרות משותפות לפי שם העמודה, וכל שורה מסודרת מחדש לפיהן */
+  /* כל עמודה לפי המופע שלה — שתי שאלות בשם "הערות" נשארות שתי עמודות, ועמודה בלי כותרת מקבלת שם */
+  const label = (p, i) => { const h = p.headers[i] || ("עמודה " + (i+1));
+    const n = p.headers.slice(0, i).filter((x,j)=>(x || ("עמודה " + (j+1)))===h).length;
+    return n ? `${h} (${n+1})` : h; };
   const headers = [];
-  parts.forEach(p=>p.headers.forEach(h=>{ if(h && !headers.includes(h)) headers.push(h); }));
-  const seenKeys = new Set(), rows = [];
-  parts.forEach(p=>p.rows.forEach(r=>{
-    const row = headers.map(h=>{ const i = p.headers.indexOf(h); return i>=0 ? (r[i]==null?"":r[i]) : ""; });
-    const k = rowKey(headers, row);
-    if(seenKeys.has(k)) return;        /* אותה תשובה בשתי לשוניות */
-    seenKeys.add(k); rows.push(row);
-  }));
+  parts.forEach(p=>{ p.labels = p.headers.map((_,i)=>label(p,i)); p.labels.forEach(l=>{ if(!headers.includes(l)) headers.push(l); }); });
+  /* נרמול כותרות "(2)" לשם המקורי לצורך זיהוי שדה — rowToPerson שומר כפולות בצד */
+  const outHeaders = headers.map(h=>h.replace(/ \(\d+\)$/,"")).map((h,i)=>/^עמודה \d+$/.test(headers[i]) ? "" : h);
+  const keyFrom = new Map(), rows = [];
+  parts.forEach((p, pi)=>{
+    const W = Math.max(p.headers.length, ...p.rows.map(r=>r.length));
+    for(let i=p.labels.length; i<W; i++){ const l = "עמודה " + (i+1); p.labels.push(l); if(!headers.includes(l)){ headers.push(l); outHeaders.push(""); } }
+    p.rows.forEach(r=>{
+      const row = headers.map(h=>{ const i = p.labels.indexOf(h); return i>=0 ? (r[i]==null?"":r[i]) : ""; });
+      const k = rowKey(outHeaders, row);
+      if(keyFrom.has(k) && keyFrom.get(k) !== pi) return;   /* אותה תשובה גם בלשונית אחרת — לא בתוך אותה לשונית */
+      keyFrom.set(k, pi); rows.push(row);
+    });
+  });
   const counts = parts.map(p=>`${p.tab}: ${p.rows.length}`).join(" · ");
-  return {headers, rows, tab: parts.map(p=>p.tab).join(" + "), counts, tabCount: parts.length};
+  return {headers: outHeaders, rows, tab: parts.map(p=>p.tab).join(" + "), counts, tabCount: parts.length};
 }
 
 /* מזהה קבוע לכל תשובה: חותמת הזמן + השם (ואם אין חותמת — כל תוכן השורה) */
@@ -5651,6 +5719,7 @@ function rowToPerson(headers, r, key, allowNameless){
     if(val && /חותמת זמן|timestamp|תאריך מילוי/i.test(h)){ p.filledAt = tsToDate(val) || val; return; }
     if(!val) return;
     const k = guessField(h);
+    if(k==="__skip") return;
     const xk = ()=>{ const base = h || ("עמודה "+(i+1)); return p.extra[base]==null ? base : base + " (" + (i+1) + ")"; };   /* כותרות כפולות — לא דורסים */
     if(k==="__extra") p.extra[xk()] = val;
     else if(!p[k]) p[k] = val;
@@ -5701,12 +5770,19 @@ async function syncForm(manual, dryRun){
     }
     let added = 0, pending = 0, similar = 0, skipped = 0, already = 0, held = 0, merged = 0;
     const firstRun = !F.baselined || !DB.people.length;   /* כרטסייה ריקה (למשל אחרי איפוס) = ייבוא מלא מחדש */
-    const runIds = new Set();
+    const runIds = new Set(), runKeys = new Set(); let dupN = 0;
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
       seen.add(key);
       const p = rowToPerson(headers, r, key, true);
       if(!p){ skipped++; return; }
+      /* אותו אדם הגיש פעמיים באותה דקה (למשל תיקון מיד אחרי השליחה) — המזהה זהה, אבל זו תשובה נוספת: לאישור */
+      if(runKeys.has(key)){
+        const ex = DB.people.find(x=>personKeys(x).includes(key));
+        if(ex){ F.pending.push({key: key + "#" + (++dupN), p, exId: ex.id, date: today(), why: "הגיש/ה שוב באותה דקה"}); pending++; }
+        return;
+      }
+      runKeys.add(key);
       if(p.nameless){   /* תשובה בלי שם — לא נזרקת: נכנסת לבדיקה בדף הקליטה */
         const nl = DB.people.find(x=>/^ללא שם/.test(String(x.fullName||"")) && ((normPhone(p.phone)&&normPhone(x.phone)===normPhone(p.phone)) || (normEmail(p.email)&&normEmail(x.email)===normEmail(p.email))));
         if(nl && sameRowAs(nl, Object.assign({}, p, {fullName:nl.fullName}), key)){ already++; return; }
@@ -5733,7 +5809,7 @@ async function syncForm(manual, dryRun){
       if(ex){ p.tags = ["⚠ טלפון/מייל משותף עם " + ex.fullName]; }
       const nm = String(p.fullName).trim();
       if(DB.people.some(x=>String(x.fullName||"").trim()===nm)){
-        p.tags = ["⚠ שם דומה קיים"]; similar++;
+        p.tags = (p.tags||[]).concat("⚠ שם דומה קיים"); similar++;
       }
       const chk = intakeCheck(p);
       if(chk.sus.length || chk.missing.filter(m=>m!=="שם משפחה").length >= 3){
@@ -5925,6 +6001,8 @@ function restoreTrash(tid){
   (t.matches||[]).forEach(m=>{ if(!DB.matches.some(x=>x.id===m.id)) DB.matches.push(m); });
   (t.sessions||[]).forEach(x=>{ if(!DB.sessions.some(y=>y.id===x.id)) DB.sessions.push(x); });
   personKeys(p).concat(t.pendKeys||[]).forEach(unIgnore);
+  (t.unlinked||[]).forEach(([sid, mid])=>{ const x = DB.sessions.find(y=>y.id===sid); if(x && DB.matches.some(m=>m.id===mid)) x.mid = mid; });
+  (t.pendItems||[]).forEach(it=>{ const F = formDB(); if(!F.pending.some(x=>x.key===it.key)) F.pending.push(Object.assign({}, it, {exId: p.id})); });
   T.splice(i,1);
   save(); render(); toast(`${p.fullName} שוחזר/ה לכרטסייה — עם ההצעות והפגישות שהיו`);
   return p;
@@ -5960,8 +6038,11 @@ function bulkPending(mode){
   if(mode==="ignore" && !confirm(`להתעלם מכל ${F.pending.length} התשובות הממתינות? הכרטיסים הקיימים לא ישתנו.`)) return;
   if(mode==="newer" && !confirm(`לעדכן את כל ${F.pending.length} הכרטיסים לפי התשובה החדשה? (הערכים הישנים נשמרים וניתנים להחזרה)`)) return;
   const undoList = [];
+  const pendBefore = F.pending.slice(), ignBefore = (F.ignored||[]).slice(), seenBefore = F.seen.slice(), handledBefore = JSON.parse(JSON.stringify(F.handled||{}));
+  const snaps = new Map();   /* מצב כל כרטיס לפני העדכון — לביטול מדויק גם כשיש כמה תשובות לאותו כרטיס */
   if(mode==="newer") F.pending.forEach(it=>{
     const ex = personById(it.exId); if(!ex) return;
+    if(!snaps.has(ex.id)) snaps.set(ex.id, JSON.parse(JSON.stringify(ex)));
     const prev = {}, prevExtra = Object.assign({}, ex.extra||{});
     ex.fieldDates = ex.fieldDates || {};
     pendingDiff(it).forEach(x=>{ prev[x.k] = ex[x.k]; ex[x.k] = it.p[x.k]; ex.fieldDates[x.k] = today(); n++; });
@@ -5971,15 +6052,21 @@ function bulkPending(mode){
   });
   if(mode==="fill") F.pending.forEach(it=>{
     const ex = personById(it.exId); if(!ex) return;
-    pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; n++; });
-    if(n) ex.updated = today();
+    let c = 0; ex.fieldDates = ex.fieldDates || {}; ex.extra = ex.extra || {};
+    pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; ex.fieldDates[x.k] = today(); c++; });
+    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ if(String(v||"").trim() && !String(ex.extra[k]||"").trim()){ ex.extra[k] = v; ex.fieldDates["x:"+k] = today(); c++; } });
+    if(c) ex.updated = today(); n += c;
   });
   F.ignored = F.ignored || [];
   F.pending.forEach(it=>{ if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key); if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key);
     const ex = personById(it.exId); logHandled(it.key, {act: mode==="fill" ? "fill" : mode==="newer" ? "update" : "bulkIgnore", name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, p: it.p, prev: it.__prev, prevExtra: it.__prevExtra, fields: it.__prev ? Object.keys(it.__prev) : undefined}); });
   F.pending = [];
   save(); render(); renderForm(); closeSheet();
-  if(mode==="newer") toastUndo(`עודכנו ${undoList.length} כרטיסים — התשובה החדשה גברה (${n} פרטים)`, ()=>{ undoList.forEach(u=>{ Object.assign(u.ex, u.prev); u.ex.extra = u.prevExtra; }); save(); render(); toast("הערכים הישנים הוחזרו ✓"); });
+  if(mode==="newer") toastUndo(`עודכנו ${undoList.length} כרטיסים — התשובה החדשה גברה (${n} פרטים)`, ()=>{
+    /* ביטול מלא: כל כרטיס חוזר בדיוק למצבו, והתשובות חוזרות לרשימת "ממתינים לאישור" */
+    snaps.forEach((snap, id)=>{ const ex = personById(id); if(ex){ Object.keys(ex).forEach(k=>delete ex[k]); Object.assign(ex, snap); } });
+    F.pending = pendBefore; F.ignored = ignBefore; F.seen = seenBefore; F.handled = handledBefore;
+    save(); render(); renderForm(); toast("הערכים הישנים הוחזרו ✓ — התשובות שוב ממתינות לאישור"); });
   else toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
 }
 
