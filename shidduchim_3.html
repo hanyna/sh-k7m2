@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>כרטסיית שידוכים</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f5f5c">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="application-name" content="כרטסיית שידוכים">
+<meta name="apple-mobile-web-app-title" content="שידוכים">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -540,6 +546,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <div class="save-state" id="saveState">נשמר ומוצפן</div>
       <div id="acctLine" style="margin-top:6px"></div>
       <button class="btn ghost sm" id="btnLock" style="margin-top:8px;color:#b3c0cb;width:100%">נעילה</button>
+      <button class="btn sm hidden" id="btnInstall" style="margin-top:8px;width:100%;background:#1d3a3a;color:#cfe6e3;border-color:#2b5554">📌 התקנה כאפליקציה</button>
     </div>
   </aside>
 
@@ -665,6 +672,9 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         הגיבוי מתבצע אוטומטית בפתיחה הראשונה של הכלי אחריה. כך תמיד יש עותק יומי, גם בלי שרת.
       </div>
       <div id="driveHost"></div>
+
+      <div class="sect" style="margin-top:30px">התקנה כאפליקציה במחשב</div>
+      <div id="installHost" style="font-size:13.5px;color:var(--ink-soft);max-width:640px"></div>
 
       <div class="sect" style="margin-top:30px">חיבור לטופס הגוגל — תשובות נכנסות אוטומטית</div>
       <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:12px">
@@ -4139,6 +4149,46 @@ function askCompletion(id){
   p.log = p.log || []; p.askedAt = today(); save();
 }
 
+/* ============ התקנה כאפליקציה (PWA) ============
+   כרום ו-Edge מציעים "התקנה": נוצר אייקון בשולחן העבודה ובתפריט התחל, והכלי נפתח בחלון משלו —
+   בלי שורת כתובת ולשוניות. הנתונים משותפים לאפליקציה ולדפדפן (אותו אחסון), כך שאין שום מעבר נתונים. */
+const APP = {prompt:null};
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
+if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); APP.prompt = e; renderInstall(); });
+window.addEventListener("appinstalled", ()=>{ APP.prompt = null; renderInstall(); toast("הותקן ✓ — האייקון נמצא בשולחן העבודה ובתפריט התחל"); });
+async function installApp(){
+  if(APP.prompt){
+    APP.prompt.prompt();
+    const r = await APP.prompt.userChoice.catch(()=>null);
+    APP.prompt = null; renderInstall();
+    if(r && r.outcome === "accepted") toast("מתקין… האייקון יופיע בשולחן העבודה");
+  }else{
+    setView("backup");
+    setTimeout(()=>{ const h = $("#installHost"); if(h) h.scrollIntoView({behavior:"smooth", block:"center"}); }, 200);
+  }
+}
+function renderInstall(){
+  const btn = $("#btnInstall"), host = $("#installHost");
+  const inApp = isStandalone();
+  if(btn) btn.classList.toggle("hidden", inApp || !APP.prompt);
+  if(!host) return;
+  const ua = navigator.userAgent, edge = /Edg\//.test(ua), chrome = /Chrome\//.test(ua) && !edge;
+  host.innerHTML = inApp
+    ? `<div class="cloud-on"><b>✓ הכלי פתוח כאפליקציה.</b> <span>אפשר להצמיד אותו לשורת המשימות: קליק ימני על האייקון בשורת המשימות ← "הצמד לשורת המשימות".</span></div>`
+    : `<p style="margin-top:0">פותחים את הכלי מאייקון בשולחן העבודה — בחלון נקי משלו, בלי שורת כתובת ולשוניות, כמו תוכנה רגילה.
+         הנתונים נשארים אותם נתונים.</p>
+       ${APP.prompt ? `<button class="btn pri" onclick="installApp()">📌 התקנה כאפליקציה במחשב</button>` : `
+       <div class="card-hint" style="margin:0">
+         ${edge ? `ב-<b>Edge</b>: לוחצים על שלוש הנקודות (⋯) למעלה ← <b>אפליקציות</b> ← <b>התקן אתר זה כאפליקציה</b>. אחרי ההתקנה מסמנים "צור קיצור דרך בשולחן העבודה".`
+         : chrome ? `ב-<b>כרום</b>: לוחצים על שלוש הנקודות (⋮) למעלה ← <b>העברה, שמירה ושיתוף</b> ← <b>התקנת הדף כאפליקציה</b> (או סמל ההתקנה ⊕ בצד שורת הכתובת).`
+         : `פתחו את הכלי בדפדפן <b>כרום</b> או <b>Edge</b> — שם מופיעה אפשרות "התקנה כאפליקציה".`}
+         ${location.protocol !== "https:" ? `<br><b>שימו לב:</b> ההתקנה אפשרית רק מהכתובת באינטרנט (https), לא מקובץ במחשב.` : ""}
+       </div>`}`;
+}
+
 /* ============ חיבור לטופס הגוגל — תשובות נכנסות אוטומטית ============
    הטופס שומר כל תשובה בגיליון גוגל. הכלי קורא את הגיליון (הרשאת קריאה בלבד),
    ומכניס כרטיס לכל תשובה חדשה. כל תשובה מזוהה לפי חותמת הזמן שלה — ולא תיכנס פעמיים.
@@ -5094,6 +5144,7 @@ $("#btnClearFilters").addEventListener("click",()=>{
 });
 $("#btnNew").addEventListener("click",()=>editPerson(""));
 $("#btnSmart").addEventListener("click", smartSearch);
+$("#btnInstall").addEventListener("click", installApp);
 $("#btnFormSync").addEventListener("click", ()=>syncForm(true));
 $("#btnImportTop").addEventListener("click",()=>setView("import"));
 $("#scrim").addEventListener("click", ()=>leaveEdit(closeSheet));
@@ -5200,6 +5251,7 @@ $("#btnWipe").addEventListener("click", async ()=>{
 boot();
 renderDrive();
 renderForm();
+renderInstall();
 driveTick();
 setInterval(driveTick, 5 * 60 * 1000);
 </script>
