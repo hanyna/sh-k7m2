@@ -2711,14 +2711,28 @@ function openImportReport(){
   const rows = R.items.map((x,i)=>`<div class="fieldrow" style="align-items:center">
       <dt style="min-width:70px">${x.row?`שורה ${x.row}`:""}</dt>
       <dd style="flex:1"><b>${esc(x.name||"")}</b><div style="font-size:12.5px;color:var(--ink-soft)">${esc(x.why)}</div></dd>
-      ${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">ייבוא בכל זאת</button>` : `<span style="font-size:12px;color:var(--teal)">✓ בכרטסייה</span>`}
+      ${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">ייבוא בכל זאת</button>`
+        : x.act==="held" ? `<button class="btn sm" onclick="closeSheet();ui.intake='held';setView('intake')">לבדיקה</button>`
+        : x.act==="pend" ? `<button class="btn sm" onclick="openFormReview()">לאישור</button>`
+        : `<span style="font-size:12px;color:var(--teal)">✓</span>`}
     </div>`).join("");
   $("#sheetHead").innerHTML = `<div style="flex:1"><h3>דוח ${R.kind==="sheet"?"בדיקת שלמות מול הגיליון":"הייבוא"} · ${esc(R.date)}</h3>
       <div class="meta">${R.kind==="sheet"
-        ? `בגיליון ${R.total} תשובות${R.tabs?` (${esc(R.tabs)})`:""} · ${R.found} כבר בכרטסייה${R.twice?` (מתוכן ${R.twice} כפולות זהות)`:""}${R.toApprove?` · ${R.toApprove} מילאו שוב — ממתינים לאישורך`:""} · ${open.length} חסרות`
+        ? (R.B ? `בגיליון ${R.total} תשובות · ${R.B.missing ? R.B.missing + " חסרות — אפשר להוסיף למטה" : "אף תשובה לא חסרה ✓"}` : `בגיליון ${R.total} תשובות · ${open.length} חסרות`)
         : `בקובץ ${R.total} שורות · נקלטו ${R.added} · דולגו ${R.skipped||0}${R.nameless?` · ${R.nameless} ללא שם`:""}`}</div></div>
     <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
-  $("#sheetBody").innerHTML = R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`;
+  const B = R.B;
+  const tile = (n,l,c)=> n ? `<div class="stat" style="${c?`background:${c}`:""}"><b>${n}</b><span>${l}</span></div>` : "";
+  const breakdown = B ? `<div class="sect">איפה נמצאת כל אחת מ-${R.total} התשובות שבגיליון${R.tabs?` (${esc(R.tabs)})`:""}</div>
+    <div class="stats" style="margin-bottom:10px">
+      ${tile(B.cards,"בכרטסייה")}${tile(B.held,"מושהות — לבדיקה","var(--brass-light)")}${tile(B.pend,"מילאו שוב — לאישורך","var(--brass-light)")}
+      ${tile(B.twice,"כפולות זהות (כרטיס אחד)")}${tile(B.deleted,"נמחקו / התעלמת")}${tile(B.missing,"חסרות","#f6e3e6")}${tile(B.empty,"שורות ריקות")}
+    </div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">
+      ${B.cards+B.held+B.pend+B.twice+B.deleted+B.missing+B.empty} = ${R.total} ✓ ·
+      ב״סה״כ מועמדים״ בכרטסייה מופיעים ${R.visible}${R.outside?` — מתוכם ${R.outside} שלא מהגיליון (נוספו ידנית או מקובץ)`:""}.
+    </div>` : "";
+  $("#sheetBody").innerHTML = breakdown + (R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`);
   $("#sheetFoot").innerHTML = `${open.length?`<button class="btn pri" onclick="importAnyway('all')">ייבוא כל ה-${open.length}</button>`:""}
     <button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
   openSheet();
@@ -2746,32 +2760,55 @@ async function formReconcile(){
     toast("בודק את כל התשובות בגיליון…");
     const token = await driveToken(false);
     const {headers, rows, counts, tabCount} = await fetchFormRows(token);
-    const byKey = new Set(DB.people.flatMap(personKeys));
-    (DB.form&&DB.form.pending||[]).forEach(x=>byKey.add(keyCanon(x.key)));
-    (DB.form&&DB.form.ignored||[]).forEach(k=>byKey.add(keyCanon(k)));
-    const items = []; let found = 0, toApprove = 0, twice = 0;
-    const extraKey = new Map(); DB.people.forEach(x=>(x.formKeys||[]).forEach(k=>extraKey.set(keyCanon(k), x)));
+    const F = formDB();
+    /* לכל שורה בגיליון — איפה היא נמצאת בכלי */
+    const mainKey = new Map(), extraKey = new Map(), pendKey = new Map();
+    DB.people.forEach(x=>{ if(x.formKey) mainKey.set(keyCanon(x.formKey), x); (x.formKeys||[]).forEach(k=>extraKey.set(keyCanon(k), x)); });
+    F.pending.forEach(it=>pendKey.set(keyCanon(it.key), it));
+    const ignored = new Set((F.ignored||[]).map(keyCanon));
+    const B = {cards:0, held:0, pend:0, twice:0, deleted:0, missing:0, empty:0, approveNew:0};
+    const items = [];
+    const usedIds = new Set();
     rows.forEach((r, idx)=>{
-      const key = rowKey(headers, r);
-      if(extraKey.has(key)){ found++; twice++; items.push({row: idx+2, name: extraKey.get(key).fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
-      if(byKey.has(key)){ found++; return; }
+      const key = rowKey(headers, r), row = idx + 2;
+      const nm0 = String(r[headers.findIndex(h=>guessField(h)==="fullName")]||"").trim();
+      if(mainKey.has(key)){
+        const x = mainKey.get(key); usedIds.add(x.id);
+        if(x.hold){ B.held++; items.push({row, name:x.fullName, why:"מושהה — ממתין/ה לבדיקה שלך בדף הקליטה (לא נספר/ת ב״סה״כ מועמדים״)", done:true, act:"held"}); }
+        else B.cards++;
+        return;
+      }
+      if(extraKey.has(key)){ B.twice++; items.push({row, name:extraKey.get(key).fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
+      if(pendKey.has(key)){ B.pend++; items.push({row, name:pendKey.get(key).p.fullName||nm0, why:"מילא/ה שוב עם פרטים שונים — ממתין/ה לאישור שלך (עדכון / כרטיס חדש / התעלמות)", done:true, act:"pend"}); return; }
+      if(ignored.has(key)){ B.deleted++; items.push({row, name:nm0||"ללא שם", why:"הכרטיס נמחק על ידך, או שבחרת להתעלם מהתשובה — לא חוזר אוטומטית", done:true}); return; }
       let p = rowToPerson(headers, r, key, true);
-      if(!p) return;                                         /* שורה ריקה */
+      if(!p){ B.empty++; return; }
       const nm = normName(p.fullName);
       const twin = DB.people.find(x=>normName(x.fullName)===nm && samePersonGuess(x, p));
-      if(twin && !p.nameless && sameRowAs(twin, p, key)){ found++; return; }
+      if(twin && !p.nameless && sameRowAs(twin, p, key)){
+        usedIds.add(twin.id);
+        if(personKeys(twin)[0]===key){ twin.hold ? B.held++ : B.cards++; }
+        else { B.twice++; items.push({row, name:twin.fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); }
+        return;
+      }
       if(twin && !p.nameless){   /* אותו אדם עם פרטים שונים — לא מאחדים: לאישור המנהל */
-        formDB().pending.push({key, p, exId:twin.id, date:today(), why:"אותו שם — מילא/ה את הטופס שוב"}); toApprove++; return;
+        F.pending.push({key, p, exId:twin.id, date:today(), why:"אותו שם — מילא/ה את הטופס שוב"}); B.pend++; B.approveNew++;
+        items.push({row, name:p.fullName, why:"מילא/ה שוב עם פרטים שונים — נוסף/ה עכשיו לרשימת האישור שלך", done:true, act:"pend"}); return;
       }
       if(p.nameless){ p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בטופס"]; }
       else { p.reviewed = true; p.historic = true; }
-      items.push({row: idx+2, name: p.fullName, p,
+      B.missing++;
+      items.push({row, name: p.fullName, p,
         why: p.nameless ? "בתשובה הזו לא נמצא שם — אם תוסיפו, היא תמתין לבדיקה בדף הקליטה"
-           : (DB.people.some(x=>normName(x.fullName)===nm) ? "יש כרטיס עם אותו שם אבל טלפון/מייל אחרים — כנראה אדם אחר" : "התשובה הזו לא נכנסה לכרטסייה")});
+           : (DB.people.some(x=>normName(x.fullName)===nm) ? "חסר: יש כרטיס עם אותו שם אבל טלפון/מייל אחרים — כנראה אדם אחר" : "חסר: התשובה הזו לא נכנסה לכרטסייה")});
     });
-    DB.importReport = {date: today(), total: rows.length, found, toApprove, twice, items, kind:"sheet", tabs: tabCount>1 ? counts : ""};
+    /* כרטיסים בכלי שלא הגיעו מהגיליון (נוספו ידנית או מקובץ אחר) — כדי שהספירה תסתדר */
+    const outside = DB.people.filter(x=>!x.hold && !usedIds.has(x.id) && !mainKey.has(keyCanon(x.formKey||"~"))).length;
+    items.sort((x,y)=>(x.done?1:0)-(y.done?1:0) || x.row-y.row);
+    DB.importReport = {date: today(), total: rows.length, items, kind:"sheet", tabs: tabCount>1 ? counts : "", B, outside,
+      visible: DB.people.filter(x=>!x.hold).length};
     save(); render(); openImportReport();
-    if(toApprove) setTimeout(()=>reviewAlert(0, toApprove), 500);
+    if(B.approveNew) setTimeout(()=>reviewAlert(0, B.approveNew), 500);
   }catch(err){ toast(err.message); }
 }
 
