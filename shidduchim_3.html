@@ -140,9 +140,15 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 }
 .pcard.g-m .mono{background:#e8eff6;color:#2f5d8a}
 .pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
-.pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
-.pcard-head>div{min-width:0}
-.pcard .meta{overflow-wrap:anywhere}
+/* כל כרטיס באותו גובה ורוחב — גם כשמהטופס הגיע טקסט ארוך (שם, חוג, עדה, תגיות): שורה אחת לכל פרט, והשאר נחתך ב"…" */
+.pcard{display:flex;flex-direction:column;min-width:0;height:186px}
+.pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:52px}
+.pcard-head>div:not(.mono){min-width:0;flex:1}
+.pcard-head>.mono{flex:none}
+.pcard .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard .rows{min-height:0;overflow:hidden}
+.pcard .tagline{flex-wrap:nowrap !important;overflow:hidden;margin-top:auto !important;padding-top:9px}
+.pcard .tag{flex:none;max-width:100%}
 .pcard .meta{font-size:12.5px;color:var(--ink-faint)}
 .pcard .rows{font-size:13px;color:var(--ink-soft);display:flex;flex-direction:column;gap:2px}
 .pcard .rows div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1636,7 +1642,11 @@ function renderStats(){
     ["סה\u05F4כ מועמדים", vis.length],
     ["בנים", m], ["בנות", f], ["פנויים", free],
     ["הצעות פתוחות", open], ["התארסו", eng]
-  ].map(([l,v])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  ].map(([l,v])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("")
+  /* כדי שהספירה תמיד תסתדר: מי שעוד לא בכרטסייה (מושהה / ממתין לאישור) מוצג כאן, בלחיצה לבדיקה */
+  + (()=>{ const held = DB.people.length - vis.length, pend = (DB.form&&DB.form.pending||[]).length;
+      return (held||pend) ? `<button class="stat" style="cursor:pointer;background:var(--brass-light);border-color:#ecdcbe;text-align:inherit;font:inherit" onclick="${pend&&!held?"openFormReview()":"ui.intake='held';setView('intake')"}" title="לא נספרים בכרטסייה עד שתאשרי">
+        <b>${held+pend}</b><span>ממתינים לבדיקה${held&&pend?` (${held} מושהים · ${pend} מילאו שוב)`:""}</span></button>` : ""; })();
   $("#stats").innerHTML = html;
   $("#stats2").innerHTML = html;
   const cs = $("#cryptoState");
@@ -2068,7 +2078,10 @@ function delPerson(id){
   DB.people = DB.people.filter(x=>x.id!==id);
   DB.matches = DB.matches.filter(m=>m.a!==id && m.b!==id);
   DB.sessions = DB.sessions.filter(x=>x.pid!==id && !gone.has(x.mid));
-  if(DB.form && DB.form.pending) DB.form.pending = DB.form.pending.filter(it=>it.exId!==id);
+  { const F = formDB(); F.ignored = F.ignored || [];
+    /* נמחק בכוונה — גם התשובות שלו שחיכו לאישור לא ייובאו שוב מהגיליון */
+    personKeys(p).concat(F.pending.filter(it=>it.exId===id).map(it=>keyCanon(it.key))).forEach(k=>{ if(!F.ignored.includes(k)) F.ignored.push(k); });
+    F.pending = F.pending.filter(it=>it.exId!==id); }   /* נמחק בכוונה — לא ייובא שוב מהגיליון */
   save(); closeSheet(); render(); toast("הכרטיס נמחק");
 }
 
@@ -2582,8 +2595,16 @@ function runImport(){
       const ex = byName.get(normName(p.fullName));
       if(ex){
         if(samePersonGuess(ex, p)){
+          /* לא מאחדים ולא זורקים — ממתין לאישור המנהל במסך "מילאו שוב" */
           skipped++;
-          items.push({row:rowNo, name:p.fullName, why:"השם כבר קיים בכרטסייה (נראה שזה אותו אדם)", p, exId:ex.id});
+          normalizeImported(p);
+          const sameRow = personKeys(ex).includes(keyCanon(key));
+          const identical = !sameRow && sameRowAs(ex, p, key);
+          if(!sameRow && !identical) F.pending.push({key, p, exId:ex.id, date:today(), why:"אותו שם — מופיע שוב בקובץ"});
+          items.push({row:rowNo, name:p.fullName, why: sameRow ? "השורה הזו כבר בכרטסייה"
+            : identical ? "מילא/ה פעמיים עם אותם פרטים בדיוק — נספר/ת פעם אחת (אין מה לאחד)"
+            : "השם כבר קיים עם פרטים שונים — ממתין לאישורך: לעדכן את הכרטיס הקיים, כרטיס חדש או התעלמות", done:true});
+          if(identical || sameRow) skipped--;
           return;
         }
         sameName++;
@@ -2600,7 +2621,8 @@ function runImport(){
 
   save(); cancelImport(); setView("cards");
   toast(`יובאו ${added} מועמדים${skipped?` · דולגו ${skipped}`:""}${nameless?` · ${nameless} ללא שם (לבדיקה)`:""}`);
-  if(items.length) setTimeout(()=>openImportReport(), 600);
+  if(skipped) setTimeout(()=>reviewAlert(0, skipped), 700);
+  else if(items.length) setTimeout(()=>openImportReport(), 600);
 }
 
 /* ============ שלמות הייבוא: אף שורה לא הולכת לאיבוד ============ */
@@ -2632,6 +2654,14 @@ function samePersonGuess(a, b){
   return false;
 }
 
+/* אותה תשובה בדיוק (נכנסה קודם מקובץ, עם מזהה בפורמט אחר) — אין אף פרט חדש או שונה.
+   לא משנים שום נתון: רק מקשרים את הכרטיס לשורה בגיליון, כדי שלא תוצע שוב */
+function sameRowAs(ex, p, key){
+  if(pendingDiff({p, exId:ex.id}).length) return false;
+  if(!personKeys(ex).includes(keyCanon(key))){ ex.formKeys = (ex.formKeys||[]).concat(key); }
+  return true;
+}
+
 /* דוח: מה לא נכנס ולמה — עם אפשרות להכניס בכל זאת */
 function openImportReport(){
   const R = DB.importReport; if(!R) return toast("אין דוח ייבוא שמור");
@@ -2643,7 +2673,7 @@ function openImportReport(){
     </div>`).join("");
   $("#sheetHead").innerHTML = `<div style="flex:1"><h3>דוח ${R.kind==="sheet"?"בדיקת שלמות מול הגיליון":"הייבוא"} · ${esc(R.date)}</h3>
       <div class="meta">${R.kind==="sheet"
-        ? `בגיליון ${R.total} תשובות · ${R.found} כבר בכרטסייה · ${open.length} חסרות`
+        ? `בגיליון ${R.total} תשובות · ${R.found} כבר בכרטסייה${R.twice?` (מתוכן ${R.twice} כפולות זהות)`:""}${R.toApprove?` · ${R.toApprove} מילאו שוב — ממתינים לאישורך`:""} · ${open.length} חסרות`
         : `בקובץ ${R.total} שורות · נקלטו ${R.added} · דולגו ${R.skipped||0}${R.nameless?` · ${R.nameless} ללא שם`:""}`}</div></div>
     <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
   $("#sheetBody").innerHTML = R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`;
@@ -2674,25 +2704,32 @@ async function formReconcile(){
     toast("בודק את כל התשובות בגיליון…");
     const token = await driveToken(false);
     const {headers, rows} = await fetchFormRows(token);
-    const byKey = new Set(DB.people.map(p=>p.formKey).filter(Boolean));
-    (DB.form&&DB.form.pending||[]).forEach(x=>byKey.add(x.key));
-    const items = []; let found = 0;
+    const byKey = new Set(DB.people.flatMap(personKeys));
+    (DB.form&&DB.form.pending||[]).forEach(x=>byKey.add(keyCanon(x.key)));
+    (DB.form&&DB.form.ignored||[]).forEach(k=>byKey.add(keyCanon(k)));
+    const items = []; let found = 0, toApprove = 0, twice = 0;
+    const extraKey = new Map(); DB.people.forEach(x=>(x.formKeys||[]).forEach(k=>extraKey.set(keyCanon(k), x)));
     rows.forEach((r, idx)=>{
       const key = rowKey(headers, r);
+      if(extraKey.has(key)){ found++; twice++; items.push({row: idx+2, name: extraKey.get(key).fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
       if(byKey.has(key)){ found++; return; }
       let p = rowToPerson(headers, r, key, true);
       if(!p) return;                                         /* שורה ריקה */
       const nm = normName(p.fullName);
       const twin = DB.people.find(x=>normName(x.fullName)===nm && samePersonGuess(x, p));
-      if(twin && !p.nameless){ found++; return; }
+      if(twin && !p.nameless && sameRowAs(twin, p, key)){ found++; return; }
+      if(twin && !p.nameless){   /* אותו אדם עם פרטים שונים — לא מאחדים: לאישור המנהל */
+        formDB().pending.push({key, p, exId:twin.id, date:today(), why:"אותו שם — מילא/ה את הטופס שוב"}); toApprove++; return;
+      }
       if(p.nameless){ p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בטופס"]; }
       else { p.reviewed = true; p.historic = true; }
       items.push({row: idx+2, name: p.fullName, p,
         why: p.nameless ? "בתשובה הזו לא נמצא שם — אם תוסיפו, היא תמתין לבדיקה בדף הקליטה"
            : (DB.people.some(x=>normName(x.fullName)===nm) ? "יש כרטיס עם אותו שם אבל טלפון/מייל אחרים — כנראה אדם אחר" : "התשובה הזו לא נכנסה לכרטסייה")});
     });
-    DB.importReport = {date: today(), total: rows.length, found, items, kind:"sheet"};
-    save(); openImportReport();
+    DB.importReport = {date: today(), total: rows.length, found, toApprove, twice, items, kind:"sheet"};
+    save(); render(); openImportReport();
+    if(toApprove) setTimeout(()=>reviewAlert(0, toApprove), 500);
   }catch(err){ toast(err.message); }
 }
 
@@ -3509,6 +3546,7 @@ function renderCardTab(p){
       ${cardMode==="edit"?"תצוגה מקדימה":"חזרה לעריכה"}</button>
     ${cardMode==="edit"?`<button class="btn pri" onclick="saveCard('${pid}')">שמירה</button>`:""}
     <button class="btn" onclick="composeCard('${pid}')">הפקה מהתיק</button>
+    <button class="btn" onclick="reviseCardAI('${pid}','full')" title="כותבים מה לא טוב — וה-AI מתקן את הכרטיס">✨ תיקון עם AI</button>
     <button class="btn" onclick="copyCard('${pid}')">העתקה לוואטסאפ</button>
     <button class="btn pri" onclick="cardToImage('${pid}')">תמונה לוואטסאפ</button>
     <button class="btn" onclick="exportCardWord('${pid}')">שמירה כוורד</button>
@@ -3796,16 +3834,17 @@ async function composeGroupCard(pid){
 *[שם]*
 גיל: … | מגורים: … | גובה: …${p.edah?" | עדה: …":""}
 
-*קצת על ${self}:*
-2-3 משפטים שמציירים דמות: רקע, מסלול חיים, עיסוק.
+*קצת על עצמי:*
+2-3 משפטים חמים בגוף שלישי שמציירים דמות: הבית, הרקע, מסלול החיים והעיסוק.
 
 *אופי ומידות:*
-2-3 שורות קצרות. כל שורה: *כותרת של 2-3 מילים:* ואז משפט קצר אחד.
+2-4 נקודות. כל נקודה בשורה משלה: ⭐ *כותרת של 2-3 מילים:* ואז משפט קצר אחד.
 
-*תחומי עניין:* שורה אחת.
+*תחומי עניין:*
+שורה אחת.
 
 *${seek}:*
-2-3 משפטים על מי שיתאים.
+2-3 משפטים על האופי, הכיוון בחיים והבית המבוקש.
 
 עקרונות מחייבים:
 - לעבור על כל הפרטים שבחומר ולהשתמש בכולם — בחר מתוכם את המשמעותיים ביותר ושלב אותם, אל תדלג על פרט מהותי.
@@ -3858,7 +3897,11 @@ function finishFlow(pid){
 function gcardBoxHtml(pid){
   const p = personById(pid);
   const t = (p.groupCard && p.groupCard.text) || "";
-  return `<textarea id="gcardText" dir="rtl" style="width:100%;min-height:270px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;line-height:1.55">${esc(t)}</textarea>
+  return `<textarea id="gcardText" dir="rtl" oninput="gcardEdited('${pid}')" style="width:100%;min-height:270px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;line-height:1.55">${esc(t)}</textarea>
+    <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+      <input id="gcardAsk" placeholder="מה לשנות? למשל: לקצר, להוסיף שהיא מורה, פחות רשמי…" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px" onkeydown="if(event.key==='Enter')reviseCardAI('${pid}','group')">
+      <button class="btn sm" onclick="reviseCardAI('${pid}','group')">✨ תיקון עם AI</button>
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
       <button class="btn pri sm" onclick="copyGroupCard('${pid}')">📋 העתקה לוואטסאפ</button>
       <button class="btn sm" onclick="regenGroupCard('${pid}')">🔄 ניסוח מחדש</button>
@@ -3881,6 +3924,96 @@ async function regenGroupCard(pid){
        ${p.groupCard&&p.groupCard.text?gcardBoxHtml(pid):""}
        <button class="btn sm" style="margin-top:6px" onclick="regenGroupCard('${pid}')">ניסיון נוסף</button>`;
   }
+}
+
+/* עריכה ידנית של הכרטיס לשליחה — נשמרת מיד */
+let gcardSaveT = null;
+function gcardEdited(pid){
+  clearTimeout(gcardSaveT);
+  gcardSaveT = setTimeout(()=>{
+    const p = personById(pid), ta = $("#gcardText"); if(!p || !ta) return;
+    p.groupCard = Object.assign({}, p.groupCard, {text: ta.value, date: today(), edited:true, warn: checkCardText(ta.value, p, "group")});
+    save();
+  }, 500);
+}
+
+/* תיקון עם AI: השדכנית כותבת מה לא טוב, וה-AI מתקן את הכרטיס — באותו מבנה ורק מתוך החומר שבתיק */
+async function reviseCardAI(pid, kind){
+  const p = personById(pid);
+  let want = "";
+  if(kind==="group"){
+    want = ($("#gcardAsk") && $("#gcardAsk").value.trim()) || "";
+  }else{
+    const r = await ask({title:"✨ תיקון הכרטיס עם AI", note:"כתבו מה לא טוב או מה לשנות. ה-AI יתקן את ארבעת הקטעים — באותו מבנה, ורק מתוך מה שבתיק.",
+      fields:[{label:"מה לשנות?", type:"text", value:""}], ok:"תיקון"});
+    if(!r) return; want = String(r[0]||"").trim();
+  }
+  if(!want) return toast("כתבו קודם מה לשנות");
+  const g = p.gender==="בת" ? "בחורה" : "בחור";
+  const facts = caseMaterial(p, kind==="group" ? GCARD_SKIP : (aiAnon() ? AI_PII.concat("notes") : ["refs"]), {sessions: kind!=="group"});
+  const first = String(p.fullName||"").trim().split(/\s+/)[0] || "";
+  const sign = gcardSign();
+  let cur, prompt;
+  if(kind==="group"){
+    cur = String(($("#gcardText")&&$("#gcardText").value) || (p.groupCard&&p.groupCard.text) || "");
+    cur = cur.split("*לפרטים ויצירת קשר:*")[0].trim();
+    if(first) cur = cur.split(first).join("[שם]");
+    prompt = `לפניך כרטיס שידוכים של ${g} לשליחה בקבוצות וואטסאפ. תקן אותו לפי הבקשה של השדכנית.
+
+הבקשה: ${want}
+
+כללים: שמור על אותו מבנה וכותרות (*[שם]*, שורת פרטים, *קצת על עצמי:*, *אופי ומידות:* עם ⭐, *תחומי עניין:*, *${p.gender==="בת"?"מחפשת":"מחפש"}:*). אל תמציא עובדות — מותר להשתמש רק במה שבכרטיס ובחומר מהתיק שלמטה. בלי פרטים מזהים או רגישים. במקום השם כתוב [שם].
+
+הכרטיס הנוכחי:
+${cur}
+
+החומר מהתיק:
+${facts}
+
+החזר את הכרטיס המתוקן בלבד, בלי הסברים ובלי סימוני קוד.`;
+  }else{
+    const c = p.card || {};
+    cur = JSON.stringify({about:c.about||"", middot:c.middot||"", hobbies:c.hobbies||"", looking:c.looking||""});
+    prompt = `לפניך ארבעת הקטעים של כרטיס שידוכים של ${g} (JSON). תקן אותם לפי הבקשה של השדכנית.
+
+הבקשה: ${want}
+
+כללים: אותו מבנה — about ("קצת על עצמי", פסקה), middot ("אופי ומידות", נקודות שמתחילות ב"⭐ כותרת:" מופרדות בשורה ריקה), hobbies ("תחומי עניין"), looking ("מה ${p.gender==="בת"?"מחפשת":"מחפש"}"). גוף שלישי, לשון נקייה ומכובדת. אל תמציא עובדות — רק מה שבכרטיס ובחומר מהתיק. קטע שלא ביקשו לשנות — השאר כמעט כמו שהוא.
+
+הקטעים הנוכחיים:
+${cur}
+
+החומר מהתיק:
+${facts}
+
+החזר JSON בלבד, בלי סימוני קוד:
+{"about":"","middot":"","hobbies":"","looking":""}`;
+  }
+  const btns = $$("#sheetFoot button, #gcardBox button");
+  btns.forEach(b=>b.disabled = true);
+  toast("✨ מתקן את הכרטיס…");
+  try{
+    const raw = await callAI(scrubForAI(prompt, p));
+    if(kind==="group"){
+      let text = raw.replace(/```/g,"").trim().split("*לפרטים ויצירת קשר:*")[0].trim();
+      if(first) text = text.split("[שם]").join(first).split("המועמדת").join(first).split("המועמד").join(first);
+      text += `\n\n*לפרטים ויצירת קשר:*\n${sign}`;
+      p.groupCard = {text, date:today(), warn: checkCardText(text, p, "group"), revised: want};
+      save();
+      if($("#gcardBox")) $("#gcardBox").innerHTML = gcardBoxHtml(pid);
+      toast(p.groupCard.warn.length ? "תוקן · ⚠ כדאי לעבור על ההערות" : "הכרטיס תוקן ונבדק ✓");
+    }else{
+      let parsed = null;
+      try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
+      if(!parsed) throw new Error("לא התקבל נוסח תקין — נסו שוב");
+      ["about","middot","hobbies","looking"].forEach(k=>{ if(Array.isArray(parsed[k])) parsed[k] = parsed[k].join("\n\n"); if(parsed[k]!=null) parsed[k] = String(parsed[k]); });
+      p.card = Object.assign({}, p.card, parsed, {date:today()});
+      p.updated = today(); save(); cardMode="edit"; openPerson(pid,"card");
+      const w = checkCardText(["about","middot","hobbies","looking"].map(k=>p.card[k]||"").join("\n"), p, "full");
+      toast(w.length ? "תוקן · ⚠ " + w.join(" · ") : "הכרטיס תוקן ונבדק ✓ — אפשר לערוך עוד ידנית");
+    }
+  }catch(err){ toast(err.message); }
+  finally{ $$("#sheetFoot button, #gcardBox button").forEach(b=>b.disabled = false); }
 }
 
 function copyGroupCard(pid){
@@ -4428,7 +4561,7 @@ function formCfg(){
   try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
 }
 function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
-function formDB(){ if(!DB.form) DB.form = {seen:[], pending:[]}; DB.form.seen = DB.form.seen||[]; DB.form.pending = DB.form.pending||[]; return DB.form; }
+function formDB(){ if(!DB.form) DB.form = {seen:[], pending:[]}; DB.form.seen = DB.form.seen||[]; DB.form.pending = DB.form.pending||[]; DB.form.ignored = DB.form.ignored||[]; return DB.form; }
 
 /* מזהה הגיליון מכל צורה של קישור (edit / view / עם מספר לשונית) */
 function parseSheetUrl(u){
@@ -4475,12 +4608,30 @@ async function fetchFormRows(token){
 }
 
 /* מזהה קבוע לכל תשובה: חותמת הזמן + השם (ואם אין חותמת — כל תוכן השורה) */
+/* מזהה תשובה. חותמת הזמן נראית אחרת באקסל ובגיליון של גוגל (2026/09/01 מול 1.9.2026, עם או בלי שניות, AM/PM),
+   ולכן מנרמלים אותה: מספרי התאריך ממוינים (שנה בשתי ספרות) + שעה ודקה בלבד. כך אותה תשובה = אותו מזהה תמיד. */
+function tsCanon(v){
+  const str = String(v||"").trim(); if(!str) return "";
+  const m = str.match(/^(.*?\d)[\s\u00a0T,]+(\d{1,2}[:.]\d{1,2}.*)$/);
+  const datePart = m ? m[1] : str, timePart = m ? m[2] : "";
+  const dn = (datePart.match(/\d+/g)||[]).map(Number).map(x=> x>=1900 ? x%100 : x).sort((a,b)=>a-b);
+  let tn = (timePart.match(/\d+/g)||[]).map(Number).slice(0,2);
+  if(tn.length && /pm|אחה|בערב/i.test(timePart) && tn[0] < 12) tn[0] += 12;
+  if(tn.length && /am|לפנה/i.test(timePart) && tn[0] === 12) tn[0] = 0;
+  return dn.join("-") + (tn.length ? " " + tn.map(x=>String(x).padStart(2,"0")).join(":") : "");   /* יציב: נרמול חוזר נותן אותו דבר */
+}
 function rowKey(headers, r){
   const ti = headers.findIndex(h=>/חותמת זמן|timestamp/i.test(h));
   const ni = headers.findIndex(h=>guessField(h)==="fullName");
-  if(ti>=0 && String(r[ti]||"").trim()) return "t:" + String(r[ti]).trim() + "|" + String(ni>=0 ? r[ni]||"" : "").trim();
+  if(ti>=0 && String(r[ti]||"").trim()) return "t:" + tsCanon(r[ti]) + "|" + normName(ni>=0 ? r[ni]||"" : "");
   return "r:" + r.map(c=>String(c==null?"":c).trim()).join("¦");
 }
+/* מזהים ישנים (מלפני הנרמול) — מתורגמים לאותה צורה */
+function keyCanon(k){
+  const m = /^t:(.*)\|(.*)$/.exec(String(k||""));
+  return m ? "t:" + tsCanon(m[1]) + "|" + normName(m[2]) : String(k||"");
+}
+const personKeys = p => [p.formKey].concat(p.formKeys||[]).filter(Boolean).map(keyCanon);
 function rowToPerson(headers, r, key, allowNameless){
   const p = {id:uid(), created:today(), updated:today(), extra:{}, source:"טופס", formKey:key};
   headers.forEach((h,i)=>{
@@ -4519,7 +4670,13 @@ async function syncForm(manual, dryRun){
     if(!headers.some(h=>guessField(h)==="fullName"))
       throw new Error("לא נמצאה בגיליון עמודת שם (למשל ״שם פרטי ומשפחה״) — האם זה הגיליון הנכון?");
     const F = formDB(), seen = new Set(F.seen);
-    const fresh = rows.filter(r=>!seen.has(rowKey(headers,r)));
+    /* "חדש" נקבע לפי מה שבאמת יש בכלי — ולא לפי רשימת "כבר התקבל": תשובה נחשבת קיימת רק אם יש לה כרטיס,
+       אם היא ממתינה לאישור, או אם המנהל החליט במפורש להתעלם ממנה / מחק את הכרטיס שלה.
+       כך אחרי איפוס, מחיקה או ייבוא חלקי — שום תשובה מהגיליון לא נשארת בחוץ. */
+    const ignored = new Set((F.ignored || []).map(keyCanon));
+    const have = new Set(DB.people.flatMap(personKeys));
+    F.pending.forEach(it=>have.add(keyCanon(it.key)));
+    const fresh = rows.filter(r=>{ const k = rowKey(headers,r); return !have.has(k) && !ignored.has(k); });
     if(dryRun){
       FORM.busy = false;
       const msg = `החיבור תקין ✓ — בגיליון ${rows.length} תשובות, מתוכן ${fresh.length} חדשות שעוד לא נכנסו.`;
@@ -4527,7 +4684,7 @@ async function syncForm(manual, dryRun){
       return {total:rows.length, fresh:fresh.length};
     }
     let added = 0, pending = 0, similar = 0, skipped = 0, already = 0, held = 0, merged = 0;
-    const firstRun = !F.baselined;
+    const firstRun = !F.baselined || !DB.people.length;   /* כרטסייה ריקה (למשל אחרי איפוס) = ייבוא מלא מחדש */
     const runIds = new Set();
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
@@ -4535,6 +4692,8 @@ async function syncForm(manual, dryRun){
       const p = rowToPerson(headers, r, key, true);
       if(!p){ skipped++; return; }
       if(p.nameless){   /* תשובה בלי שם — לא נזרקת: נכנסת לבדיקה בדף הקליטה */
+        const nl = DB.people.find(x=>/^ללא שם/.test(String(x.fullName||"")) && ((normPhone(p.phone)&&normPhone(x.phone)===normPhone(p.phone)) || (normEmail(p.email)&&normEmail(x.email)===normEmail(p.email))));
+        if(nl && sameRowAs(nl, Object.assign({}, p, {fullName:nl.fullName}), key)){ already++; return; }
         p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בטופס"];
         DB.people.push(p); if(firstRun) runIds.add(p.id); held++; return;
       }
@@ -4543,18 +4702,19 @@ async function syncForm(manual, dryRun){
         /* מאחדים רק כשזה באמת אותו אדם: אותו שם. טלפון/מייל זהים עם שם אחר = אדם אחר
            (למשל אמא שמילאה עבור שני ילדים מאותו טלפון) — מקבל כרטיס נפרד */
         const ex0 = DB.people.find(x=>normName(x.fullName)===normName(nm) && samePersonGuess(x, p));
-        if(ex0 && runIds.has(ex0.id)){
-          /* אותו אדם מילא כמה פעמים לפני החיבור — הכרטיס מתעדכן לתשובה האחרונה (השורות בגיליון לפי סדר הזמן) */
-          FIELDS.forEach(f=>{ if(hasVal(p[f.k])) ex0[f.k] = p[f.k]; });
-          Object.assign(ex0.extra = ex0.extra||{}, p.extra||{});
-          ex0.formKey = p.formKey; merged++; return;
-        }
-        if(ex0){ already++; return; }          /* כבר היה בכרטסייה לפני החיבור */
+        /* אין איחוד בלי אישור: אותו אדם שמילא שוב → נכנס לרשימת "ממתינים לאישור" וקופצת התראה */
+        if(ex0 && personKeys(ex0).includes(key)){ already++; return; }   /* אותה שורה בדיוק כבר בכרטסייה */
+        if(ex0 && sameRowAs(ex0, p, key)){ already++; return; } /* אותה תשובה שנכנסה קודם מקובץ — בלי שינוי בפרטים */
+        if(ex0){ F.pending.push({key, p, exId:ex0.id, date:today(), why:"אותו שם — מילא/ה את הטופס שוב"}); pending++; return; }
         p.reviewed = true; p.historic = true;  /* תשובה ישנה — נכנסת ישר, בלי השהיה */
         DB.people.push(p); runIds.add(p.id); added++; return;
       }
-      const ex = findExisting(p);
-      if(ex){ F.pending.push({key, p, exId:ex.id, date:today()}); pending++; return; }
+      const twin = DB.people.find(x=>normName(x.fullName)===normName(p.fullName) && samePersonGuess(x, p));
+      if(twin && sameRowAs(twin, p, key)){ already++; return; }
+      const ex = twin || findExisting(p);
+      if(ex && (twin || normName(ex.fullName)===normName(p.fullName))){ F.pending.push({key, p, exId:ex.id, date:today(), why: twin ? "אותו שם — מילא/ה את הטופס שוב" : ""}); pending++; return; }
+      /* טלפון/מייל זהים אבל שם אחר — אדם אחר (למשל אח/ות). נכנס ככרטיס נפרד עם סימון */
+      if(ex){ p.tags = ["⚠ טלפון/מייל משותף עם " + ex.fullName]; }
       const nm = String(p.fullName).trim();
       if(DB.people.some(x=>String(x.fullName||"").trim()===nm)){
         p.tags = ["⚠ שם דומה קיים"]; similar++;
@@ -4574,7 +4734,7 @@ async function syncForm(manual, dryRun){
     if(added || pending || skipped || already || merged || firstRun) save();
     render();
     renderForm();
-    if(firstRun) toast(`📝 החיבור לטופס פעיל ✓ — ${added ? `יובאו ${added} מועמדים מהטופס` : "אין תשובות חדשות לייבא"}${already?` · ${already} כבר היו בכרטסייה`:""}${merged?` · ${merged} מילאו יותר מפעם אחת (נשמרה התשובה האחרונה)`:""}. מעכשיו כל תשובה חדשה נכנסת לבד.`);
+    if(firstRun) toast(`📝 החיבור לטופס פעיל ✓ — ${added ? `יובאו ${added} מועמדים מהטופס` : "אין תשובות חדשות לייבא"}${already?` · ${already} כבר היו בכרטסייה`:""}${pending?` · ${pending} מילאו יותר מפעם אחת — ממתינים לאישורך`:""}. מעכשיו כל תשובה חדשה נכנסת לבד.`);
     else if(added || pending){
       toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
     }else if(manual) toast("אין תשובות חדשות בטופס");
@@ -4662,7 +4822,13 @@ const FORM_SKIP_CMP = new Set(["status","notes","refs","openTo"]);
 function pendingDiff(it){
   const ex = personById(it.exId), p = it.p;
   if(!ex) return [];
-  return FIELDS.filter(f=>!FORM_SKIP_CMP.has(f.k) && p[f.k] && String(disp(p[f.k])).trim() !== String(disp(ex[f.k])||"").trim())
+  /* השוואה "חכמה": טלפון לפי הספרות, וטקסט בלי הבדלי רווחים/פיסוק — כדי שהבדלי עיצוב בין אקסל לגיליון לא ייחשבו שינוי */
+  const same = (k, a, b) => {
+    if(/phone|Phone/.test(k)) return normPhone(a) === normPhone(b) || String(a).replace(/\D/g,"").replace(/^0+/,"") === String(b).replace(/\D/g,"").replace(/^0+/,"");
+    const n = v => String(v==null?"":v).replace(/[\s.,;:!?'"״׳()\-–—]+/g," ").trim().toLowerCase();
+    return n(a) === n(b);
+  };
+  return FIELDS.filter(f=>!FORM_SKIP_CMP.has(f.k) && f.k!=="fullName" && p[f.k] && !same(f.k, disp(p[f.k]), disp(ex[f.k])||""))
     .map(f=>({k:f.k, l:f.l, cur:String(disp(ex[f.k])||""), nw:String(disp(p[f.k]))}));
 }
 function openFormReview(i){
@@ -4671,11 +4837,11 @@ function openFormReview(i){
   if(!F.pending.length){ save(); render(); renderForm(); closeSheet(); toast("אין תשובות ממתינות"); return; }
   if(i == null){
     $("#sheetHead").innerHTML = `<div style="flex:1"><h3>📝 תשובות מהטופס — ממתינות לבדיקה</h3>
-      <div class="meta">הממלאים כבר קיימים בכרטסייה לפי טלפון או מייל. בחרו מה לעשות עם כל תשובה.</div></div>
+      <div class="meta">נראה שהממלאים כבר קיימים בכרטסייה (שם, טלפון או מייל). שום דבר לא אוחד — בחרו מה לעשות עם כל תשובה.</div></div>
       <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
     $("#sheetBody").innerHTML = `<div class="win-col">${F.pending.map((it,j)=>{
       const ex = personById(it.exId), d = pendingDiff(it);
-      const why = normPhone(it.p.phone) && normPhone(it.p.phone)===normPhone(ex.phone) ? "טלפון זהה" : "מייל זהה";
+      const why = it.why || (normPhone(it.p.phone) && normPhone(it.p.phone)===normPhone(ex.phone) ? "טלפון זהה" : normEmail(it.p.email) && normEmail(it.p.email)===normEmail(ex.email) ? "מייל זהה" : "שם זהה");
       return `<button class="picker-item" onclick="openFormReview(${j})">
         ${avatar(ex,32)}
         <div style="min-width:0;flex:1"><div style="font-weight:600">${esc(it.p.fullName)} ${it.p.fullName.trim()!==String(ex.fullName).trim()?`<span style="color:var(--ink-faint);font-weight:400">← בכרטסייה: ${esc(ex.fullName)}</span>`:""}</div>
@@ -4719,6 +4885,8 @@ function applyPending(i, mode){
     it.p.tags = ["⚠ שם/טלפון דומה קיים"];
     DB.people.push(it.p); toast("נוסף כרטיס חדש");
   }else toast("התשובה סומנה כטופלה");
+  if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key);   /* טופלה — לא תחזור שוב */
+  if(mode==="ignore" || mode==="update"){ F.ignored = F.ignored || []; if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key); }
   F.pending.splice(i,1);
   save(); render(); renderForm();
   if(F.pending.length) openFormReview(); else { closeSheet(); }
@@ -4731,6 +4899,8 @@ function bulkPending(mode){
     pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; n++; });
     if(n) ex.updated = today();
   });
+  F.ignored = F.ignored || [];
+  F.pending.forEach(it=>{ if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key); if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key); });
   F.pending = [];
   save(); render(); renderForm(); closeSheet();
   toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
@@ -5497,8 +5667,10 @@ $("#btnWipe").addEventListener("click", async ()=>{
   });
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
-  const keepForm = {seen:(DB.form&&DB.form.seen)||[], pending:[], baselined:!!(DB.form&&DB.form.baselined)};
-  DB = {people:[], matches:[], sessions:[], seq:1, form:keepForm}; save(); setView("cards"); toast("כל הנתונים נמחקו");
+  /* איפוס מלא — גם זיכרון הטופס: בחיבור הבא כל התשובות שבגיליון ייכנסו מחדש */
+  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null};
+  try{ const c = formCfg(); c.last = ""; c.total = 0; c.lastMsg = ""; formSave(c); }catch(e){}
+  save(); setView("cards"); toast("כל הנתונים נמחקו. בחיבור הבא לטופס — כל התשובות ייכנסו מחדש");
 });
 
 boot();
