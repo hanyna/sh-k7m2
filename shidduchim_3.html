@@ -124,7 +124,20 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 
 /* ---------- card grid ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
-.grid>*{min-width:0;max-width:100%}   /* ערך ארוך בכרטיס לא ימתח את כל העמודה */
+.grid>*{min-width:0;max-width:100%}
+/* עורך טקסט מקצועי לכרטיס: סרגל עיצוב, ביטול/חזרה, תצוגה מקדימה כמו בוואטסאפ */
+.red{margin-bottom:6px}
+.red-bar{display:flex;gap:2px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);border-bottom:none;border-radius:9px 9px 0 0;padding:4px 6px;background:#f6f7f9}
+.red-bar button{border:0;background:transparent;padding:5px 9px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px;color:var(--ink);min-width:30px}
+.red-bar button:hover{background:#e8ecf0}
+.red-bar button.on{background:var(--teal-light);color:var(--teal)}
+.red-sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+.red-count{margin-inline-start:auto;font-size:11.5px;color:var(--ink-faint);padding:0 6px}
+.red textarea{display:block;width:100%;border:1px solid var(--line);border-radius:0 0 9px 9px;padding:10px 12px;font-size:13.5px;line-height:1.6;resize:vertical}
+.red textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,95,92,.12)}
+.red-pv{border:1px solid var(--line);border-top:none;border-radius:0 0 9px 9px;padding:14px;background:#efeae2}
+.red-pv .bubble{background:#d9fdd3;border-radius:10px 0 10px 10px;padding:9px 12px;max-width:520px;margin-inline-start:auto;font-size:14px;line-height:1.55;box-shadow:0 1px 1px rgba(0,0,0,.12);white-space:normal}
+.red.pv textarea{display:none}   /* ערך ארוך בכרטיס לא ימתח את כל העמודה */
 .pcard{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;text-align:right;transition:.16s;position:relative;overflow:hidden;
@@ -1120,7 +1133,7 @@ async function openVault(raw, secret){
 
 function adoptDB(d){
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
-        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null};
+        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || []};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
@@ -2075,6 +2088,14 @@ function delPerson(id){
   const p = personById(id);
   if(!confirm(`למחוק את הכרטיס של ${p.fullName}? גם ההצעות המשויכות אליו יימחקו.`)) return;
   const gone = new Set(DB.matches.filter(m=>m.a===id || m.b===id).map(m=>m.id));
+  /* סל מחזור: הכרטיס נשמר עם ההצעות והפגישות שלו, וניתן לשחזור מלא */
+  const tid = uid(), F0 = formDB();
+  const pendOf = F0.pending.filter(it=>it.exId===id);
+  DB.trash = (DB.trash||[]).concat({id: tid, date: new Date().toISOString(), p: JSON.parse(JSON.stringify(p)),
+    matches: DB.matches.filter(m=>gone.has(m.id)), sessions: DB.sessions.filter(x=>x.pid===id || gone.has(x.mid)),
+    pendKeys: pendOf.map(it=>keyCanon(it.key))}).slice(-300);
+  personKeys(p).forEach(k=>logHandled(k, {act:"deleted", name:p.fullName, trashId: tid}));
+  pendOf.forEach(it=>logHandled(it.key, {act:"pendOfDeleted", name: it.p.fullName, exName: p.fullName, trashId: tid, p: it.p}));
   DB.people = DB.people.filter(x=>x.id!==id);
   DB.matches = DB.matches.filter(m=>m.a!==id && m.b!==id);
   DB.sessions = DB.sessions.filter(x=>x.pid!==id && !gone.has(x.mid));
@@ -2082,7 +2103,7 @@ function delPerson(id){
     /* נמחק בכוונה — גם התשובות שלו שחיכו לאישור לא ייובאו שוב מהגיליון */
     personKeys(p).concat(F.pending.filter(it=>it.exId===id).map(it=>keyCanon(it.key))).forEach(k=>{ if(!F.ignored.includes(k)) F.ignored.push(k); });
     F.pending = F.pending.filter(it=>it.exId!==id); }   /* נמחק בכוונה — לא ייובא שוב מהגיליון */
-  save(); closeSheet(); render(); toast("הכרטיס נמחק");
+  save(); closeSheet(); render(); toast("הכרטיס נמחק — אפשר לשחזר מ״היסטוריה וסל מחזור״ בדף הקליטה");
 }
 
 /* ============ matching ============ */
@@ -2712,6 +2733,9 @@ function openImportReport(){
       <dt style="min-width:70px">${x.row?`שורה ${x.row}`:""}</dt>
       <dd style="flex:1"><b>${esc(x.name||"")}</b><div style="font-size:12.5px;color:var(--ink-soft)">${esc(x.why)}</div></dd>
       ${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">ייבוא בכל זאת</button>`
+        : x.act==="handled" ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+            ${x.trashId ? `<button class="btn sm pri" onclick="reportRestore(${i})">↩ שחזור הכרטיס</button>` : (x.p ? `<button class="btn sm pri" onclick="reportReAdd(${i})">➕ הוספה ככרטיס</button>` : "")}
+            ${x.exId && personById(x.exId) ? `<button class="btn sm" onclick="openPerson('${x.exId}')">פתיחת הכרטיס</button>` : ""}</div>`
         : x.act==="held" ? `<button class="btn sm" onclick="closeSheet();ui.intake='held';setView('intake')">לבדיקה</button>`
         : x.act==="pend" ? `<button class="btn sm" onclick="openFormReview()">לאישור</button>`
         : `<span style="font-size:12px;color:var(--teal)">✓</span>`}
@@ -2726,7 +2750,7 @@ function openImportReport(){
   const breakdown = B ? `<div class="sect">איפה נמצאת כל אחת מ-${R.total} התשובות שבגיליון${R.tabs?` (${esc(R.tabs)})`:""}</div>
     <div class="stats" style="margin-bottom:10px">
       ${tile(B.cards,"בכרטסייה")}${tile(B.held,"מושהות — לבדיקה","var(--brass-light)")}${tile(B.pend,"מילאו שוב — לאישורך","var(--brass-light)")}
-      ${tile(B.twice,"כפולות זהות (כרטיס אחד)")}${tile(B.deleted,"נמחקו / התעלמת")}${tile(B.missing,"חסרות","#f6e3e6")}${tile(B.empty,"שורות ריקות")}
+      ${tile(B.twice,"כפולות זהות (כרטיס אחד)")}${tile(B.deleted,"טופלו קודם — ראו למטה מה קרה")}${tile(B.missing,"חסרות","#f6e3e6")}${tile(B.empty,"שורות ריקות")}
     </div>
     <div style="font-size:13px;color:var(--ink-soft);margin-bottom:10px">
       ${B.cards+B.held+B.pend+B.twice+B.deleted+B.missing+B.empty} = ${R.total} ✓ ·
@@ -2737,6 +2761,57 @@ function openImportReport(){
     <button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
   openSheet();
 }
+/* מהדוח: החזרת תשובה שטופלה בעבר */
+function reportRestore(i){
+  const x = DB.importReport && DB.importReport.items[i]; if(!x) return;
+  const p = restoreTrash(x.trashId);
+  if(p){ x.why = "שוחזר/ה מסל המחזור ✓"; x.act = ""; x.trashId = ""; save(); openImportReport(); }
+}
+function reportReAdd(i){
+  const x = DB.importReport && DB.importReport.items[i]; if(!x || !x.p) return;
+  unIgnore(x.key);
+  const p = Object.assign({}, x.p, {id: uid(), created: today(), updated: today(), formKey: x.key});
+  if(x.exId && personById(x.exId)) p.tags = ["⚠ שם/טלפון דומה קיים"];
+  DB.people.push(p);
+  x.why = "נוסף/ה לכרטסייה ✓"; x.act = ""; x.p = null;
+  save(); render(); openImportReport(); toast(`${p.fullName} נוסף/ה לכרטסייה`);
+}
+
+/* היסטוריה וסל מחזור: כל מה שנעשה בתשובות מהטופס, וכל כרטיס שנמחק — עם אפשרות להחזיר */
+function openHistory(){
+  const F = formDB(), H = F.handled || {}, T = (DB.trash||[]).slice().reverse();
+  const log = Object.entries(H).sort((a,b)=>String(b[1].date).localeCompare(String(a[1].date)));
+  HIST_KEYS = log.map(([k])=>k);
+  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>📜 היסטוריה וסל מחזור</h3>
+      <div class="meta">מה נעשה בכל תשובה מהטופס, וכרטיסים שנמחקו — אפשר להחזיר כל אחד</div></div>
+    <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    <div class="sect">סל מחזור — כרטיסים שנמחקו (${T.length})</div>
+    ${T.length ? `<dl class="fields">${T.map(t=>`<div class="fieldrow" style="align-items:center">
+        <dt style="min-width:120px">${esc(fmtWhen(t.date))}</dt>
+        <dd style="flex:1"><b>${esc(t.p.fullName||"")}</b><div style="font-size:12.5px;color:var(--ink-soft)">${[t.p.age,t.p.city].filter(Boolean).map(esc).join(" · ")}${(t.matches||[]).length?` · ${t.matches.length} הצעות`:""}${(t.sessions||[]).length?` · ${t.sessions.length} פגישות`:""}</div></dd>
+        <button class="btn sm pri" onclick="restoreTrash('${t.id}');openHistory()">↩ שחזור</button></div>`).join("")}</dl>`
+      : `<div style="color:var(--ink-faint);font-size:13px">סל המחזור ריק.</div>`}
+    <div class="sect">מה נעשה בתשובות מהטופס (${log.length})</div>
+    ${log.length ? `<dl class="fields">${log.map(([k,h],j)=>`<div class="fieldrow" style="align-items:center">
+        <dt style="min-width:120px">${esc(fmtWhen(h.date))}</dt>
+        <dd style="flex:1">${esc(handledText(k))}</dd>
+        ${h.act!=="deleted" && h.p && !h.restored ? `<button class="btn sm" onclick="historyReAdd(${j})">➕ הוספה ככרטיס</button>` : ""}</div>`).join("")}</dl>`
+      : `<div style="color:var(--ink-faint);font-size:13px">עוד לא נרשמו פעולות. מעכשיו כל אישור, התעלמות ומחיקה נרשמים כאן.</div>`}
+  </div>`;
+  $("#sheetFoot").innerHTML = `<button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
+  openSheet();
+}
+let HIST_KEYS = [];
+function historyReAdd(j){
+  const k = HIST_KEYS[j];
+  const F = formDB(), h = (F.handled||{})[k]; if(!h || !h.p) return;
+  const p = Object.assign({}, h.p, {id: uid(), created: today(), updated: today(), formKey: k, reviewed: true});
+  if(h.exId && personById(h.exId)) p.tags = ["⚠ שם/טלפון דומה קיים"];
+  unIgnore(k); DB.people.push(p);
+  save(); render(); openHistory(); toast(`${p.fullName} נוסף/ה לכרטסייה`);
+}
+
 function importAnyway(i){
   const R = DB.importReport; if(!R) return;
   const list = i==="all" ? R.items.filter(x=>!x.done && x.p) : [R.items[i]].filter(x=>x && !x.done && x.p);
@@ -2780,7 +2855,15 @@ async function formReconcile(){
       }
       if(extraKey.has(key)){ B.twice++; items.push({row, name:extraKey.get(key).fullName, why:"מילא/ה את הטופס פעמיים עם אותם פרטים בדיוק — כרטיס אחד", done:true}); return; }
       if(pendKey.has(key)){ B.pend++; items.push({row, name:pendKey.get(key).p.fullName||nm0, why:"מילא/ה שוב עם פרטים שונים — ממתין/ה לאישור שלך (עדכון / כרטיס חדש / התעלמות)", done:true, act:"pend"}); return; }
-      if(ignored.has(key)){ B.deleted++; items.push({row, name:nm0||"ללא שם", why:"הכרטיס נמחק על ידך, או שבחרת להתעלם מהתשובה — לא חוזר אוטומטית", done:true}); return; }
+      if(ignored.has(key)){
+        B.deleted++;
+        const h = (F.handled||{})[key] || {};
+        const tr = h.trashId && (DB.trash||[]).some(t=>t.id===h.trashId) ? h.trashId : "";
+        const pp = rowToPerson(headers, r, key, true);
+        if(pp){ pp.reviewed = true; }
+        items.push({row, name:nm0||"ללא שם", why: handledText(key), act:"handled", key, trashId: tr, exId: h.exId, p: pp, done:true});
+        return;
+      }
       let p = rowToPerson(headers, r, key, true);
       if(!p){ B.empty++; return; }
       const nm = normName(p.fullName);
@@ -3610,8 +3693,7 @@ function renderCardTab(p){
       `<div class="fieldrow"><dt>${l}</dt><dd class="${v?"":"na"}">${v?esc(v):"[להשלים]"}</dd></div>`).join("") + `</dl>`;
     html += CARD_SECTIONS.map(sx=>`
       <div class="sect">${sx.l}</div>
-      <textarea id="c_${sx.k}" style="width:100%;min-height:${sx.k==="hobbies"?"70":"110"}px;border:1px solid var(--line);border-radius:8px;padding:9px 11px"
-        placeholder="${esc(sx.ph||"")}">${esc(c[sx.k])}</textarea>`).join("");
+      ${richEditor("c_"+sx.k, c[sx.k], {minh: sx.k==="hobbies" ? 70 : 110, placeholder: sx.ph||""})}`).join("");
     html += `<div class="sect">לפרטים ויצירת קשר (מופיע בתחתית כל כרטיס)</div>
       <div class="form-grid" style="max-width:460px">
         <div class="field"><label for="shName">שם השדכנית</label><input id="shName" value="${esc(sh.name)}" placeholder="מרים לנדסברג"></div>
@@ -3650,7 +3732,7 @@ function renderCardDoc(p, opts){
   const hideEmpty = (p.card && p.card.hideEmpty) || opts.forImage;
   const val = v => (v && String(v).trim()) ? esc(v)
     : (hideEmpty ? null : `<span class="todo-mark">[להשלים]</span>`);
-  const para = (v)=>{ const x=val(v); return x===null?"":`<p>${x.replace(/\n/g,"<br>")}</p>`; };
+  const para = (v)=>{ const x=val(v); return x===null?"":`<p>${waFmt(x).replace(/\n/g,"<br>")}</p>`; };
 
   let h = `<div class="doc doc-${(p.card&&p.card.theme)||"classic"}" style="--accent:${th.accent};--tint:${tint};--headfont:${th.head}">`;
   h += `<div class="doc-band"></div>`;
@@ -3671,7 +3753,7 @@ function renderCardDoc(p, opts){
   if(mb.length){
     h += `<h3>אופי ומידות</h3>` + mb.map(b=>
       `<div class="doc-star">${b.title?`<div class="doc-star-t">⭐ ${esc(b.title)}</div>`:""}` +
-      (b.body.length?`<p>${esc(b.body.join("\n")).replace(/\n/g,"<br>")}</p>`:"") + `</div>`).join("");
+      (b.body.length?`<p>${waFmt(esc(b.body.join("\n"))).replace(/\n/g,"<br>")}</p>`:"") + `</div>`).join("");
   }else if(!hideEmpty){
     h += `<h3>אופי ומידות</h3><p><span class="todo-mark">[להשלים]</span></p>`;
   }
@@ -3993,7 +4075,7 @@ function finishFlow(pid){
 function gcardBoxHtml(pid){
   const p = personById(pid);
   const t = (p.groupCard && p.groupCard.text) || "";
-  return `<textarea id="gcardText" dir="rtl" oninput="gcardEdited('${pid}')" style="width:100%;min-height:270px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13.5px;line-height:1.55">${esc(t)}</textarea>
+  return `${richEditor("gcardText", t, {minh:270, oninput:`gcardEdited('${pid}')`})}
     <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
       <input id="gcardAsk" placeholder="מה לשנות? למשל: לקצר, להוסיף שהיא מורה, פחות רשמי…" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px" onkeydown="if(event.key==='Enter')reviseCardAI('${pid}','group')">
       <button class="btn sm" onclick="reviseCardAI('${pid}','group')">✨ תיקון עם AI</button>
@@ -4021,6 +4103,80 @@ async function regenGroupCard(pid){
        <button class="btn sm" style="margin-top:6px" onclick="regenGroupCard('${pid}')">ניסיון נוסף</button>`;
   }
 }
+
+/* ============ עורך טקסט מקצועי ============ */
+/* סימוני וואטסאפ: *מודגש*  _נטוי_  ~קו חוצה~ — מוצגים גם בכרטיס המודפס/בתמונה */
+function waFmt(escaped){
+  return String(escaped)
+    .replace(/\*([^*\n]+)\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s.,!?)])/g, "$1<i>$2</i>")
+    .replace(/~([^~\n]+)~/g, "<s>$1</s>");
+}
+function richEditor(id, value, opts){
+  opts = opts || {};
+  return `<div class="red" id="${id}_wrap">
+    <div class="red-bar" role="toolbar" aria-label="עיצוב טקסט">
+      <button type="button" title="מודגש (Ctrl+B)" onmousedown="event.preventDefault()" onclick="redWrap('${id}','*')"><b>B</b></button>
+      <button type="button" title="נטוי (Ctrl+I)" onmousedown="event.preventDefault()" onclick="redWrap('${id}','_')"><i>I</i></button>
+      <button type="button" title="קו חוצה" onmousedown="event.preventDefault()" onclick="redWrap('${id}','~')"><s>S</s></button>
+      <span class="red-sep"></span>
+      <button type="button" title="נקודה עם כוכב" onmousedown="event.preventDefault()" onclick="redLine('${id}','⭐ ')">⭐ נקודה</button>
+      <button type="button" title="תבליט" onmousedown="event.preventDefault()" onclick="redLine('${id}','• ')">• תבליט</button>
+      <span class="red-sep"></span>
+      <button type="button" title="ביטול (Ctrl+Z)" onmousedown="event.preventDefault()" onclick="redCmd('${id}','undo')">↶ ביטול</button>
+      <button type="button" title="חזרה (Ctrl+Y)" onmousedown="event.preventDefault()" onclick="redCmd('${id}','redo')">↷ חזרה</button>
+      <span class="red-sep"></span>
+      <button type="button" id="${id}_pvb" title="איך זה ייראה בוואטסאפ" onclick="redPreview('${id}')">👁 תצוגה מקדימה</button>
+      <span class="red-count" id="${id}_cnt">${redCountTxt(value)}</span>
+    </div>
+    <textarea id="${id}" dir="rtl" style="min-height:${opts.minh||120}px" placeholder="${esc(opts.placeholder||"")}"
+      oninput="redCount('${id}');${opts.oninput||""}" onkeydown="redKeys(event,'${id}')">${esc(value||"")}</textarea>
+    <div class="red-pv" id="${id}_pv" style="display:none"></div>
+  </div>`;
+}
+function redCountTxt(v){ const t = String(v||"").trim(); const w = t ? t.split(/\s+/).length : 0; return `${w} מילים · ${t.length} תווים`; }
+function redCount(id){ const el = $("#"+id), c = $("#"+id+"_cnt"); if(el && c) c.textContent = redCountTxt(el.value); }
+/* הכנסה דרך execCommand — כך גם Ctrl+Z / "ביטול" מבטלים את הפעולה */
+function redInsert(el, text){
+  el.focus();
+  let ok = false;
+  try{ ok = document.execCommand("insertText", false, text); }catch(e){}
+  if(!ok){ el.setRangeText(text, el.selectionStart, el.selectionEnd, "end"); el.dispatchEvent(new Event("input", {bubbles:true})); }
+}
+function redWrap(id, mark){
+  const el = $("#"+id); if(!el) return; redPreviewOff(id);
+  const a = el.selectionStart, b = el.selectionEnd, sel = el.value.slice(a, b);
+  if(sel){
+    /* כבר מסומן? — מסירים את הסימון */
+    if(sel.length > 1 && sel.startsWith(mark) && sel.endsWith(mark)) redInsert(el, sel.slice(1, -1));
+    else redInsert(el, mark + sel.trim() + mark + (/\s$/.test(sel) ? " " : ""));
+  }else{
+    redInsert(el, mark + mark); el.selectionStart = el.selectionEnd = el.selectionStart - 1;
+  }
+}
+function redLine(id, prefix){
+  const el = $("#"+id); if(!el) return; redPreviewOff(id);
+  const a = el.selectionStart, start = el.value.lastIndexOf("\n", a - 1) + 1;
+  el.focus(); el.selectionStart = el.selectionEnd = start;
+  const line = el.value.slice(start).split("\n")[0];
+  if(line.startsWith(prefix)){ el.selectionEnd = start + prefix.length; redInsert(el, ""); }
+  else redInsert(el, prefix);
+}
+function redCmd(id, cmd){ const el = $("#"+id); if(!el) return; redPreviewOff(id); el.focus(); try{ document.execCommand(cmd); }catch(e){} redCount(id); }
+function redKeys(e, id){
+  if(!(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if(k==="b" || k==="נ"){ e.preventDefault(); redWrap(id, "*"); }
+  else if(k==="i" || k==="ן"){ e.preventDefault(); redWrap(id, "_"); }
+}
+function redPreview(id){
+  const w = $("#"+id+"_wrap"), pv = $("#"+id+"_pv"), el = $("#"+id), b = $("#"+id+"_pvb"); if(!w || !pv || !el) return;
+  const on = !w.classList.contains("pv");
+  w.classList.toggle("pv", on); b.classList.toggle("on", on);
+  pv.style.display = on ? "" : "none";
+  if(on) pv.innerHTML = `<div class="bubble">${waFmt(esc(el.value)).replace(/\n/g,"<br>") || '<span style="color:#888">אין עדיין טקסט</span>'}</div>`;
+}
+function redPreviewOff(id){ const w = $("#"+id+"_wrap"); if(w && w.classList.contains("pv")) redPreview(id); }
 
 /* עריכה ידנית של הכרטיס לשליחה — נשמרת מיד */
 let gcardSaveT = null;
@@ -4531,6 +4687,7 @@ function renderIntake(){
         <button class="btn sm" onclick="formReconcile()">🔎 בדיקת שלמות — מה חסר מהגיליון</button>` : `<span style="font-size:13px;color:var(--ink-faint)">הטופס עוד לא מחובר</span>`}
       ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ${pend} מילאו שוב — ממתינים לבדיקה</button>`:""}
       ${DB.importReport?`<button class="btn sm" onclick="openImportReport()">📄 דוח הייבוא האחרון</button>`:""}
+      <button class="btn sm" onclick="openHistory()">📜 היסטוריה וסל מחזור${(DB.trash||[]).length?` (${DB.trash.length})`:""}</button>
       <button class="btn ghost sm" style="margin-inline-start:auto" onclick="ui.intake='all';renderIntake()">הצגת כולם</button>
       <span style="font-size:12.5px;color:var(--ink-faint)">פניות רגילות מהטופס מאושרות אוטומטית; חריגות מושהות כאן.</span>
     </div>
@@ -4994,11 +5151,52 @@ function openFormReview(i){
     <button class="btn ghost" onclick="openFormReview()">חזרה לרשימה</button>`;
   openSheet();
 }
+/* ============ היסטוריה: מה באמת קרה לכל תשובה מהטופס, וסל מחזור לכרטיסים שנמחקו ============ */
+function logHandled(key, info){
+  if(!key) return;
+  const F = formDB(); F.handled = F.handled || {};
+  F.handled[keyCanon(key)] = Object.assign({date: new Date().toISOString()}, info);
+}
+const HANDLED_TXT = {
+  deleted:  h=>`הכרטיס של ${h.name||"המועמד"} נמחק ב-${fmtWhen(h.date)}`,
+  ignore:   h=>`בחרת "התעלמות" בתשובה החוזרת של ${h.name||""} ב-${fmtWhen(h.date)} — הכרטיס הקיים לא השתנה`,
+  update:   h=>`התשובה עודכנה לתוך הכרטיס הקיים של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}${h.fields&&h.fields.length?` (${h.fields.length} פרטים)`:" (לא סומנו פרטים לעדכון)"}`,
+  fill:     h=>`"השלמת שדות ריקים בכולם" — הושלמו פרטים בכרטיס של ${h.exName||h.name||""} ב-${fmtWhen(h.date)}`,
+  bulkIgnore: h=>`"התעלמות מכולם" ב-${fmtWhen(h.date)} — התשובה החוזרת של ${h.name||""} לא נכנסה`,
+  pendOfDeleted: h=>`חיכתה לאישור, והכרטיס של ${h.exName||""} נמחק ב-${fmtWhen(h.date)}`
+};
+function fmtWhen(iso){ try{ const d = new Date(iso); return d.toLocaleDateString("he-IL") + " " + d.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso||""; } }
+function handledText(key){
+  const h = (formDB().handled||{})[keyCanon(key)];
+  if(!h) return "סומנה כ״טופלה״ בגרסה קודמת של הכלי — שם עוד לא נרשם מה בדיוק נעשה בה";
+  return (HANDLED_TXT[h.act] || (()=>"טופלה"))(h) + (h.restored ? ` · ↩ הוחזר/ה לכרטסייה ב-${fmtWhen(h.restored)}` : "");
+}
+/* החזרת תשובה שטופלה: מוציאים מרשימת "טופלו" ומכניסים ככרטיס */
+function unIgnore(key){
+  const F = formDB(), k = keyCanon(key);
+  F.ignored = (F.ignored||[]).filter(x=>keyCanon(x)!==k);
+  F.seen = (F.seen||[]).filter(x=>keyCanon(x)!==k);
+  if(F.handled && F.handled[k]) F.handled[k].restored = new Date().toISOString();   /* ההיסטוריה נשמרת — רק מסמנים שהוחזר */
+}
+function restoreTrash(tid){
+  const T = DB.trash || [], i = T.findIndex(t=>t.id===tid); if(i<0) return toast("לא נמצא בסל המחזור");
+  const t = T[i], p = t.p;
+  if(personById(p.id)) p.id = uid();
+  DB.people.push(p);
+  (t.matches||[]).forEach(m=>{ if(!DB.matches.some(x=>x.id===m.id)) DB.matches.push(m); });
+  (t.sessions||[]).forEach(x=>{ if(!DB.sessions.some(y=>y.id===x.id)) DB.sessions.push(x); });
+  personKeys(p).concat(t.pendKeys||[]).forEach(unIgnore);
+  T.splice(i,1);
+  save(); render(); toast(`${p.fullName} שוחזר/ה לכרטסייה — עם ההצעות והפגישות שהיו`);
+  return p;
+}
+
 function applyPending(i, mode){
   const F = formDB(), it = F.pending[i]; if(!it) return;
   const ex = personById(it.exId);
+  let ks = [];
   if(mode==="update" && ex){
-    const ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
+    ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
     ks.forEach(k=>{ ex[k] = it.p[k]; });
     Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(!ex.extra[k]) ex.extra[k] = v; });
     ex.updated = today();
@@ -5008,7 +5206,8 @@ function applyPending(i, mode){
     DB.people.push(it.p); toast("נוסף כרטיס חדש");
   }else toast("התשובה סומנה כטופלה");
   if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key);   /* טופלה — לא תחזור שוב */
-  if(mode==="ignore" || mode==="update"){ F.ignored = F.ignored || []; if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key); }
+  if(mode==="ignore" || mode==="update"){ F.ignored = F.ignored || []; if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key);
+    logHandled(it.key, {act: mode, name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, fields: ks, p: it.p}); }
   F.pending.splice(i,1);
   save(); render(); renderForm();
   if(F.pending.length) openFormReview(); else { closeSheet(); }
@@ -5022,7 +5221,8 @@ function bulkPending(mode){
     if(n) ex.updated = today();
   });
   F.ignored = F.ignored || [];
-  F.pending.forEach(it=>{ if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key); if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key); });
+  F.pending.forEach(it=>{ if(it.key && !F.seen.includes(it.key)) F.seen.push(it.key); if(it.key && !F.ignored.includes(it.key)) F.ignored.push(it.key);
+    const ex = personById(it.exId); logHandled(it.key, {act: mode==="fill" ? "fill" : "bulkIgnore", name: it.p.fullName, exName: ex && ex.fullName, exId: it.exId, p: it.p}); });
   F.pending = [];
   save(); render(); renderForm(); closeSheet();
   toast(mode==="fill" ? `הושלמו ${n} שדות ריקים — שום פרט קיים לא נדרס` : "כל התשובות הממתינות סומנו כטופלו");
@@ -5790,7 +5990,7 @@ $("#btnWipe").addEventListener("click", async ()=>{
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
   /* איפוס מלא — גם זיכרון הטופס: בחיבור הבא כל התשובות שבגיליון ייכנסו מחדש */
-  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null};
+  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null, trash:[]};
   try{ const c = formCfg(); c.last = ""; c.total = 0; c.lastMsg = ""; formSave(c); }catch(e){}
   save(); setView("cards"); toast("כל הנתונים נמחקו. בחיבור הבא לטופס — כל התשובות ייכנסו מחדש");
 });
