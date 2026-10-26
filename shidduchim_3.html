@@ -1698,19 +1698,21 @@ function renderCards(keepLimit){
   if(!keepLimit) cardLimit = CARD_BATCH;
   const list = filtered();
   const host = $("#cardsHost");
-  if(!DB.people.length){
-    host.innerHTML = `<div class="empty"><h3>הכרטסייה עדיין ריקה</h3>
-      <p>העלו קובץ אקסל עם רשימת המועמדים, או הוסיפו מועמד ידנית.</p>
-      <button class="btn pri" onclick="setView('import')">העלאת קובץ</button></div>`;
-    return;
-  }
   const S = ui.smart;
   const pend = (DB.form && DB.form.pending || []).length;
   const fc = formCfg();
-  const connectBanner = (fc.sheetId && !fc.last && driveCfg().clientId) ? `<div class="smart-banner">
-      <div><b>📝 הכרטסייה מחוברת לטופס "כרטיס שידוכים"</b> — נשאר רק לאשר מול גוגל, פעם אחת. מעכשיו כל מי שממלא את הטופס ייכנס לבד.</div>
-      <button class="btn sm pri" onclick="syncForm(true)">אישור מול גוגל</button>
+  const needClient = fc.sheetId && !fc.last && !driveCfg().clientId;
+  const connectBanner = (fc.sheetId && !fc.last) ? `<div class="smart-banner">
+      <div><b>📝 הכרטסייה מחוברת לטופס "כרטיס שידוכים"</b> — נשאר רק לאשר מול גוגל, פעם אחת. כל מי שכבר מילא את הטופס ייכנס לכרטסייה מיד, ומעכשיו כל תשובה חדשה תיכנס לבד.
+        ${needClient?`<div style="font-size:12.5px;color:var(--rose);margin-top:4px">לפני כן צריך להגדיר את החיבור לגוגל (Client ID) בעמוד גיבוי וניהול.</div>`:""}</div>
+      <button class="btn sm pri" onclick="${needClient?"setView('backup')":"syncForm(true)"}">${needClient?"להגדרות":"אישור מול גוגל"}</button>
     </div>` : "";
+  if(!DB.people.length){
+    host.innerHTML = connectBanner + `<div class="empty"><h3>הכרטסייה עדיין ריקה</h3>
+      <p>${fc.sheetId?"אחרי האישור מול גוגל, כל מי שמילא את הטופס יופיע כאן.":"העלו קובץ אקסל עם רשימת המועמדים, או הוסיפו מועמד ידנית."}</p>
+      ${fc.sheetId?"":`<button class="btn pri" onclick="setView('import')">העלאת קובץ</button>`}</div>`;
+    return;
+  }
   const fbanner = connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
       <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
       <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
@@ -4195,10 +4197,12 @@ function renderInstall(){
    מי שכבר קיים בכרטסייה (טלפון או מייל זהים) לא נכנס שוב — הוא ממתין לאישור השדכנית. */
 const FORM = {busy:false};
 /* הגיליון של טופס "כרטיס שידוכים" — מוגדר מראש, כדי שהשדכנית לא תצטרך להגדיר כלום */
-const FORM_PRESET = {url:"", sheetId:"", gid:""};
+const FORM_PRESET = {url:"https://docs.google.com/spreadsheets/d/1xmDHwi6mdxHl6qCgPeeO0NlwnqGtfFCj9i9U1L2zPBM/edit", sheetId:"1xmDHwi6mdxHl6qCgPeeO0NlwnqGtfFCj9i9U1L2zPBM", gid:""};
 function formCfg(){
   const def = Object.assign({url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0}, FORM_PRESET);
-  try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
+  let c; try{ c = Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ c = def; }
+  if(!c.sheetId && !c.unlinked){ c.sheetId = FORM_PRESET.sheetId; c.url = FORM_PRESET.url; }
+  return c;
 }
 function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
 function formDB(){ if(!DB.form) DB.form = {seen:[], pending:[]}; DB.form.seen = DB.form.seen||[]; DB.form.pending = DB.form.pending||[]; return DB.form; }
@@ -4294,8 +4298,9 @@ async function syncForm(manual, dryRun){
       formStatus(msg, "var(--teal)");
       return {total:rows.length, fresh:fresh.length};
     }
-    let added = 0, pending = 0, similar = 0, skipped = 0, already = 0, held = 0;
+    let added = 0, pending = 0, similar = 0, skipped = 0, already = 0, held = 0, merged = 0;
     const firstRun = !F.baselined;
+    const runIds = new Set();
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
       seen.add(key);
@@ -4303,7 +4308,16 @@ async function syncForm(manual, dryRun){
       if(!p){ skipped++; return; }
       if(firstRun){
         const nm = String(p.fullName).trim();
-        if(findExisting(p) || DB.people.some(x=>String(x.fullName||"").trim()===nm)){ already++; return; }
+        const ex0 = findExisting(p) || DB.people.find(x=>String(x.fullName||"").trim()===nm);
+        if(ex0 && runIds.has(ex0.id)){
+          /* אותו אדם מילא כמה פעמים לפני החיבור — הכרטיס מתעדכן לתשובה האחרונה (השורות בגיליון לפי סדר הזמן) */
+          FIELDS.forEach(f=>{ if(hasVal(p[f.k])) ex0[f.k] = p[f.k]; });
+          Object.assign(ex0.extra = ex0.extra||{}, p.extra||{});
+          ex0.formKey = p.formKey; merged++; return;
+        }
+        if(ex0){ already++; return; }          /* כבר היה בכרטסייה לפני החיבור */
+        p.reviewed = true; p.historic = true;  /* תשובה ישנה — נכנסת ישר, בלי השהיה */
+        DB.people.push(p); runIds.add(p.id); added++; return;
       }
       const ex = findExisting(p);
       if(ex){ F.pending.push({key, p, exId:ex.id, date:today()}); pending++; return; }
@@ -4323,10 +4337,10 @@ async function syncForm(manual, dryRun){
     c.last = new Date().toISOString(); c.total = rows.length;
     c.lastMsg = added||pending ? `${added===1?"נוסף 1":"נוספו "+added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
     formSave(c);
-    if(added || pending || skipped || already || firstRun) save();
+    if(added || pending || skipped || already || merged || firstRun) save();
     render();
     renderForm();
-    if(firstRun && already) toast(`📝 החיבור לטופס פעיל ✓ — ${already} תשובות כבר היו בכרטסייה וסומנו כטופלו${added?`, ${added===1?"נוסף מועמד חדש":"נוספו "+added+" חדשים"}`:""}. מעכשיו נכנסות רק תשובות חדשות.`);
+    if(firstRun) toast(`📝 החיבור לטופס פעיל ✓ — ${added ? `יובאו ${added} מועמדים מהטופס` : "אין תשובות חדשות לייבא"}${already?` · ${already} כבר היו בכרטסייה`:""}${merged?` · ${merged} מילאו יותר מפעם אחת (נשמרה התשובה האחרונה)`:""}. מעכשיו כל תשובה חדשה נכנסת לבד.`);
     else if(added || pending){
       toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
     }else if(manual) toast("אין תשובות חדשות בטופס");
@@ -4393,7 +4407,7 @@ function renderForm(){
     if(r.err){ formStatus(r.err, "var(--rose)"); return; }
     const c2 = formCfg();
     const changed = c2.sheetId && c2.sheetId !== r.id;
-    c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked;
+    c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked; c2.unlinked = false;
     if(changed){ c2.last = ""; c2.total = 0; const F = formDB(); F.baselined = false; F.pending = []; save(); }
     formSave(c2);
     renderForm();
@@ -4404,7 +4418,7 @@ function renderForm(){
   const now = $("#btnFormNow"); if(now) now.addEventListener("click", ()=>syncForm(true));
   const off = $("#btnFormOff"); if(off) off.addEventListener("click", ()=>{
     if(!confirm("לנתק את הטופס? הכרטיסים שכבר נכנסו נשארים בכרטסייה.")) return;
-    const c2 = formCfg(); c2.sheetId = ""; c2.url = ""; c2.last = ""; formSave(c2); renderForm(); toast("הטופס נותק");
+    const c2 = formCfg(); c2.sheetId = ""; c2.url = ""; c2.last = ""; c2.unlinked = true; formSave(c2); renderForm(); toast("הטופס נותק");
   });
 }
 
@@ -4491,11 +4505,15 @@ function bulkPending(mode){
 const DRIVE = {token:null, exp:0, tc:null, busy:false};
 const DRIVE_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const FOLDER_NAME = "גיבויי שידוכים";
+const CLIENT_PRESET = "924796524180-t5pkkg9r7oguokc0v5eekfu4b1us5vor.apps.googleusercontent.com";
 
 function driveCfg(){
-  const def = {clientId:"", enabled:false, hour:1, folderId:"", last:"", keepDays:7, encOn:true, xlsxOn:true, closeOn:true};
-  try{ return Object.assign(def, JSON.parse(localStorage.getItem("drive_cfg") || "null") || {}); }
-  catch(e){ return def; }
+  const def = {clientId:CLIENT_PRESET, enabled:false, hour:1, folderId:"", last:"", keepDays:7, encOn:true, xlsxOn:true, closeOn:true};
+  let c;
+  try{ c = Object.assign(def, JSON.parse(localStorage.getItem("drive_cfg") || "null") || {}); }
+  catch(e){ c = def; }
+  if(!c.clientId) c.clientId = CLIENT_PRESET;
+  return c;
 }
 function driveSave(cfg){
   try{ localStorage.setItem("drive_cfg", JSON.stringify(cfg)); }catch(e){}
