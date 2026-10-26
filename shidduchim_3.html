@@ -1501,6 +1501,7 @@ function sanitizeDB(d){
 }
 
 async function boot(){
+  applyConnectLink();
   await vaultLoad();
   /* הצפנה זמינה רק בהקשר מאובטח — https או localhost. פתיחת הקובץ בלחיצה כפולה לא נחשבת. */
   if(!window.crypto || !crypto.subtle){
@@ -1703,7 +1704,7 @@ function renderCards(keepLimit){
   const fc = formCfg();
   const needClient = fc.sheetId && !fc.last && !driveCfg().clientId;
   const connectBanner = (fc.sheetId && !fc.last) ? `<div class="smart-banner">
-      <div><b>📝 הכרטסייה מחוברת לטופס "כרטיס שידוכים"</b> — נשאר רק לאשר מול גוגל, פעם אחת. כל מי שכבר מילא את הטופס ייכנס לכרטסייה מיד, ומעכשיו כל תשובה חדשה תיכנס לבד.
+      <div><b>📝 הכרטסייה מחוברת לטופס השידוכים</b> — נשאר רק לאשר מול גוגל, פעם אחת. כל מי שכבר מילא את הטופס ייכנס לכרטסייה מיד, ומעכשיו כל תשובה חדשה תיכנס לבד.
         ${needClient?`<div style="font-size:12.5px;color:var(--rose);margin-top:4px">לפני כן צריך להגדיר את החיבור לגוגל (Client ID) בעמוד גיבוי וניהול.</div>`:""}</div>
       <button class="btn sm pri" onclick="${needClient?"setView('backup')":"syncForm(true)"}">${needClient?"להגדרות":"אישור מול גוגל"}</button>
     </div>` : "";
@@ -4197,12 +4198,22 @@ function renderInstall(){
    מי שכבר קיים בכרטסייה (טלפון או מייל זהים) לא נכנס שוב — הוא ממתין לאישור השדכנית. */
 const FORM = {busy:false};
 /* הגיליון של טופס "כרטיס שידוכים" — מוגדר מראש, כדי שהשדכנית לא תצטרך להגדיר כלום */
-const FORM_PRESET = {url:"https://docs.google.com/spreadsheets/d/1xmDHwi6mdxHl6qCgPeeO0NlwnqGtfFCj9i9U1L2zPBM/edit", sheetId:"1xmDHwi6mdxHl6qCgPeeO0NlwnqGtfFCj9i9U1L2zPBM", gid:""};
+/* אין קישור טופס קבוע בקוד — הקוד ציבורי. החיבור נעשה רק במחשב שנפתח בו קישור הגדרה פרטי
+   (…/shidduchim_3.html#connect=<מזהה הגיליון>), והמזהה נשמר רק בדפדפן הזה. */
+function applyConnectLink(){
+  try{
+    const m = /(?:^#|&)connect=([A-Za-z0-9_-]{25,})/.exec(location.hash || "");
+    if(!m) return false;
+    history.replaceState(null, "", location.pathname + location.search);   /* מוחקים את הקישור משורת הכתובת */
+    const c = formCfg();
+    if(c.sheetId !== m[1]){ c.sheetId = m[1]; c.url = "https://docs.google.com/spreadsheets/d/"+m[1]+"/edit"; c.gid = ""; c.last = ""; c.total = 0; c.auto = true; }
+    formSave(c);
+    return true;
+  }catch(e){ return false; }
+}
 function formCfg(){
-  const def = Object.assign({url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0}, FORM_PRESET);
-  let c; try{ c = Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ c = def; }
-  if(!c.sheetId && !c.unlinked){ c.sheetId = FORM_PRESET.sheetId; c.url = FORM_PRESET.url; }
-  return c;
+  const def = {url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0};
+  try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
 }
 function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
 function formDB(){ if(!DB.form) DB.form = {seen:[], pending:[]}; DB.form.seen = DB.form.seen||[]; DB.form.pending = DB.form.pending||[]; return DB.form; }
@@ -4407,7 +4418,7 @@ function renderForm(){
     if(r.err){ formStatus(r.err, "var(--rose)"); return; }
     const c2 = formCfg();
     const changed = c2.sheetId && c2.sheetId !== r.id;
-    c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked; c2.unlinked = false;
+    c2.url = $("#formUrl").value.trim(); c2.sheetId = r.id; c2.gid = r.gid; c2.auto = $("#formAuto").checked;
     if(changed){ c2.last = ""; c2.total = 0; const F = formDB(); F.baselined = false; F.pending = []; save(); }
     formSave(c2);
     renderForm();
@@ -4418,7 +4429,7 @@ function renderForm(){
   const now = $("#btnFormNow"); if(now) now.addEventListener("click", ()=>syncForm(true));
   const off = $("#btnFormOff"); if(off) off.addEventListener("click", ()=>{
     if(!confirm("לנתק את הטופס? הכרטיסים שכבר נכנסו נשארים בכרטסייה.")) return;
-    const c2 = formCfg(); c2.sheetId = ""; c2.url = ""; c2.last = ""; c2.unlinked = true; formSave(c2); renderForm(); toast("הטופס נותק");
+    const c2 = formCfg(); c2.sheetId = ""; c2.url = ""; c2.last = ""; formSave(c2); renderForm(); toast("הטופס נותק");
   });
 }
 
