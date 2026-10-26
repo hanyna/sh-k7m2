@@ -124,6 +124,7 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 
 /* ---------- card grid ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.grid>*{min-width:0;max-width:100%}   /* ערך ארוך בכרטיס לא ימתח את כל העמודה */
 .pcard{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;text-align:right;transition:.16s;position:relative;overflow:hidden;
@@ -139,12 +140,14 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 }
 .pcard.g-m .mono{background:#e8eff6;color:#2f5d8a}
 .pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
-.pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3}
+.pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.pcard-head>div{min-width:0}
+.pcard .meta{overflow-wrap:anywhere}
 .pcard .meta{font-size:12.5px;color:var(--ink-faint)}
 .pcard .rows{font-size:13px;color:var(--ink-soft);display:flex;flex-direction:column;gap:2px}
 .pcard .rows div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pcard .tagline{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap}
-.tag{background:#f0f3f5;border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft)}
+.tag{background:#f0f3f5;border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badge{
   position:absolute;top:10px;left:10px;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;
 }
@@ -2823,7 +2826,7 @@ function delSession(sid, pid){
 /* ---- שכבת הפנייה לשירות הניתוח — תומכת בשני ספקים ---- */
 const GEMINI_DEFAULT = "gemini-3.5-flash-lite";
 const GEMINI_MODELS = ["gemini-3.5-flash-lite","gemini-3.6-flash","gemini-3.5-flash","gemini-flash-lite-latest"];
-const ANTHROPIC_MODELS = ["claude-sonnet-4-6","claude-haiku-4-5-20251001","claude-opus-4-8"];
+const ANTHROPIC_MODELS = ["claude-sonnet-5-5","claude-haiku-5-5","claude-opus-5-5"];
 function fillModelList(provider){
   const list = provider === "gemini" ? GEMINI_MODELS : ANTHROPIC_MODELS;
   const dl = document.getElementById("dlModels");
@@ -2861,14 +2864,19 @@ async function callAI(prompt){
 
   if(cfg.provider === "gemini"){
     if(!cfg.key) throw new Error("לא הוזן מפתח Gemini בהגדרות.");
-    const model = cfg.model || GEMINI_DEFAULT;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    let model = cfg.model || GEMINI_DEFAULT;
+    const urlOf = m => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
+    const wantJson = /החזר JSON|JSON בלבד/.test(prompt);
 
     /* שולח בקשה. thinkOff=true מוסיף thinkingBudget:0 (מהיר), אבל חלק מהמודלים
        לא מכירים את הפרמטר ומחזירים 400 — לכן ננסה שוב אוטומטית בלעדיו. */
-    async function send(thinkOff){
-      const gen = {temperature:0.4, maxOutputTokens:4096};
-      if(thinkOff){ gen.thinkingConfig = {thinkingBudget:0}; if(/החזר JSON|JSON בלבד/.test(prompt)) gen.responseMimeType = "application/json"; }
+    /* mode: "budget0" (דגמי 2.x — בלי חשיבה, מהיר) · "low" (דגמי 3 ומעלה) · "plain" (בלי הגדרת חשיבה) */
+    async function send(mode){
+      const gen = {temperature:0.4, maxOutputTokens:8192};
+      if(mode==="budget0") gen.thinkingConfig = {thinkingBudget:0};
+      if(mode==="low") gen.thinkingConfig = {thinkingLevel:"low"};
+      if(wantJson && mode!=="plain") gen.responseMimeType = "application/json";
+      const url = urlOf(model);
       const ctl = new AbortController();
       const timer = setTimeout(()=>ctl.abort(), 45000);
       try{
@@ -2883,17 +2891,27 @@ async function callAI(prompt){
       }catch(e){
         clearTimeout(timer);
         throw new Error(e.name === "AbortError"
-          ? "השירות לא הגיב בזמן. נסו מודל מהיר יותר (gemini-3.5-flash-lite) או נסו שוב."
-          : "בעיית תקשורת מול Gemini: " + e.message);
+          ? "השירות לא הגיב בזמן. נסו מודל מהיר יותר או נסו שוב."
+          : "אין חיבור לשירות Gemini (" + e.message + "). בדקו את האינטרנט; אם יש סינון (כמו נטפרי) — ייתכן שהוא חוסם את generativelanguage.googleapis.com וצריך לבקש לפתוח אותו.");
       }
     }
 
-    let res = await send(true);
-    if(res.status === 400){
-      /* ייתכן שהפרמטר לא נתמך במודל — ננסה שוב בלי thinkingConfig */
-      const retry = await send(false);
-      if(retry.ok) res = retry;
-      else res = retry;   /* נמשיך לטיפול השגיאה המפורט למטה */
+    /* מתחילים בהגדרה שמתאימה לדור המודל, ואם הוא דוחה אותה (400) — מנסים את הבאה */
+    const gen3 = m => { const v = parseFloat((String(m).match(/gemini-(\d+(?:\.\d+)?)/)||[])[1]||"0"); return v>=3 || /latest/.test(m); };
+    async function attempt(){
+      const order = gen3(model) ? ["low","budget0","plain"] : ["budget0","low","plain"];
+      let r;
+      for(const mode of order){ r = await send(mode); if(r.status !== 400) break; }
+      return r;
+    }
+    let res = await attempt();
+    if(res.status === 404 || (res.status === 400 && !cfg.model)){
+      /* המודל לא קיים / הוצא משימוש — בוחרים לבד מודל זמין מהרשימה של גוגל ושומרים אותו */
+      try{
+        const avail = await fetchGeminiModels(cfg.key);
+        const pick = avail.find(m=>m!==model);
+        if(pick){ model = pick; res = await attempt(); if(res.ok) try{ localStorage.setItem("ai_model", pick); }catch(e){} }
+      }catch(e){}
     }
     if(!res.ok){
       /* תמיד שולפים את ההודעה האמיתית של גוגל — בלעדיה אי אפשר לדעת מה הבעיה */
@@ -2901,8 +2919,8 @@ async function callAI(prompt){
       try{ const j = await res.clone().json(); detail = (j.error && j.error.message) || ""; }
       catch(e){ try{ detail = (await res.clone().text()).slice(0,200); }catch(e2){} }
       const hint = res.status===401 ? " (המפתח שגוי או בוטל — בדקו את מפתח ה-API בעמוד גיבוי וניהול ← שירות הניתוח)"
-        : res.status===400
-        ? " (בדקו שם מודל, ולחצו 'טעינת המודלים הזמינים')"
+        : res.status===400 || res.status===404
+        ? " (המודל " + model + " לא זמין — לחצו 'טעינת המודלים הזמינים' בעמוד גיבוי וניהול)"
         : res.status===403 ? " (ודאו ש-Generative Language API מופעל ושהמפתח תקף)"
         : res.status===429 ? " (חריגה ממכסה — נסו מאוחר יותר)" : "";
       throw new Error(`Gemini החזירה שגיאה ${res.status}${hint}` + (detail ? " · " + detail.slice(0,180) : ""));
@@ -2927,12 +2945,25 @@ async function callAI(prompt){
     headers["anthropic-version"] = "2023-06-01";
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   }
-  const res = await fetch("https://api.anthropic.com/v1/messages",{
+  const sendA = m => fetch("https://api.anthropic.com/v1/messages",{
     method:"POST", headers,
-    body: JSON.stringify({model: cfg.model || "claude-sonnet-4-6", max_tokens:4096,
-                          messages:[{role:"user", content:prompt}]})
+    body: JSON.stringify({model: m, max_tokens:4096, messages:[{role:"user", content:prompt}]})
   });
-  if(!res.ok) throw new Error(aiError(res.status, "anthropic"));
+  let res;
+  try{
+    res = await sendA(cfg.model || ANTHROPIC_MODELS[0]);
+    /* שם מודל ישן/שגוי — ננסה את ברירת המחדל העדכנית */
+    if((res.status===404 || res.status===400) && cfg.model && cfg.model!==ANTHROPIC_MODELS[0]){
+      const r2 = await sendA(ANTHROPIC_MODELS[0]);
+      if(r2.ok){ res = r2; try{ localStorage.setItem("ai_model", ANTHROPIC_MODELS[0]); }catch(e){} }
+    }
+  }catch(e){
+    throw new Error("אין חיבור לשירות Claude (" + e.message + "). בדקו את האינטרנט; אם יש סינון (כמו נטפרי) — ייתכן שהוא חוסם את api.anthropic.com.");
+  }
+  if(!res.ok){
+    let detail=""; try{ const j=await res.clone().json(); detail=(j.error&&j.error.message)||""; }catch(e){}
+    throw new Error(aiError(res.status, "anthropic") + (detail ? " · " + detail.slice(0,180) : ""));
+  }
   const data = await res.json();
   return data.content.filter(x=>x.type==="text").map(x=>x.text).join("\n");
 }
@@ -2947,7 +2978,7 @@ async function fetchGeminiModels(key){
   const names = (d.models||[])
     .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
     .map(m=>String(m.name).replace(/^models\//,""))
-    .filter(n=>/gemini/i.test(n));
+    .filter(n=>/gemini/i.test(n) && !/tts|image|embed|live|audio|vision|robotics|computer-use|native/i.test(n));
   /* דירוג: flash-lite עדיף (מהיר וזול), אחריו flash; ומספר גרסה גבוה יותר קודם */
   const score = n=>{
     let s = 0;
@@ -3502,13 +3533,71 @@ const CARD_STYLE = {
   "דתי לייט": "סגנון דתי פתוח: ערכי בית, אמינות, שילוב מסורת עם חיים מודרניים. לשון פשוטה ולא עמוסה."
 };
 
+/* ============ כל החומר שבתיק — לניסוח כרטיס ============ */
+/* מאחד את כל מה שידוע על המועמד: שדות הטופס, שדות נוספים מהטופס/הקובץ (extra), מה שהשדכנית
+   כבר כתבה בכרטיס, תמצית הניתוח וסיכומי הפגישות — כדי שה-AI ינסח מכל הפרטים ולא רק מחלקם. */
+const EXTRA_PII = /טלפון|נייד|פלאפון|מייל|אימייל|e-?mail|דוא"?ל|ת\.?ז|תעודת|כתובת מגורים|רחוב|שם משפחה|שם פרטי|שם מלא|חותמת זמן|timestamp|ממליצ|ממליץ|בריאות|רפואי|מחל|תרופ/i;
+function caseMaterial(p, skip, opt){
+  opt = opt || {};
+  const lines = [];
+  FIELDS.forEach(f=>{ if(hasVal(p[f.k]) && !skip.includes(f.k)) lines.push(`${f.l}: ${disp(p[f.k])}`); });
+  const ex = p.extra || {};
+  Object.keys(ex).forEach(k=>{
+    const v = String(ex[k]==null?"":ex[k]).trim();
+    if(!v || EXTRA_PII.test(k) || /@|\d{3}[-\s]?\d{6,7}/.test(v)) return;
+    lines.push(`${k}: ${v.slice(0,400)}`);
+  });
+  const c = p.card || {};
+  const own = ["about","middot","hobbies","looking"].map(k=>c[k]&&!/^\[להשלים\]$/.test(String(c[k]).trim())?String(c[k]).trim():"").filter(Boolean);
+  if(own.length && opt.ownCard!==false) lines.push(`\nמה שהשדכנית כבר כתבה בכרטיס:\n${own.join("\n")}`);
+  const an = p.analysis;
+  if(an){
+    if(an.summary) lines.push(`\nתמצית השדכנית: ${an.summary}`);
+    if((an.strengths||[]).length) lines.push(`חוזקות: ${asList(an.strengths).join("; ")}`);
+    if((an.wants||[]).length) lines.push(`מבקש/ת: ${asList(an.wants).join("; ")}`);
+  }
+  if(opt.sessions){
+    const ss = sessionsOf(p.id).filter(x=>x.notes);
+    if(ss.length) lines.push(`\nסיכומי הפגישות עם השדכנית:\n` + ss.map(x=>`[${x.date} · ${x.type}] ${x.notes}`).join("\n").slice(0,3000));
+  }
+  return lines.join("\n");
+}
+
+/* בדיקה אוטומטית של כרטיס שהופק — לפני שהוא יוצא לשליחה */
+function checkCardText(text, p, kind){
+  const t = String(text||""), w = [];
+  if(/\[להשלים\]/.test(t)) w.push("יש קטע שסומן [להשלים] — חסר מידע בתיק");
+  if(/\[שם\]/.test(t)) w.push("נשאר [שם] במקום השם");
+  if(/\b0\d{1,2}[-\s]?\d{3}[-\s]?\d{4}\b|\+972/.test(t.replace(gcardSign(),""))) w.push("מופיע מספר טלפון בגוף הכרטיס");
+  if(/[\w.-]+@[\w-]+\.\w+/.test(t)) w.push("מופיעה כתובת מייל בכרטיס");
+  const last = String(p.fullName||"").trim().split(/\s+/).slice(1).join(" ");
+  if(kind==="group" && last && last.length>1 && t.includes(last)) w.push("מופיע שם המשפחה — בכרטיס לקבוצות לא כותבים אותו");
+  const age = parseInt(p.age,10);
+  const m = t.match(/גיל[:\s*]*(\d{2})/);
+  if(age && m && Math.abs(parseInt(m[1],10)-age)>1) w.push(`הגיל בכרטיס (${m[1]}) לא תואם לגיל בתיק (${age})`);
+  const hw = (re)=> new RegExp("(^|[^א-ת])(" + re + ")(?=$|[^א-ת])").test(t);
+  const male = hw("הוא|בחור|מחפש|לומד"), female = hw("היא|בחורה|מחפשת|לומדת");
+  if(p.gender==="בת" && male && !female) w.push("נראה שהכרטיס כתוב בלשון זכר — לבדוק");
+  if(p.gender==="בן" && female && !male) w.push("נראה שהכרטיס כתוב בלשון נקבה — לבדוק");
+  if(hw("בריאות|מחלה|מחלת|טיפול תרופתי|אבחנה|גרוש|גרושה|גירושין")) w.push("ייתכן שמופיע פרט רגיש (בריאות/מצב משפחתי) — לבדוק");
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if(kind==="group" && words>170) w.push(`הכרטיס ארוך (${words} מילים) — לוואטסאפ עדיף קצר יותר`);
+  if(t.trim().length < 60) w.push("הכרטיס קצר מאוד — ייתכן שחסר מידע בתיק");
+  return w;
+}
+function checkHtml(w){
+  return w.length
+    ? `<div class="lock-warn" style="margin-top:8px;text-align:right"><b>⚠ בדיקה אוטומטית — כדאי לעבור על:</b><br>${w.map(x=>"• "+esc(x)).join("<br>")}</div>`
+    : `<div style="font-size:12.5px;color:var(--teal);margin-top:6px">✓ בדיקה אוטומטית: הכרטיס תקין — אין פרטים מזהים, השם והגיל תואמים.</div>`;
+}
+
 async function composeCard(pid){
   const p = personById(pid);
   const ss = sessionsOf(pid);
   const an = p.analysis;
   const skipF = aiAnon() ? AI_PII.concat("notes") : ["refs"];
-  const facts = FIELDS.filter(f=>p[f.k] && !skipF.includes(f.k)).map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
-  const log = ss.map(s=>`[${s.date} · ${s.type}] ${s.notes||""}`).join("\n");
+  const facts = caseMaterial(p, skipF, {sessions:true, ownCard:false});
+  const log = "";
   const style = CARD_STYLE[p.community] || CARD_STYLE["דתי לאומי"];
   const g = p.gender==="בת" ? "בחורה" : "בחור";
 
@@ -3517,6 +3606,7 @@ async function composeCard(pid){
 ${style}
 
 כללים מחייבים:
+- השתמש בכל הפרטים שבחומר שלמטה — כל שדה, כל תשובה מהטופס וכל סיכום — ושלב אותם בכרטיס; אל תשמיט פרט רלוונטי.
 - אך ורק על סמך החומר שלמטה. אם אין מספיק מידע לקטע מסוים — החזר בו בדיוק "[להשלים]".
 - בלי הגזמות, בלי סופרלטיבים ריקים ובלי המצאת עובדות (ישיבות, תפקידים, עיסוקים שלא נכתבו).
 - לשון נקייה ומכובדת, 2-4 משפטים לכל קטע.
@@ -3525,8 +3615,6 @@ ${style}
 נתוני הכרטיס:
 ${facts}
 
-${log?`סיכומי הפגישות עם השדכנית:\n${log}`:""}
-${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
 
 מבנה הקטעים:
 - about — "קצת על עצמי": פסקה חמה וזורמת בגוף שלישי על הבית, הרקע ומסלול החיים (3-4 משפטים).
@@ -3545,10 +3633,12 @@ ${an&&an.summary?`תמצית קודמת: ${an.summary}`:""}
     let parsed = null;
     try{ parsed = JSON.parse(raw.replace(/```json|```/g,"").trim()); }catch(e){}
     if(!parsed) throw new Error("לא התקבל נוסח תקין — נסו שוב");
+    ["about","middot","hobbies","looking"].forEach(k=>{ if(Array.isArray(parsed[k])) parsed[k] = parsed[k].join("\n\n"); if(parsed[k]!=null) parsed[k] = String(parsed[k]); });
     p.card = Object.assign({}, p.card, parsed, {date:today()});
     p.updated = today();
     save(); cardMode="edit"; openPerson(pid,"card");
-    toast("נוסח הופק — עברו עליו לפני שליחה");
+    const w = checkCardText(["about","middot","hobbies","looking"].map(k=>p.card[k]||"").join("\n"), p, "full");
+    toast(w.length ? "נוסח הופק · ⚠ " + w.join(" · ") : "נוסח הופק ונבדק ✓ — עברו עליו לפני שליחה");
   }catch(err){
     foot.innerHTML = old;
     toast(err.message);
@@ -3568,8 +3658,7 @@ function gcardSign(){
 
 /* שדות שלא נכנסים לכרטיס לקבוצה: פרטים מזהים, רגישים או כאלה שעלולים להביך */
 const GCARD_SKIP = AI_PII.concat(["notes","health","dealBreaker","compromise","challenge",
-  "familyStatus","moreInfo","goodRelationship","status","glasses","skinTone","hairColor",
-  "build","parentsHome","parentsOccupation","siblings"]);
+  "familyStatus","status","glasses","skinTone","hairColor"]);
 
 /* ניסוח כרטיס קצר לקבוצות — בתבנית המקובלת אצל שדכניות, מהחומר שבתיק בלבד */
 async function composeGroupCard(pid){
@@ -3577,9 +3666,7 @@ async function composeGroupCard(pid){
   const g = p.gender==="בת" ? "בחורה" : "בחור";
   const self = p.gender==="בת" ? "עצמה" : "עצמו";
   const seek = p.gender==="בת" ? "מחפשת" : "מחפש";
-  const facts = FIELDS.filter(f=>p[f.k] && !GCARD_SKIP.includes(f.k))
-    .map(f=>`${f.l}: ${disp(p[f.k])}`).join("\n");
-  const an = p.analysis;
+  const facts = caseMaterial(p, GCARD_SKIP, {sessions:false});
 
   const prompt = `נסח כרטיס שידוכים קצר לשליחה בקבוצות וואטסאפ של שדכניות, עבור ${g}. במקום השם כתוב תמיד [שם].
 
@@ -3599,6 +3686,7 @@ async function composeGroupCard(pid){
 2-3 משפטים על מי שיתאים.
 
 עקרונות מחייבים:
+- לעבור על כל הפרטים שבחומר ולהשתמש בכולם — בחר מתוכם את המשמעותיים ביותר ושלב אותם, אל תדלג על פרט מהותי.
 - להבליט את הייחודיות ואת המעלות — שהקורא ידמיין אדם אמיתי מול העיניים, לא רשימת תכונות כללית.
 - אך ורק על סמך החומר שלמטה. בלי להמציא עובדות ובלי סופרלטיבים ריקים ("מדהימה", "מושלם").
 - בלי פרטים מזהים או רגישים: בלי שם משפחה, בלי בריאות, בלי פרטי משפחה רגישים ובלי שום דבר שעלול להביך.
@@ -3607,7 +3695,6 @@ async function composeGroupCard(pid){
 
 החומר מהתיק:
 ${facts}
-${an&&an.summary?`\nתמצית השדכנית: ${an.summary}`:""}
 
 החזר את טקסט הכרטיס בלבד, בלי הסברים ובלי סימוני קוד.`;
 
@@ -3619,7 +3706,7 @@ ${an&&an.summary?`\nתמצית השדכנית: ${an.summary}`:""}
                .split("המועמדת").join(first).split("המועמד").join(first);
   }
   text += `\n\n*לפרטים ויצירת קשר:*\n${gcardSign()}`;
-  p.groupCard = {text, date:today()};
+  p.groupCard = {text, date:today(), warn: checkCardText(text, p, "group")};
   p.updated = today();
   save();
   return text;
@@ -3655,6 +3742,7 @@ function gcardBoxHtml(pid){
       <button class="btn sm" onclick="regenGroupCard('${pid}')">🔄 ניסוח מחדש</button>
       <button class="btn ghost sm" onclick="editGcardSign('${pid}')" title="שורת יצירת הקשר שבסוף הכרטיס">חתימה: ${esc(gcardSign())}</button>
     </div>
+    ${p.groupCard ? checkHtml(p.groupCard.warn || checkCardText(t, p, "group")) : ""}
     <div style="font-size:12px;color:var(--ink-faint);margin-top:4px">אפשר לערוך את הנוסח ישירות בתיבה — ההעתקה שומרת ולוקחת את מה שכתוב בה.</div>`;
 }
 
@@ -5253,7 +5341,7 @@ $("#btnListModels").addEventListener("click", listModels);
 $("#aiProvider").addEventListener("change", e=>{
   const list = fillModelList(e.target.value);
   $("#aiModel").value = list[0];
-  $("#aiModel").placeholder = e.target.value==="gemini" ? "gemini-3.5-flash-lite (מומלץ — מהיר)" : "claude-sonnet-4-6";
+  $("#aiModel").placeholder = e.target.value==="gemini" ? "gemini-3.5-flash-lite (מומלץ — מהיר)" : "claude-sonnet-5-5";
   $("#aiStatus").textContent = "";
 });
 $("#btnClearKey").addEventListener("click",()=>{
