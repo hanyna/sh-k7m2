@@ -2103,7 +2103,49 @@ function suggestScore(a,b){
   if(a.city && b.city && a.city.trim()===b.city.trim()) s += 12;
   if(a.edah && b.edah && a.edah.trim()===b.edah.trim()) s += 10;
   if((b.status||"פנוי")==="פנוי") s += 8;
+
+  /* אחרי הבסיס (גיל, מין, חוג) — אופי ומה מחפשים, בשני הכיוונים:
+     טווח הגילאים המבוקש, והאם התכונות שצד אחד מחפש מופיעות בתיאור של הצד השני */
+  s += ageFit(a, b) + ageFit(b, a);
+  s += Math.round((traitFit(a, b).score + traitFit(b, a).score) / 2);
   return Math.max(0, Math.min(99, s));
+}
+
+/* טווח גילאים מבוקש ("20-24", "עד 25", "מ-22") מול הגיל של הצד השני */
+function ageRangeOf(p){
+  const t = String(p.ageRange||""); const n = (t.match(/\d{2}/g)||[]).map(Number).filter(x=>x>=16&&x<=70);
+  if(!n.length) return null;
+  if(/עד/.test(t) && n.length===1) return [0, n[0]];
+  if(/(^|[^א-ת])(מ|מעל|לפחות|מגיל)/.test(t) && n.length===1) return [n[0], 99];
+  return n.length===1 ? [n[0]-1, n[0]+1] : [Math.min(...n), Math.max(...n)];
+}
+function ageFit(a, b){
+  const r = ageRangeOf(a), age = parseFloat(b.age);
+  if(!r || !age) return 0;
+  if(age >= r[0] && age <= r[1]) return 8;
+  return (age < r[0]-2 || age > r[1]+2) ? -12 : -3;
+}
+
+/* מילות תוכן בעברית — בלי מילות קישור, ובלי אות שימוש בתחילת מילה (ו/ה/ב/ל/מ/ש/כ) */
+const HE_STOP = new Set("של את עם על אל לא גם כל או אם כי זה זו הוא היא הם הן אני אנחנו מאוד יותר פחות קצת הרבה שלו שלה מה מי איך כמו בין אבל רק עוד כבר יש אין להיות שיהיה שתהיה טוב טובה חשוב חשובה בעל בעלת אחד אחת דבר דברים".split(" "));
+function heWords(t){
+  const out = new Map();     /* שורש → המילה כפי שנכתבה */
+  String(t||"").replace(/[^א-ת\s]/g," ").split(/\s+/).forEach(w=>{
+    if(w.length < 3) return;
+    let x = w;
+    if(x.length > 4 && /^[והבלמשכ]/.test(x)) x = x.slice(1);
+    x = x.replace(/(ות|ים|ה|ת)$/,"");          /* שמחה/שמח, רגועה/רגוע */
+    if(x.length >= 3 && !HE_STOP.has(w) && !HE_STOP.has(x) && !out.has(x)) out.set(x, w);
+  });
+  return out;
+}
+/* מה ש-a מחפש מול מה שמתואר אצל b */
+function traitFit(a, b){
+  const want = heWords([a.lookingTraits, a.mustTrait, a.looking, a.lookingReligious, a.lookingHashkafa, a.goodRelationship].join(" "));
+  if(!want.size) return {score:0, hits:[]};
+  const has = heWords([b.character, b.hobbies, b.torahAttitude, b.hashkafa, b.futurePlans, b.yeshivaPlans, b.occupation, b.card&&b.card.middot, b.card&&b.card.about].join(" "));
+  const hits = [...want.keys()].filter(w=>has.has(w)).map(w=>has.get(w));
+  return {score: Math.min(20, hits.length * 5), hits};
 }
 
 function openSuggest(id){
@@ -2673,7 +2715,7 @@ function openImportReport(){
     </div>`).join("");
   $("#sheetHead").innerHTML = `<div style="flex:1"><h3>דוח ${R.kind==="sheet"?"בדיקת שלמות מול הגיליון":"הייבוא"} · ${esc(R.date)}</h3>
       <div class="meta">${R.kind==="sheet"
-        ? `בגיליון ${R.total} תשובות · ${R.found} כבר בכרטסייה${R.twice?` (מתוכן ${R.twice} כפולות זהות)`:""}${R.toApprove?` · ${R.toApprove} מילאו שוב — ממתינים לאישורך`:""} · ${open.length} חסרות`
+        ? `בגיליון ${R.total} תשובות${R.tabs?` (${esc(R.tabs)})`:""} · ${R.found} כבר בכרטסייה${R.twice?` (מתוכן ${R.twice} כפולות זהות)`:""}${R.toApprove?` · ${R.toApprove} מילאו שוב — ממתינים לאישורך`:""} · ${open.length} חסרות`
         : `בקובץ ${R.total} שורות · נקלטו ${R.added} · דולגו ${R.skipped||0}${R.nameless?` · ${R.nameless} ללא שם`:""}`}</div></div>
     <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
   $("#sheetBody").innerHTML = R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`;
@@ -2703,7 +2745,7 @@ async function formReconcile(){
   try{
     toast("בודק את כל התשובות בגיליון…");
     const token = await driveToken(false);
-    const {headers, rows} = await fetchFormRows(token);
+    const {headers, rows, counts, tabCount} = await fetchFormRows(token);
     const byKey = new Set(DB.people.flatMap(personKeys));
     (DB.form&&DB.form.pending||[]).forEach(x=>byKey.add(keyCanon(x.key)));
     (DB.form&&DB.form.ignored||[]).forEach(k=>byKey.add(keyCanon(k)));
@@ -2727,7 +2769,7 @@ async function formReconcile(){
         why: p.nameless ? "בתשובה הזו לא נמצא שם — אם תוסיפו, היא תמתין לבדיקה בדף הקליטה"
            : (DB.people.some(x=>normName(x.fullName)===nm) ? "יש כרטיס עם אותו שם אבל טלפון/מייל אחרים — כנראה אדם אחר" : "התשובה הזו לא נכנסה לכרטסייה")});
     });
-    DB.importReport = {date: today(), total: rows.length, found, toApprove, twice, items, kind:"sheet"};
+    DB.importReport = {date: today(), total: rows.length, found, toApprove, twice, items, kind:"sheet", tabs: tabCount>1 ? counts : ""};
     save(); render(); openImportReport();
     if(toApprove) setTimeout(()=>reviewAlert(0, toApprove), 500);
   }catch(err){ toast(err.message); }
@@ -3686,6 +3728,17 @@ function copyCard(pid){
 }
 
 /* ניסוח שלושת הקטעים מתוך כל מה שנצבר בתיק */
+/* "שירגיש אמיתי": הנחיות כתיבה משותפות לכל ניסוח כרטיס — שייקרא כמו שדכנית שמכירה את האדם, לא כמו מכונה */
+const CARD_VOICE = `איך לכתוב כדי שהכרטיס ירגיש אמיתי:
+- כתוב כמו שדכנית ותיקה שמכירה את האדם אישית ומספרת עליו לחברה — חם, טבעי ופשוט. לא כמו פרסומת ולא כמו מכונה.
+- פרטים מוחשיים במקום תארים כלליים: במקום "אוהבת לעזור" — מה היא עושה בפועל (מתנדבת, מלמדת, מטפלת באחים), כפי שכתוב בחומר.
+- השתמש במילים ובביטויים של המועמד עצמו מהתשובות בטופס, כשהם יפים וטבעיים.
+- משפטים קצרים ובאורך משתנה. בלי חזרות על אותה מילה ובלי פתיחה זהה לכל משפט.
+- בלי מליצות וסופרלטיבים ריקים: לא "מדהים/ה", "מושלם/ת", "יוצא/ת דופן", "ייחודי/ת במינו", "נשמה טהורה", "פנינה", "יהלום", "אין כמוהו/ה", "בלתי רגיל".
+- בלי הקדמות ("להלן", "הנה כרטיס") ובלי סיכומים בסוף. בלי אימוג'ים מלבד ⭐ במקום שנקבע.
+- לא להגזים: עדיף משפט אחד נכון ומדויק משלושה מפוארים. כל מה שנכתב חייב להיות מבוסס על החומר.`;
+const CARD_CLICHES = ["מדהים","מדהימה","מושלם","מושלמת","יוצא דופן","יוצאת דופן","ייחודי במינו","ייחודית במינה","נשמה טהורה","פנינה","יהלום","אין כמוהו","אין כמוה","בלתי רגיל","בלתי רגילה","להלן","הנה כרטיס"];
+
 const CARD_STYLE = {
   "חרדי": "סגנון ישיבתי־חרדי: דגש על עמל התורה, שקידה, יראת שמים ומידות. בלי אזכור שירות צבאי או אקדמיה אלא אם כתוב במפורש.",
   "חרדל״ני": "סגנון תורני־לאומי: תורת ארץ ישראל, ישיבת הסדר, שילוב של תורה ועשייה, אהבת הארץ והכלל.",
@@ -3740,6 +3793,8 @@ function checkCardText(text, p, kind){
   if(p.gender==="בת" && male && !female) w.push("נראה שהכרטיס כתוב בלשון זכר — לבדוק");
   if(p.gender==="בן" && female && !male) w.push("נראה שהכרטיס כתוב בלשון נקבה — לבדוק");
   if(hw("בריאות|מחלה|מחלת|טיפול תרופתי|אבחנה|גרוש|גרושה|גירושין")) w.push("ייתכן שמופיע פרט רגיש (בריאות/מצב משפחתי) — לבדוק");
+  const cl = CARD_CLICHES.filter(c=>t.includes(c));
+  if(cl.length) w.push(`ניסוח "מליצי" שפחות מרגיש אמיתי: ${cl.slice(0,3).join(", ")} — אפשר לבקש "תיקון עם AI: פחות מליצות"`);
   const words = t.split(/\s+/).filter(Boolean).length;
   if(kind==="group" && words>170) w.push(`הכרטיס ארוך (${words} מילים) — לוואטסאפ עדיף קצר יותר`);
   if(t.trim().length < 60) w.push("הכרטיס קצר מאוד — ייתכן שחסר מידע בתיק");
@@ -3764,6 +3819,8 @@ async function composeCard(pid){
   const prompt = `נסח ארבעה קטעים לכרטיס שידוכים עבור ${g}, מתוך החומר שנאסף בתיק אצל השדכנית.
 
 ${style}
+
+${CARD_VOICE}
 
 כללים מחייבים:
 - השתמש בכל הפרטים שבחומר שלמטה — כל שדה, כל תשובה מהטופס וכל סיכום — ושלב אותם בכרטיס; אל תשמיט פרט רלוונטי.
@@ -3845,6 +3902,8 @@ async function composeGroupCard(pid){
 
 *${seek}:*
 2-3 משפטים על האופי, הכיוון בחיים והבית המבוקש.
+
+${CARD_VOICE}
 
 עקרונות מחייבים:
 - לעבור על כל הפרטים שבחומר ולהשתמש בכולם — בחר מתוכם את המשמעותיים ביותר ושלב אותם, אל תדלג על פרט מהותי.
@@ -3962,6 +4021,8 @@ async function reviseCardAI(pid, kind){
 
 הבקשה: ${want}
 
+${CARD_VOICE}
+
 כללים: שמור על אותו מבנה וכותרות (*[שם]*, שורת פרטים, *קצת על עצמי:*, *אופי ומידות:* עם ⭐, *תחומי עניין:*, *${p.gender==="בת"?"מחפשת":"מחפש"}:*). אל תמציא עובדות — מותר להשתמש רק במה שבכרטיס ובחומר מהתיק שלמטה. בלי פרטים מזהים או רגישים. במקום השם כתוב [שם].
 
 הכרטיס הנוכחי:
@@ -3977,6 +4038,8 @@ ${facts}
     prompt = `לפניך ארבעת הקטעים של כרטיס שידוכים של ${g} (JSON). תקן אותם לפי הבקשה של השדכנית.
 
 הבקשה: ${want}
+
+${CARD_VOICE}
 
 כללים: אותו מבנה — about ("קצת על עצמי", פסקה), middot ("אופי ומידות", נקודות שמתחילות ב"⭐ כותרת:" מופרדות בשורה ריקה), hobbies ("תחומי עניין"), looking ("מה ${p.gender==="בת"?"מחפשת":"מחפש"}"). גוף שלישי, לשון נקייה ומכובדת. אל תמציא עובדות — רק מה שבכרטיס ובחומר מהתיק. קטע שלא ביקשו לשנות — השאר כמעט כמו שהוא.
 
@@ -4044,7 +4107,7 @@ function suggestListHtml(pid, limit){
   const pool = DB.people.filter(x=>x.id!==pid && !x.hold && (!want || x.gender===want))
     .map(x=>({x, s:suggestScore(p,x)})).sort((a,b)=>b.s-a.s);
   const strong = pool.filter(o=>o.s>=45);
-  const show = (strong.length?strong:pool).slice(0, limit||8);
+  const show = (strong.length?strong:pool).slice(0, limit||15);
   if(!show.length) return `<div class="empty">אין כרגע מועמדים מתאימים במאגר.</div>`;
   return show.map(({x,s})=>{
     const exists = DB.matches.some(m=>(m.a===pid&&m.b===x.id)||(m.b===pid&&m.a===x.id));
@@ -4055,6 +4118,10 @@ function suggestListHtml(pid, limit){
       <div style="min-width:0">
         <div style="font-weight:600">${esc(x.fullName)} ${warn}</div>
         <div style="font-size:12px;color:var(--ink-faint)">${[x.age,x.city,x.community].filter(Boolean).map(esc).join(" · ")||"—"}</div>
+        ${(()=>{ const h = [...new Set(traitFit(p,x).hits.concat(traitFit(x,p).hits))].slice(0,4);
+          const ag = ageFit(p,x)>0 && ageFit(x,p)>=0 ? "בטווח הגילאים המבוקש" : "";
+          const why = [ag, h.length ? "במשותף: " + h.join(", ") : ""].filter(Boolean).join(" · ");
+          return why ? `<div style="font-size:11.5px;color:var(--teal)">${esc(why)}</div>` : ""; })()}
       </div>
       <span class="score">${exists?"כבר הוצע":"התאמה "+s+"%"}</span>
     </button>`;
@@ -4597,14 +4664,32 @@ async function fetchFormRows(token){
   const cfg = formCfg();
   const meta = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets.properties(title,sheetId)`, token);
   const tabs = (meta.sheets||[]).map(x=>x.properties);
-  const tab = (cfg.gid && tabs.find(t=>String(t.sheetId)===String(cfg.gid))) || tabs[0];
-  if(!tab) throw new Error("הגיליון ריק — אין בו לשוניות");
-  const range = encodeURIComponent("'" + tab.title.replace(/'/g,"''") + "'");
-  const v = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`, token);
-  const all = v.values || [];
-  const headers = (all[0]||[]).map(h=>String(h).trim());
-  const rows = all.slice(1).filter(r=>r.some(c=>String(c==null?"":c).trim()));
-  return {headers, rows, tab:tab.title};
+  if(!tabs.length) throw new Error("הגיליון ריק — אין בו לשוניות");
+  /* כשמחברים טופס מחדש, גוגל פותחת לשונית חדשה ("תגובות לטופס 2") והתשובות מתפצלות.
+     לכן — אם לא נבחרה לשונית מסוימת — קוראים את כל לשוניות התשובות ומאחדים, בלי כפילויות. */
+  const pick = cfg.gid ? tabs.filter(t=>String(t.sheetId)===String(cfg.gid)) : tabs;
+  const read = async tab => {
+    const range = encodeURIComponent("'" + tab.title.replace(/'/g,"''") + "'");
+    const v = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`, token);
+    const all = v.values || [];
+    return {tab: tab.title, headers: (all[0]||[]).map(h=>String(h).trim()), rows: all.slice(1).filter(r=>r.some(c=>String(c==null?"":c).trim()))};
+  };
+  let parts = [];
+  for(const t of (pick.length ? pick : [tabs[0]])) parts.push(await read(t));
+  const isResp = p => p.headers.some(h=>/חותמת זמן|timestamp/i.test(h)) && p.headers.some(h=>guessField(h)==="fullName");
+  if(!cfg.gid){ const resp = parts.filter(isResp); parts = resp.length ? resp : parts.slice(0,1); }
+  /* איחוד: כותרות משותפות לפי שם העמודה, וכל שורה מסודרת מחדש לפיהן */
+  const headers = [];
+  parts.forEach(p=>p.headers.forEach(h=>{ if(h && !headers.includes(h)) headers.push(h); }));
+  const seenKeys = new Set(), rows = [];
+  parts.forEach(p=>p.rows.forEach(r=>{
+    const row = headers.map(h=>{ const i = p.headers.indexOf(h); return i>=0 ? (r[i]==null?"":r[i]) : ""; });
+    const k = rowKey(headers, row);
+    if(seenKeys.has(k)) return;        /* אותה תשובה בשתי לשוניות */
+    seenKeys.add(k); rows.push(row);
+  }));
+  const counts = parts.map(p=>`${p.tab}: ${p.rows.length}`).join(" · ");
+  return {headers, rows, tab: parts.map(p=>p.tab).join(" + "), counts, tabCount: parts.length};
 }
 
 /* מזהה קבוע לכל תשובה: חותמת הזמן + השם (ואם אין חותמת — כל תוכן השורה) */
@@ -4665,7 +4750,7 @@ async function syncForm(manual, dryRun){
   formStatus(dryRun ? "בודק את החיבור לגיליון…" : "בודק אם יש תשובות חדשות…");
   try{
     const token = await driveToken(!manual);
-    const {headers, rows} = await fetchFormRows(token);
+    const {headers, rows, counts, tabCount} = await fetchFormRows(token);
     if(!headers.length) throw new Error("הגיליון ריק — עוד אין בו תשובות");
     if(!headers.some(h=>guessField(h)==="fullName"))
       throw new Error("לא נמצאה בגיליון עמודת שם (למשל ״שם פרטי ומשפחה״) — האם זה הגיליון הנכון?");
@@ -4679,7 +4764,7 @@ async function syncForm(manual, dryRun){
     const fresh = rows.filter(r=>{ const k = rowKey(headers,r); return !have.has(k) && !ignored.has(k); });
     if(dryRun){
       FORM.busy = false;
-      const msg = `החיבור תקין ✓ — בגיליון ${rows.length} תשובות, מתוכן ${fresh.length} חדשות שעוד לא נכנסו.`;
+      const msg = `החיבור תקין ✓ — בגיליון ${rows.length} תשובות${tabCount>1?` (מ-${tabCount} לשוניות — ${counts})`:""}, מתוכן ${fresh.length} חדשות שעוד לא נכנסו.`;
       formStatus(msg, "var(--teal)");
       return {total:rows.length, fresh:fresh.length};
     }
