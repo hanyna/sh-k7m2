@@ -728,8 +728,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
           <div class="field">
             <label for="aiProvider">ספק השירות</label>
             <select id="aiProvider">
-              <option value="anthropic">Anthropic — Claude</option>
-              <option value="gemini">Google — Gemini</option>
+              <option value="gemini">Google — Gemini (חינם, מומלץ)</option>
+              <option value="anthropic">Anthropic — Claude (בתשלום)</option>
             </select>
           </div>
           <div class="field">
@@ -1114,7 +1114,7 @@ async function openVault(raw, secret){
 
 function adoptDB(d){
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
-        form: d.form || {seen:[], pending:[]}};
+        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
@@ -2422,6 +2422,8 @@ function parseCSV(text){
 
 function guessField(header){
   const h = String(header||"").trim().toLowerCase().replace(/\s+/g," ");
+  /* "שם משפחה" לבדו = שם המשפחה של המועמד (לא רקע המשפחה) — נשמר בצד ומצורף לשם המלא */
+  if(/^שם (ה)?משפחה[:?]?$/.test(h)) return "__extra";
   for(const k in SYN){
     if(SYN[k].some(s=>h===s.toLowerCase())) return k;
   }
@@ -2552,30 +2554,146 @@ function runImport(){
   const map = {};
   $$("#mapHost select[data-col]").forEach(s=>{ map[s.dataset.col] = s.value; });
   const skipDup = $("#skipDup").checked;
-  const existing = new Set(DB.people.map(p=>String(p.fullName||"").trim()));
-  let added=0, skipped=0;
+  const byName = new Map(DB.people.map(p=>[normName(p.fullName), p]));
+  let added=0, skipped=0, nameless=0, sameName=0;
+  const items = [];
 
   const F = formDB(), seen = new Set(F.seen);
-  pending.rows.forEach(r=>{
+  pending.rows.forEach((r, idx)=>{
+    const rowNo = idx + 2;   /* מספר השורה כפי שרואים אותה באקסל (שורה 1 = כותרות) */
     const key = rowKey(pending.headers, r.map(c=>String(c==null?"":c).trim()));
-    seen.add(key);
     const p = {id:uid(), created:today(), updated:today(), extra:{}, formKey:key, source:"ייבוא קובץ", reviewed:true};
     pending.headers.forEach((h,i)=>{
       const target = map[i]; const val = String(r[i]==null?"":r[i]).trim();
       if(!val || target==="__skip") return;
       if(target==="__extra") p.extra[h||("עמודה "+(i+1))] = val;
-      else p[target] = val;
+      else if(!p[target]) p[target] = val;
+      else p.extra[h||("עמודה "+(i+1))] = val;
     });
-    if(!p.fullName){ skipped++; return; }
-    if(skipDup && existing.has(p.fullName.trim())){ skipped++; return; }
+    nameFallback(p);
+    if(!p.fullName){
+      const hasData = FIELDS.some(f=>f.k!=="fullName" && hasVal(p[f.k])) || Object.keys(p.extra).length;
+      if(!hasData) return;                                   /* שורה ריקה לגמרי */
+      /* אין שם — לא מוותרים על השורה: נקלטת כ"ללא שם" וממתינה לבדיקה בדף הקליטה */
+      p.fullName = `ללא שם (שורה ${rowNo})`; p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בקובץ"];
+      nameless++;
+      items.push({row:rowNo, name:p.fullName, why:"לא נמצא שם בשורה — נקלט כ״ללא שם״ וממתין לבדיקה בדף הקליטה", done:true});
+    }else if(skipDup){
+      const ex = byName.get(normName(p.fullName));
+      if(ex){
+        if(samePersonGuess(ex, p)){
+          skipped++;
+          items.push({row:rowNo, name:p.fullName, why:"השם כבר קיים בכרטסייה (נראה שזה אותו אדם)", p, exId:ex.id});
+          return;
+        }
+        sameName++;
+        items.push({row:rowNo, name:p.fullName, why:"שם זהה לכרטיס קיים, אבל טלפון/מייל שונים — נקלט ככרטיס נפרד", done:true});
+      }
+    }
+    seen.add(key);           /* רק שורה שבאמת נקלטה מסומנת כ"התקבלה" */
     normalizeImported(p);
-    existing.add(p.fullName.trim());
+    byName.set(normName(p.fullName), p);
     DB.people.push(p); added++;
   });
   F.seen = [...seen];
+  DB.importReport = {date: today(), total: pending.rows.length, added, skipped, nameless, sameName, items, kind:"file"};
 
   save(); cancelImport(); setView("cards");
-  toast(`יובאו ${added} מועמדים${skipped?` · דולגו ${skipped}`:""}`);
+  toast(`יובאו ${added} מועמדים${skipped?` · דולגו ${skipped}`:""}${nameless?` · ${nameless} ללא שם (לבדיקה)`:""}`);
+  if(items.length) setTimeout(()=>openImportReport(), 600);
+}
+
+/* ============ שלמות הייבוא: אף שורה לא הולכת לאיבוד ============ */
+const normName = v => String(v||"").replace(/["'״׳`]/g,"").replace(/\s+/g," ").trim();
+/* אם אין עמודת "שם מלא" — מחפשים שם בעמודות אחרות (שם פרטי + שם משפחה, "שם המועמד" וכו') */
+function nameFallback(p){
+  const ex = p.extra || {}, keys = Object.keys(ex);
+  const cur = String(p.fullName||"").trim();
+  if(cur){
+    /* יש רק שם פרטי ועמודת "שם משפחה" נפרדת — מצרפים */
+    const lk = keys.find(k=>/^שם (ה)?משפחה[:?]?$/.test(k.trim()));
+    if(lk && !/\s/.test(cur) && String(ex[lk]).trim() && !cur.includes(String(ex[lk]).trim())) p.fullName = cur + " " + String(ex[lk]).trim();
+    return p;
+  }
+  const bad = /אב|אם|הורה|הורים|ממליצ|ישיבה|סמינר|מוסד|רב|חבר|קשר|מכר|שדכן|ממלא|רחוב|עיר|קהילה|אח|אחות/;
+  const first = keys.find(k=>/שם פרטי/.test(k) && !bad.test(k.replace(/שם פרטי/,"")));
+  const last  = keys.find(k=>/שם משפחה/.test(k) && !bad.test(k.replace(/שם משפחה/,"")));
+  let nm = "";
+  if(first || last) nm = [first?ex[first]:"", last?ex[last]:""].join(" ").trim();
+  if(!nm){ const k = keys.find(k=>/(^|\s)שם(\s|$|:)|שם המועמד|שם הבחור|שם הבחורה|שם מלא/.test(k) && !bad.test(k)); if(k) nm = String(ex[k]).trim(); }
+  if(nm) p.fullName = nm;
+  return p;
+}
+/* אותו אדם? שם זהה + (טלפון או מייל זהים, או שלאחד מהם אין פרטי קשר בכלל) */
+function samePersonGuess(a, b){
+  const pa = normPhone(a.phone), pb = normPhone(b.phone), ea = normEmail(a.email), eb = normEmail(b.email);
+  if((pa && pa===pb) || (ea && ea===eb)) return true;
+  if((!pa && !ea) || (!pb && !eb)) return true;
+  return false;
+}
+
+/* דוח: מה לא נכנס ולמה — עם אפשרות להכניס בכל זאת */
+function openImportReport(){
+  const R = DB.importReport; if(!R) return toast("אין דוח ייבוא שמור");
+  const open = R.items.filter(x=>!x.done && x.p);
+  const rows = R.items.map((x,i)=>`<div class="fieldrow" style="align-items:center">
+      <dt style="min-width:70px">${x.row?`שורה ${x.row}`:""}</dt>
+      <dd style="flex:1"><b>${esc(x.name||"")}</b><div style="font-size:12.5px;color:var(--ink-soft)">${esc(x.why)}</div></dd>
+      ${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">ייבוא בכל זאת</button>` : `<span style="font-size:12px;color:var(--teal)">✓ בכרטסייה</span>`}
+    </div>`).join("");
+  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>דוח ${R.kind==="sheet"?"בדיקת שלמות מול הגיליון":"הייבוא"} · ${esc(R.date)}</h3>
+      <div class="meta">${R.kind==="sheet"
+        ? `בגיליון ${R.total} תשובות · ${R.found} כבר בכרטסייה · ${open.length} חסרות`
+        : `בקובץ ${R.total} שורות · נקלטו ${R.added} · דולגו ${R.skipped||0}${R.nameless?` · ${R.nameless} ללא שם`:""}`}</div></div>
+    <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
+  $("#sheetBody").innerHTML = R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`;
+  $("#sheetFoot").innerHTML = `${open.length?`<button class="btn pri" onclick="importAnyway('all')">ייבוא כל ה-${open.length}</button>`:""}
+    <button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
+  openSheet();
+}
+function importAnyway(i){
+  const R = DB.importReport; if(!R) return;
+  const list = i==="all" ? R.items.filter(x=>!x.done && x.p) : [R.items[i]].filter(x=>x && !x.done && x.p);
+  const F = formDB(), seen = new Set(F.seen);
+  list.forEach(x=>{
+    const p = Object.assign({}, x.p, {id:uid(), created:today(), updated:today()});
+    if(!p.reviewed && !p.hold) p.reviewed = true;
+    DB.people.push(p); if(p.formKey) seen.add(p.formKey);
+    x.done = true; x.why = "נוסף ידנית מהדוח";
+  });
+  F.seen = [...seen];
+  save(); render(); openImportReport();
+  toast(list.length===1 ? `${list[0].name} נוסף/ה לכרטסייה` : `נוספו ${list.length} כרטיסים`);
+}
+
+/* בדיקת שלמות מול גיליון הטופס: כל תשובה בגיליון ← יש לה כרטיס? מה שחסר מוצג עם אפשרות להוסיף */
+async function formReconcile(){
+  const cfg = formCfg();
+  if(!cfg.sheetId) return toast("עדיין לא חובר טופס");
+  try{
+    toast("בודק את כל התשובות בגיליון…");
+    const token = await driveToken(false);
+    const {headers, rows} = await fetchFormRows(token);
+    const byKey = new Set(DB.people.map(p=>p.formKey).filter(Boolean));
+    (DB.form&&DB.form.pending||[]).forEach(x=>byKey.add(x.key));
+    const items = []; let found = 0;
+    rows.forEach((r, idx)=>{
+      const key = rowKey(headers, r);
+      if(byKey.has(key)){ found++; return; }
+      let p = rowToPerson(headers, r, key, true);
+      if(!p) return;                                         /* שורה ריקה */
+      const nm = normName(p.fullName);
+      const twin = DB.people.find(x=>normName(x.fullName)===nm && samePersonGuess(x, p));
+      if(twin && !p.nameless){ found++; return; }
+      if(p.nameless){ p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בטופס"]; }
+      else { p.reviewed = true; p.historic = true; }
+      items.push({row: idx+2, name: p.fullName, p,
+        why: p.nameless ? "בתשובה הזו לא נמצא שם — אם תוסיפו, היא תמתין לבדיקה בדף הקליטה"
+           : (DB.people.some(x=>normName(x.fullName)===nm) ? "יש כרטיס עם אותו שם אבל טלפון/מייל אחרים — כנראה אדם אחר" : "התשובה הזו לא נכנסה לכרטסייה")});
+    });
+    DB.importReport = {date: today(), total: rows.length, found, items, kind:"sheet"};
+    save(); openImportReport();
+  }catch(err){ toast(err.message); }
 }
 
 /* ============ export ============ */
@@ -2841,11 +2959,15 @@ function aiCfg(){
     localStorage.setItem("ai_provider", "anthropic");
     localStorage.removeItem("anthropic_key");
   }
-  return {
-    provider: localStorage.getItem("ai_provider") || "anthropic",
-    key: (localStorage.getItem("ai_key") || "").trim(),
-    model: localStorage.getItem("ai_model") || ""
-  };
+  const key = (localStorage.getItem("ai_key") || "").trim();
+  let provider = localStorage.getItem("ai_provider") || "gemini";
+  /* מפתח של גוגל מתחיל ב-AIza, של Claude ב-sk-ant — אם הספק שנבחר לא תואם למפתח, מתקנים לבד */
+  if(/^AIza/.test(key)) provider = "gemini";
+  else if(/^sk-ant-/.test(key)) provider = "anthropic";
+  let model = localStorage.getItem("ai_model") || "";
+  if(provider==="gemini" && /^claude/i.test(model)) model = "";
+  if(provider==="anthropic" && /^gemini/i.test(model)) model = "";
+  return {provider, key, model};
 }
 
 function aiError(status, provider){
@@ -4168,8 +4290,10 @@ function renderIntake(){
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 12px">
       ${fc.sheetId ? `<span style="font-size:13px;color:var(--ink-soft)">📝 טופס: ${fc.last?`בדיקה אחרונה ${esc(new Date(fc.last).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}))}`:"מחובר — טרם אושר מול גוגל"}</span>
-        <button class="btn sm" onclick="syncForm(true)">בדיקת תשובות חדשות</button>` : `<span style="font-size:13px;color:var(--ink-faint)">הטופס עוד לא מחובר</span>`}
+        <button class="btn sm" onclick="syncForm(true)">בדיקת תשובות חדשות</button>
+        <button class="btn sm" onclick="formReconcile()">🔎 בדיקת שלמות — מה חסר מהגיליון</button>` : `<span style="font-size:13px;color:var(--ink-faint)">הטופס עוד לא מחובר</span>`}
       ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ${pend} מילאו שוב — ממתינים לבדיקה</button>`:""}
+      ${DB.importReport?`<button class="btn sm" onclick="openImportReport()">📄 דוח הייבוא האחרון</button>`:""}
       <button class="btn ghost sm" style="margin-inline-start:auto" onclick="ui.intake='all';renderIntake()">הצגת כולם</button>
       <span style="font-size:12.5px;color:var(--ink-faint)">פניות רגילות מהטופס מאושרות אוטומטית; חריגות מושהות כאן.</span>
     </div>
@@ -4357,7 +4481,7 @@ function rowKey(headers, r){
   if(ti>=0 && String(r[ti]||"").trim()) return "t:" + String(r[ti]).trim() + "|" + String(ni>=0 ? r[ni]||"" : "").trim();
   return "r:" + r.map(c=>String(c==null?"":c).trim()).join("¦");
 }
-function rowToPerson(headers, r, key){
+function rowToPerson(headers, r, key, allowNameless){
   const p = {id:uid(), created:today(), updated:today(), extra:{}, source:"טופס", formKey:key};
   headers.forEach((h,i)=>{
     const val = String(r[i]==null?"":r[i]).trim();
@@ -4367,7 +4491,12 @@ function rowToPerson(headers, r, key){
     else if(!p[k]) p[k] = val;
     else p.extra[h] = val;      /* שתי שאלות שממופות לאותו שדה — השנייה נשמרת בצד */
   });
-  if(!String(p.fullName||"").trim()) return null;
+  nameFallback(p);
+  if(!String(p.fullName||"").trim()){
+    const hasData = FIELDS.some(f=>hasVal(p[f.k])) || Object.keys(p.extra).length;
+    if(!allowNameless || !hasData) return null;
+    p.fullName = "ללא שם"; p.nameless = true;
+  }
   return normalizeImported(p);
 }
 function findExisting(p){
@@ -4403,11 +4532,17 @@ async function syncForm(manual, dryRun){
     fresh.forEach(r=>{
       const key = rowKey(headers, r);
       seen.add(key);
-      const p = rowToPerson(headers, r, key);
+      const p = rowToPerson(headers, r, key, true);
       if(!p){ skipped++; return; }
+      if(p.nameless){   /* תשובה בלי שם — לא נזרקת: נכנסת לבדיקה בדף הקליטה */
+        p.hold = true; p.reviewed = false; p.holdWhy = ["חסר שם בטופס"];
+        DB.people.push(p); if(firstRun) runIds.add(p.id); held++; return;
+      }
       if(firstRun){
         const nm = String(p.fullName).trim();
-        const ex0 = findExisting(p) || DB.people.find(x=>String(x.fullName||"").trim()===nm);
+        /* מאחדים רק כשזה באמת אותו אדם: אותו שם. טלפון/מייל זהים עם שם אחר = אדם אחר
+           (למשל אמא שמילאה עבור שני ילדים מאותו טלפון) — מקבל כרטיס נפרד */
+        const ex0 = DB.people.find(x=>normName(x.fullName)===normName(nm) && samePersonGuess(x, p));
         if(ex0 && runIds.has(ex0.id)){
           /* אותו אדם מילא כמה פעמים לפני החיבור — הכרטיס מתעדכן לתשובה האחרונה (השורות בגיליון לפי סדר הזמן) */
           FIELDS.forEach(f=>{ if(hasVal(p[f.k])) ex0[f.k] = p[f.k]; });
@@ -4483,6 +4618,7 @@ function renderForm(){
       <button class="btn sm pri" id="btnFormSave">שמירה ובדיקת חיבור</button>
       <button class="btn sm" id="btnFormNow" ${c.sheetId?"":"disabled"}>בדיקת תשובות חדשות עכשיו</button>
       ${pend?`<button class="btn sm" style="background:var(--brass-light)" onclick="openFormReview()">📝 ממתינים לבדיקה (${pend})</button>`:""}
+      ${c.sheetId?`<button class="btn sm" onclick="formReconcile()" title="משווה כל תשובה בגיליון לכרטסייה ומראה מה חסר">🔎 בדיקת שלמות מול הגיליון</button>`:""}
       ${c.sheetId?`<button class="btn ghost sm" id="btnFormOff">ניתוק הטופס</button>`:""}
     </div>
     <div id="formStatus" style="font-size:13px;margin-top:9px;min-height:20px">${
