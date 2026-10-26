@@ -19,13 +19,18 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
-  --ink:#16212e;
-  --ink-soft:#4a5a6b;
-  --ink-faint:#8b98a6;
-  --paper:#e9ecef;
-  --card:#ffffff;
-  --line:#d5dbe1;
-  --line-soft:#e7ebef;
+  /* פלטה חמה ורגועה — פחות "משרד", יותר פינת עבודה נעימה */
+  --ink:#2a2723;
+  --ink-soft:#5d554b;
+  --ink-faint:#958b7e;
+  --paper:#f3eee6;
+  --card:#fffdf9;
+  --line:#e2dacd;
+  --line-soft:#eee8de;
+  --soft:#f8f4ee;
+  --soft2:#efe9e0;
+  --rail:#22302f;
+  --z:1;
   --teal:#0f5f5c;
   --teal-light:#e2efee;
   --brass:#a97c34;
@@ -36,8 +41,24 @@
   --display:"Frank Ruhl Libre", Georgia, serif;
   --body:"Assistant", "Segoe UI", Arial, sans-serif;
 }
+/* מצב ערב — כהה ועדין לעבודה בשעות הלילה */
+:root[data-theme="night"]{
+  --ink:#ece6dc; --ink-soft:#bdb4a7; --ink-faint:#8c857a;
+  --paper:#1a1e22; --card:#23292f; --line:#3a424a; --line-soft:#2f363d;
+  --soft:#1f252a; --soft2:#2a3137; --rail:#121518;
+  --teal:#6fbdb4; --teal-light:#1e3a38; --brass:#d7ad66; --brass-light:#3a3123; --rose:#e39aa7;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+:root[data-theme="night"] .doc{color:#16212e}
+:root[data-theme="night"] .btn.pri{color:#0f1f1e}
+:root[data-theme="night"] .mono{filter:brightness(.78) saturate(.9)}
+:root[data-theme="night"] .toast{background:#ece6dc;color:#1a1e22}
+:root[data-theme="night"] .toast .tu{color:#1a1e22;border-color:rgba(0,0,0,.25);background:rgba(0,0,0,.06)}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+body{zoom:var(--z)}
+input,select,textarea{background:var(--card);color:var(--ink);border-color:var(--line)}
 body{
   font-family:var(--body);
   background:var(--paper);
@@ -52,8 +73,12 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* ---------- shell ---------- */
 .shell{display:flex;min-height:100vh}
+.comfort{display:flex;gap:4px;margin-top:10px}
+.comfort button{flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#dfe7ec;border-radius:7px;padding:5px 0;font-size:13px}
+.comfort button:hover{background:rgba(255,255,255,.15)}
+.hebdate{font-size:12px;color:var(--ink-faint)}
 .rail{
-  width:196px;flex:none;background:var(--ink);color:#cdd6de;
+  width:196px;flex:none;background:var(--rail);color:#cdd6de;
   display:flex;flex-direction:column;padding:20px 0;position:sticky;top:0;height:100vh;
 }
 .brand{padding:0 20px 22px;border-bottom:1px solid rgba(255,255,255,.09);margin-bottom:14px}
@@ -79,19 +104,19 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .search{position:relative;flex:1;min-width:200px;max-width:420px}
 .search input{
   width:100%;padding:9px 36px 9px 12px;border:1px solid var(--line);border-radius:8px;
-  background:#f7f9fa;
+  background:var(--soft);
 }
-.search input:focus{background:#fff;border-color:var(--teal);outline:none}
+.search input:focus{background:var(--card);border-color:var(--teal);outline:none}
 .search .mag{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--ink-faint);pointer-events:none}
 .btn{
-  border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:8px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;
   font-weight:600;transition:.15s;white-space:nowrap;
 }
-.btn:hover{border-color:var(--ink-faint);background:#f7f9fa}
+.btn:hover{border-color:var(--ink-faint);background:var(--soft)}
 .btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}
 .btn.pri:hover{background:#0c4e4c}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft)}
-.btn.ghost:hover{background:#eef1f3}
+.btn.ghost:hover{background:var(--soft2)}
 .btn.danger{color:var(--rose);border-color:#e3ccd1}
 .btn.danger:hover{background:#fbf1f3}
 .btn.sm{padding:5px 10px;font-size:13px;border-radius:7px}
@@ -112,13 +137,13 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 /* ---------- filters ---------- */
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .chip{
-  border:1px solid var(--line);background:#fff;color:var(--ink-soft);
+  border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
   padding:5px 13px;border-radius:99px;font-size:13px;transition:.15s;
 }
 .chip:hover{border-color:var(--ink-faint)}
 .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .divider-v{width:1px;height:22px;background:var(--line);margin:0 4px}
-select.mini{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 9px;font-size:13px;color:var(--ink-soft)}
+select.mini{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 9px;font-size:13px;color:var(--ink-soft)}
 .agebox{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink-soft)}
 input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px}
 
@@ -127,9 +152,9 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .grid>*{min-width:0;max-width:100%}
 /* עורך טקסט מקצועי לכרטיס: סרגל עיצוב, ביטול/חזרה, תצוגה מקדימה כמו בוואטסאפ */
 .red{margin-bottom:6px}
-.red-bar{display:flex;gap:2px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);border-bottom:none;border-radius:9px 9px 0 0;padding:4px 6px;background:#f6f7f9}
+.red-bar{display:flex;gap:2px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);border-bottom:none;border-radius:9px 9px 0 0;padding:4px 6px;background:var(--soft)}
 .red-bar button{border:0;background:transparent;padding:5px 9px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px;color:var(--ink);min-width:30px}
-.red-bar button:hover{background:#e8ecf0}
+.red-bar button:hover{background:var(--soft2)}
 .red-bar button.on{background:var(--teal-light);color:var(--teal)}
 .red-sep{width:1px;height:18px;background:var(--line);margin:0 4px}
 .red-count{margin-inline-start:auto;font-size:11.5px;color:var(--ink-faint);padding:0 6px}
@@ -149,7 +174,7 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .pcard-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
 .mono{
   width:38px;height:38px;flex:none;border-radius:9px;display:grid;place-items:center;
-  font-family:var(--display);font-size:17px;font-weight:700;background:#eef1f4;color:var(--ink-soft);
+  font-family:var(--display);font-size:17px;font-weight:700;background:var(--soft2);color:var(--ink-soft);
 }
 .pcard.g-m .mono{background:#e8eff6;color:#2f5d8a}
 .pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
@@ -166,13 +191,13 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .pcard .rows{font-size:13px;color:var(--ink-soft);display:flex;flex-direction:column;gap:2px}
 .pcard .rows div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pcard .tagline{margin-top:9px;display:flex;gap:5px;flex-wrap:wrap}
-.tag{background:#f0f3f5;border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{background:var(--soft2);border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badge{
   position:absolute;top:10px;left:10px;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;
 }
 .st-free{background:var(--teal-light);color:var(--teal)}
 .st-busy{background:#fdf3e3;color:var(--brass)}
-.st-hold{background:#eef1f4;color:var(--ink-faint)}
+.st-hold{background:var(--soft2);color:var(--ink-faint)}
 .st-done{background:var(--brass-light);color:var(--brass);border:1px solid #e6d4b3}
 
 .empty{
@@ -206,7 +231,7 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .lock-foot b{color:#8fa4b1;font-weight:600}
 .ask{position:fixed;inset:0;background:rgba(22,33,46,.5);z-index:300;display:flex;overflow-y:auto;padding:20px}
 .ask-card{margin:auto}
-.ask-card{background:#fff;border-radius:14px;padding:22px 24px;width:min(420px,100%);
+.ask-card{background:var(--card);border-radius:14px;padding:22px 24px;width:min(420px,100%);
   box-shadow:0 30px 70px -20px rgba(22,33,46,.5)}
 .ask-card h3{font-family:var(--display);font-size:19px;margin:0 0 6px}
 .ask-note{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px;line-height:1.55}
@@ -222,7 +247,7 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
   border:1.5px solid var(--line);border-radius:11px;margin-bottom:10px;font-size:15px;
   background:#fbfcfd;transition:border-color .15s, box-shadow .15s}
 .lock-card input[type=password]:focus,.lock-card input[type=text]:focus{
-  border-color:var(--teal);outline:none;box-shadow:0 0 0 3.5px var(--teal-light);background:#fff}
+  border-color:var(--teal);outline:none;box-shadow:0 0 0 3.5px var(--teal-light);background:var(--card)}
 .lock-card .btn{width:100%;margin-top:4px;padding:12px;border-radius:11px;font-size:15px;
   transition:transform .12s, box-shadow .15s, filter .15s}
 .lock-card .btn.pri:hover{filter:brightness(1.07);box-shadow:0 10px 24px -10px rgba(15,95,92,.55)}
@@ -250,7 +275,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 /* ---------- window ---------- */
 .sheet{
   position:fixed;top:50%;left:50%;transform:translate(-50%,-46%) scale(.97);
-  width:min(940px,94vw);height:min(88vh,900px);background:var(--card);border-radius:14px;
+  width:min(940px,calc(94vw / var(--z)));height:min(calc(88vh / var(--z)),900px);background:var(--card);border-radius:14px;
   z-index:50;opacity:0;pointer-events:none;transition:opacity .18s, transform .18s cubic-bezier(.4,0,.2,1);
   display:flex;flex-direction:column;box-shadow:0 30px 80px -20px rgba(22,33,46,.45);overflow:hidden;
 }
@@ -267,13 +292,34 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 }
 .win-tabs button:hover{color:var(--ink)}
 .win-tabs button.on{color:var(--teal);border-bottom-color:var(--teal)}
-.sheet-body{flex:1;overflow-y:auto;padding:20px 0 40px}
+.sheet-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:20px 0 40px}   /* min-height:0 — בלעדיו חלון ארוך לא נגלל */
+/* מצב שיחת טלפון */
+.call-wrap{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;max-width:1040px;margin:0 auto;padding:0 22px}
+.call-phone{font-size:26px;font-weight:700;letter-spacing:.5px;direction:ltr;unicode-bidi:isolate;color:var(--ink);text-decoration:none}
+.call-timer{font-variant-numeric:tabular-nums;font-size:15px;color:var(--teal);background:var(--teal-light);border-radius:99px;padding:3px 12px;font-weight:600}
+.call-ref{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13.5px;align-self:start;position:sticky;top:0}
+.call-ref h4{margin:10px 0 4px;font-size:12.5px;color:var(--ink-faint);font-weight:600}
+.call-ref h4:first-child{margin-top:0}
+.call-ref p{margin:0;white-space:pre-wrap;line-height:1.5}
+.call-saved{font-size:12px;color:var(--ink-faint)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:4px 11px;font-size:12.5px;cursor:pointer;font:inherit;font-size:12.5px}
+.chip.on{background:var(--teal-light);border-color:var(--teal);color:var(--teal)}
+@media (max-width:820px){ .call-wrap{grid-template-columns:1fr} .call-ref{position:static} }
+/* שורות בדוח: עמודות ישרות — מספר שורה | שם והסבר | פעולות */
+.rep-row{display:grid;grid-template-columns:64px minmax(0,1fr) 168px;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.rep-row .rn{font-size:12.5px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+.rep-row .rw{font-size:12.5px;color:var(--ink-soft);margin-top:2px;line-height:1.45}
+.rep-row .ra{display:flex;flex-direction:column;gap:5px;align-items:stretch}
+.rep-row .ra .btn{width:100%;justify-content:center;text-align:center}
+.rep-row .ok{font-size:13px;color:var(--teal);text-align:center}
+@media (max-width:620px){ .rep-row{grid-template-columns:52px minmax(0,1fr)} .rep-row .ra{grid-column:2;flex-direction:row;flex-wrap:wrap} .rep-row .ra .btn{width:auto} }
 .win-col{max-width:640px;margin:0 auto;padding:0 22px}
-.sheet-foot{padding:12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;background:#fafbfc}
+.sheet-foot{padding:12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;background:var(--soft)}
 .x{margin-inline-start:0;background:none;border:0;font-size:22px;color:var(--ink-faint);line-height:1;padding:2px 6px;border-radius:6px}
-.x:hover{background:#eef1f3;color:var(--ink)}
+.x:hover{background:var(--soft2);color:var(--ink)}
 
-.draft{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:9px;background:#fff}
+.draft{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:9px;background:var(--card)}
 .draft-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
 .draft-head input[type=checkbox]{accent-color:var(--teal)}
 .draft-head select,.draft-head input[type=date]{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:13px}
@@ -300,12 +346,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .field.wide{grid-column:1/-1}
 .field label{font-size:12.5px;color:var(--ink-soft);font-weight:600}
 .field input,.field select,.field textarea{
-  border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;width:100%;
+  border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--card);width:100%;
 }
 .field textarea{min-height:74px;resize:vertical}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal);outline:none}
 
-.mono.photo{padding:0;overflow:hidden;background:#eef1f4}
+.mono.photo{padding:0;overflow:hidden;background:var(--soft2)}
 .mono.photo img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-block{display:flex;gap:16px;align-items:flex-start;background:#f6f8f9;border:1px solid var(--line);
   border-radius:var(--radius);padding:14px}
@@ -349,7 +395,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .doc-contact b{color:var(--accent)}
 .card-shot .doc{border-radius:0}
 .theme-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-.theme-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font-size:13.5px;cursor:pointer;transition:.15s}
+.theme-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 13px;font-size:13.5px;cursor:pointer;transition:.15s}
 .theme-chip:hover{border-color:var(--ink-faint)}
 .theme-chip.on{border-color:var(--teal);background:var(--teal-light);font-weight:600}
 .theme-dot{width:13px;height:13px;border-radius:50%;flex:none}
@@ -359,7 +405,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .ptag-add{border:1px dashed var(--line);background:none;color:var(--ink-soft);border-radius:99px;padding:4px 11px;font-size:12.5px;cursor:pointer}
 .ptag-add:hover{border-color:var(--teal);color:var(--teal)}
 .pcard-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}
-.pcard-tag{background:#eef1f4;border-radius:5px;padding:1px 7px;font-size:11px;color:var(--ink-soft)}
+.pcard-tag{background:var(--soft2);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--ink-soft)}
 .dash-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .dash-stat{flex:1;min-width:110px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;text-align:center}
 .dash-stat b{display:block;font-family:var(--display);font-size:26px;line-height:1.1;color:var(--ink)}
@@ -390,7 +436,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .sess-tags{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0}
 .sess-notes{font-size:13.5px;color:var(--ink-soft);white-space:pre-wrap;margin-top:4px}
 .sess-action{font-size:12.5px;color:var(--brass);background:var(--brass-light);border-radius:6px;padding:3px 9px;margin-top:7px;display:inline-block}
-.sess-action.done{color:var(--ink-faint);background:#eef1f4;text-decoration:line-through}
+.sess-action.done{color:var(--ink-faint);background:var(--soft2);text-decoration:line-through}
 
 .analysis{background:linear-gradient(#fbfcfc,#f4f8f8);border:1px solid #cfe0df;border-radius:var(--radius);padding:14px 16px}
 .an-date{font-size:11.5px;color:var(--ink-faint);margin-bottom:8px}
@@ -424,11 +470,11 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .desk-ai{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-top:1px solid var(--line-soft);background:#fafcfc}
 .desk-ai-l{font-size:12.5px;font-weight:700;color:var(--teal);margin-inline-end:4px}
 #deskAI .analysis{margin:4px 0 12px}
-.reco{background:#fff;border:1px solid #cfe0df;border-radius:8px;padding:8px 11px;font-size:13.5px;margin-top:6px}
+.reco{background:var(--card);border:1px solid #cfe0df;border-radius:8px;padding:8px 11px;font-size:13.5px;margin-top:6px}
 .smart-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--teal-light);border:1px solid #cde3e1;border-radius:var(--radius);padding:11px 14px;margin-bottom:14px;font-size:14px}
 .smart-banner > div{flex:1;min-width:220px}
 .smart-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
-.analysis pre{white-space:pre-wrap;font-size:12px;background:#fff;padding:9px;border-radius:7px;border:1px solid var(--line)}
+.analysis pre{white-space:pre-wrap;font-size:12px;background:var(--card);padding:9px;border-radius:7px;border:1px solid var(--line)}
 
 /* ---------- match desk (signature) ---------- */
 .desk{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
@@ -467,12 +513,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .multi{display:flex;gap:6px;flex-wrap:wrap}
 .multi label{
   display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:99px;
-  padding:5px 12px;font-size:13.5px;cursor:pointer;background:#fff;
+  padding:5px 12px;font-size:13.5px;cursor:pointer;background:var(--card);
 }
 .multi label:hover{border-color:var(--ink-faint)}
 .multi input{accent-color:var(--teal);margin:0}
 
-.timeline{margin-top:0;padding:16px 20px;border-top:1px solid var(--line);background:#fafbfc}
+.timeline{margin-top:0;padding:16px 20px;border-top:1px solid var(--line);background:var(--soft)}
 .tl-item{display:flex;gap:11px;padding:7px 0}
 .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);margin-top:8px;flex:none}
 .tl-date{font-size:11.5px;color:var(--ink-faint)}
@@ -499,12 +545,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .maptable td{padding:8px 14px;border-bottom:1px solid var(--line-soft)}
 .maptable tr:last-child td{border-bottom:0}
 .maptable .sample{color:var(--ink-faint);font-size:12.5px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.maptable select{width:100%;border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:#fff}
+.maptable select{width:100%;border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--card)}
 
 /* ---------- picker ---------- */
 .picker-item{
   display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line-soft);
-  border-radius:9px;margin-bottom:6px;width:100%;background:#fff;text-align:right;transition:.14s;
+  border-radius:9px;margin-bottom:6px;width:100%;background:var(--card);text-align:right;transition:.14s;
 }
 .picker-item:hover{border-color:var(--teal);background:var(--teal-light)}
 .score{margin-inline-start:auto;font-size:12px;color:var(--teal);background:var(--teal-light);border-radius:99px;padding:2px 9px;font-weight:600}
@@ -514,6 +560,41 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
   z-index:320;font-size:14px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;
 }
 .toast.on{opacity:1;transform:translateY(0)}
+.toast.undo{pointer-events:auto;display:flex;align-items:center;gap:12px}
+.toast .tu{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:7px;padding:4px 12px;font:inherit;font-size:13.5px;cursor:pointer}
+/* מסך פתיחה — "מה כדאי היום" */
+.welcome{background:linear-gradient(135deg,var(--card),var(--soft));border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.welcome h2{font-family:var(--display);font-size:22px;margin:0;font-weight:700}
+.welcome .wdate{font-size:13px;color:var(--ink-faint);margin-top:2px}
+.welcome .wlist{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.welcome .witem{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line-soft);border-radius:10px;padding:8px 12px;text-align:inherit;font:inherit;color:inherit;cursor:pointer;width:100%}
+.welcome .witem:hover{border-color:var(--teal)}
+.welcome .wi{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--teal-light);flex:none}
+.welcome .wcount{margin-inline-start:auto;font-size:12.5px;color:var(--ink-faint)}
+.welcome .wjoy{font-size:13px;color:var(--brass);margin-top:10px}
+/* מזל טוב */
+.joy{position:fixed;inset:0;z-index:330;display:grid;place-items:center;background:rgba(20,24,28,.45);animation:joyin .3s ease}
+.joy-card{background:var(--card);border-radius:20px;padding:34px 40px;text-align:center;max-width:440px;box-shadow:0 30px 80px -20px rgba(0,0,0,.5);position:relative;overflow:hidden}
+.joy-card h2{font-family:var(--display);font-size:38px;margin:6px 0;color:var(--brass)}
+.joy-card p{margin:6px 0;color:var(--ink-soft)}
+.joy-card .names{font-size:19px;font-weight:700;color:var(--ink)}
+.joy i{position:absolute;top:-12px;width:8px;height:14px;border-radius:2px;animation:fall 2.6s linear forwards;opacity:.9}
+@keyframes fall{to{transform:translateY(520px) rotate(540deg);opacity:0}}
+@keyframes joyin{from{opacity:0}to{opacity:1}}
+/* הסתרה מהירה */
+.privacy{position:fixed;inset:0;z-index:400;backdrop-filter:blur(22px) saturate(.6);-webkit-backdrop-filter:blur(22px) saturate(.6);background:rgba(243,238,230,.55);display:grid;place-items:center;cursor:pointer}
+:root[data-theme="night"] .privacy{background:rgba(26,30,34,.6)}
+.privacy div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 26px;font-size:15px;color:var(--ink-soft);box-shadow:var(--shadow)}
+/* מצב ריכוז — החלון על כל המסך */
+.sheet.full{width:calc(100vw / var(--z)) !important;height:calc(100vh / var(--z)) !important;border-radius:0}
+/* חיפוש מהיר Ctrl+K */
+.qk{position:fixed;inset:0;z-index:310;background:rgba(20,24,28,.35);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh}
+.qk-box{width:min(560px,92vw);background:var(--card);border-radius:14px;box-shadow:0 30px 80px -20px rgba(0,0,0,.45);overflow:hidden}
+.qk-box input{width:100%;border:0;border-bottom:1px solid var(--line);padding:16px 18px;font-size:17px;outline:none;background:var(--card)}
+.qk-list{max-height:52vh;overflow:auto}
+.qk-item{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;width:100%;border:0;background:none;text-align:inherit;font:inherit;color:inherit}
+.qk-item.on,.qk-item:hover{background:var(--teal-light)}
+.qk-hint{font-size:12px;color:var(--ink-faint);padding:8px 16px;border-top:1px solid var(--line-soft)}
 
 .hidden{display:none !important}
 
@@ -567,6 +648,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <b id="railCount">0 מועמדים</b>
       <div class="save-state" id="saveState">נשמר ומוצפן</div>
       <div id="acctLine" style="margin-top:6px"></div>
+      <div class="comfort" role="group" aria-label="נוחות תצוגה">
+        <button type="button" onclick="uiZoom(-1)" title="אותיות קטנות יותר">א−</button>
+        <button type="button" onclick="uiZoom(1)" title="אותיות גדולות יותר" style="font-size:15px">א+</button>
+        <button type="button" onclick="uiTheme()" id="btnTheme" title="מצב ערב / יום">🌙</button>
+        <button type="button" onclick="privacyOn()" title="הסתרה מהירה של המסך (Esc פעמיים)">🙈</button>
+      </div>
       <button class="btn ghost sm" id="btnLock" style="margin-top:8px;color:#b3c0cb;width:100%">נעילה</button>
       <button class="btn sm hidden" id="btnInstall" style="margin-top:8px;width:100%;background:#1d3a3a;color:#cfe6e3;border-color:#2b5554">📌 התקנה כאפליקציה</button>
     </div>
@@ -576,7 +663,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
     <div class="topbar">
       <div class="search">
         <span class="mag">⌕</span>
-        <input id="q" type="search" placeholder="חיפוש לפי שם, עיר, ישיבה, הערות…">
+        <input id="q" type="search" placeholder="חיפוש לפי שם, עיר, ישיבה, הערות…  (Ctrl+K מכל מקום)">
       </div>
       <button class="btn hidden" id="btnFormSync" title="בדיקה אם מילאו את הטופס מאז הפעם הקודמת">📝 תשובות מהטופס</button>
       <button class="btn" id="btnSmart" title="חיפוש במילים רגילות בעזרת AI">✨ חיפוש חכם</button>
@@ -1176,6 +1263,8 @@ function idleLimit(){ return (parseInt(localStorage.getItem("idle_min")||"20",10
 function hideLockOn(){ return localStorage.getItem("hide_lock") !== "0"; }   /* מופעל כברירת מחדל */
 
 function lock(){
+  /* שיחה פתוחה — מה שנכתב נשמר לפני הנעילה */
+  if(typeof CALL!=="undefined" && CALL){ try{ callSave(); }catch(e){} closeCallTimer(); CALL = null; }
   /* שינוי שעוד לא נשמר (בתוך 250 אלפיות השנייה האחרונות) — נשמר לפני שהמפתח נמחק */
   if(saveTimer && dirty && CRY.key && !CRY.plain){ clearTimeout(saveTimer); saveTimer = null; persist().finally(lock); return; }
   const a = $("#ask"); if(a){ a.classList.add("hidden"); a.innerHTML = ""; }
@@ -1429,7 +1518,7 @@ function ask(opts){
         <input id="ask_${i}" type="${f.type||"text"}" value="${esc(f.value||"")}" autocomplete="off" spellcheck="false"></label>`).join("")}
       <div class="ask-btns">
         <button class="btn pri" id="askOk">${esc(opts.ok||"אישור")}</button>
-        <button class="btn ghost" id="askCancel">ביטול</button>
+        <button class="btn ghost" id="askCancel">${esc(opts.cancel||"ביטול")}</button>
       </div></div>`;
     box.classList.remove("hidden");
     const done = val=>{ box.classList.add("hidden"); box.innerHTML=""; resolve(val); };
@@ -1523,6 +1612,7 @@ function sanitizeDB(d){
 }
 
 async function boot(){
+  applyUiPrefs();
   applyConnectLink();
   await vaultLoad();
   /* הצפנה זמינה רק בהקשר מאובטח — https או localhost. פתיחת הקובץ בלחיצה כפולה לא נחשבת. */
@@ -1567,8 +1657,16 @@ async function boot(){
 }
 
 function toast(msg){
-  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  const t = $("#toast"); t.classList.remove("undo"); t.textContent = msg; t.classList.add("on");
   clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on"), 2600);
+}
+/* "בלי פחד לטעות": הודעה עם כפתור ביטול לכמה שניות */
+function toastUndo(msg, undoFn){
+  const t = $("#toast");
+  t.innerHTML = `<span>${esc(msg)}</span><button class="tu" type="button">↶ ביטול</button>`;
+  t.classList.add("on","undo");
+  t.querySelector(".tu").onclick = ()=>{ clearTimeout(t._h); t.classList.remove("on","undo"); try{ undoFn(); }catch(e){ toast("הביטול לא הצליח: " + e.message); } };
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("on","undo"), 7000);
 }
 
 /* ============ helpers ============ */
@@ -1740,7 +1838,8 @@ function renderCards(keepLimit){
       ${fc.sheetId?"":`<button class="btn pri" onclick="setView('import')">העלאת קובץ</button>`}</div>`;
     return;
   }
-  const fbanner = connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
+  const plain = !ui.q.trim() && !S && !ui.gender && !ui.status && !ui.sector && !ui.openTo;
+  const fbanner = (plain ? welcomeHtml() : "") + connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
       <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
       <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
     </div>` : "");
@@ -1821,15 +1920,17 @@ function leaveEdit(fn){
   fn();
 }
 function closeSheet(){
+  if(typeof CALL!=="undefined" && CALL){ try{ callSave(); }catch(e){} closeCallTimer(); CALL = null; toast("השיחה נשמרה כטיוטה בתיק"); }
   EDIT.on = false; EDIT.dirty = false;
   $("#scrim").classList.remove("on"); $("#sheet").classList.remove("on");
-  $("#sheet").classList.remove("wide"); cardMode="edit"; ui.openPerson=null;
+  $("#sheet").classList.remove("wide"); $("#sheet").classList.remove("full"); cardMode="edit"; ui.openPerson=null;
 }
 
 let winTab = "details";
 
 function openPerson(id, tab){
   const p = personById(id); if(!p) return;
+  if(typeof CALL!=="undefined" && CALL){ try{ callSave(); }catch(e){} closeCallTimer(); CALL = null; }
   if(ui.openPerson !== id) winTab = "details";
   if(tab) winTab = tab;
   ui.openPerson = id;
@@ -1843,6 +1944,8 @@ function openPerson(id, tab){
         <h3>${esc(p.fullName||"ללא שם")}</h3>
         <div class="meta">${esc(st)}${p.age?" · "+esc(p.age):""}${p.city?" · "+esc(p.city):""}${p.community?" · "+esc(p.community):""}</div>
       </div>
+      <button class="btn sm pri" onclick="openCall('${id}')" title="שיחה עם המועמד — רושמים תוך כדי, הכול נשמר לבד">📞 שיחה</button>
+      <button class="btn ghost sm" id="btnFocus" onclick="toggleFocus()" title="החלון על כל המסך — בלי הסחות">${$("#sheet").classList.contains("full")?"⤡ יציאה ממצב ריכוז":"⛶ מצב ריכוז"}</button>
       <button class="btn ghost sm" onclick="popOut('${id}')" title="פתיחה בחלון דפדפן נפרד — נוח להשוואה בין שניים">⧉ חלון נפרד</button>
       <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>
     </div>
@@ -1903,7 +2006,8 @@ function openPerson(id, tab){
 function renderFileTab(p){
   $("#sheetBody").innerHTML = `<div class="win-col">${renderDossier(p)}</div>`;
   $("#sheetFoot").innerHTML = `
-    <button class="btn pri" onclick="sessionForm('${p.id}')">רישום פגישה</button>
+    <button class="btn pri" onclick="openCall('${p.id}')">📞 שיחה — רישום תוך כדי</button>
+    <button class="btn" onclick="sessionForm('${p.id}')">רישום פגישה</button>
     <button class="btn" onclick="document.getElementById('docFile').click()">העלאת מסמך</button>
     <input type="file" id="docFile" accept=".docx,.txt,.md" class="hidden">
     <button class="btn ghost" onclick="window.print()">הדפסה</button>`;
@@ -2103,7 +2207,8 @@ function delPerson(id){
     /* נמחק בכוונה — גם התשובות שלו שחיכו לאישור לא ייובאו שוב מהגיליון */
     personKeys(p).concat(F.pending.filter(it=>it.exId===id).map(it=>keyCanon(it.key))).forEach(k=>{ if(!F.ignored.includes(k)) F.ignored.push(k); });
     F.pending = F.pending.filter(it=>it.exId!==id); }   /* נמחק בכוונה — לא ייובא שוב מהגיליון */
-  save(); closeSheet(); render(); toast("הכרטיס נמחק — אפשר לשחזר מ״היסטוריה וסל מחזור״ בדף הקליטה");
+  save(); closeSheet(); render();
+  toastUndo(`הכרטיס של ${p.fullName} נמחק`, ()=>restoreTrash(tid));
 }
 
 /* ============ matching ============ */
@@ -2323,6 +2428,7 @@ function openMatch(mid){
       [a,b].forEach(p=>{ p.status="נסגר"; p.updated=today(); });
     }
     save(); openMatch(m.id); toast("הסטטוס עודכן");
+    if(m.status==="התארסו") celebrate(a, b);
   });
   $("#logText").addEventListener("keydown", e=>{ if(e.key==="Enter") addLog(m.id); });
 }
@@ -2347,8 +2453,10 @@ async function addTag(id){
 }
 function removeTagAt(id, i){
   const p = personById(id); if(!p) return;
+  const before = (p.tags||[]).slice();
   p.tags = (p.tags||[]).filter((t,j)=>j!==i);
   p.updated = today(); save(); openPerson(id, "details");
+  toastUndo(`התווית "${before[i]||""}" הוסרה`, ()=>{ p.tags = before; save(); openPerson(id, "details"); });
 }
 function removeTag(id, tag){
   const p = personById(id);
@@ -2359,9 +2467,11 @@ function removeTag(id, tag){
 async function addTagFn(id){ return addTag(id); }
 
 function delMatch(mid){
-  if(!confirm("למחוק את ההצעה הזו לצמיתות?")) return;
+  if(!confirm("למחוק את ההצעה הזו?")) return;
+  const m = DB.matches.find(x=>x.id===mid);
   DB.matches = DB.matches.filter(x=>x.id!==mid);
-  save(); render(); toast("ההצעה נמחקה");
+  save(); render();
+  toastUndo("ההצעה נמחקה", ()=>{ if(m && !DB.matches.some(x=>x.id===m.id)){ DB.matches.push(m); save(); render(); toast("ההצעה הוחזרה ✓"); } });
 }
 
 /* ============ import ============ */
@@ -2729,16 +2839,15 @@ function sameRowAs(ex, p, key){
 function openImportReport(){
   const R = DB.importReport; if(!R) return toast("אין דוח ייבוא שמור");
   const open = R.items.filter(x=>!x.done && x.p);
-  const rows = R.items.map((x,i)=>`<div class="fieldrow" style="align-items:center">
-      <dt style="min-width:70px">${x.row?`שורה ${x.row}`:""}</dt>
-      <dd style="flex:1"><b>${esc(x.name||"")}</b><div style="font-size:12.5px;color:var(--ink-soft)">${esc(x.why)}</div></dd>
-      ${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">ייבוא בכל זאת</button>`
-        : x.act==="handled" ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
-            ${x.trashId ? `<button class="btn sm pri" onclick="reportRestore(${i})">↩ שחזור הכרטיס</button>` : (x.p ? `<button class="btn sm pri" onclick="reportReAdd(${i})">➕ הוספה ככרטיס</button>` : "")}
-            ${x.exId && personById(x.exId) ? `<button class="btn sm" onclick="openPerson('${x.exId}')">פתיחת הכרטיס</button>` : ""}</div>`
+  const rows = R.items.map((x,i)=>`<div class="rep-row">
+      <div class="rn">${x.row?`שורה ${x.row}`:""}</div>
+      <div style="min-width:0"><b>${esc(x.name||"")}</b><div class="rw">${esc(x.why)}</div></div>
+      <div class="ra">${!x.done && x.p ? `<button class="btn sm pri" onclick="importAnyway(${i})">➕ ייבוא בכל זאת</button>`
+        : x.act==="handled" ? `${x.trashId ? `<button class="btn sm pri" onclick="reportRestore(${i})">↩ שחזור הכרטיס</button>` : (x.p ? `<button class="btn sm pri" onclick="reportReAdd(${i})">➕ הוספה ככרטיס</button>` : "")}
+            ${x.exId && personById(x.exId) ? `<button class="btn sm" onclick="openPerson('${x.exId}')">פתיחת הכרטיס</button>` : ""}`
         : x.act==="held" ? `<button class="btn sm" onclick="closeSheet();ui.intake='held';setView('intake')">לבדיקה</button>`
         : x.act==="pend" ? `<button class="btn sm" onclick="openFormReview()">לאישור</button>`
-        : `<span style="font-size:12px;color:var(--teal)">✓</span>`}
+        : `<div class="ok">✓ בסדר</div>`}</div>
     </div>`).join("");
   $("#sheetHead").innerHTML = `<div style="flex:1"><h3>דוח ${R.kind==="sheet"?"בדיקת שלמות מול הגיליון":"הייבוא"} · ${esc(R.date)}</h3>
       <div class="meta">${R.kind==="sheet"
@@ -2756,7 +2865,7 @@ function openImportReport(){
       ${B.cards+B.held+B.pend+B.twice+B.deleted+B.missing+B.empty} = ${R.total} ✓ ·
       ב״סה״כ מועמדים״ בכרטסייה מופיעים ${R.visible}${R.outside?` — מתוכם ${R.outside} שלא מהגיליון (נוספו ידנית או מקובץ)`:""}.
     </div>` : "";
-  $("#sheetBody").innerHTML = breakdown + (R.items.length ? `<dl class="fields">${rows}</dl>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`);
+  $("#sheetBody").innerHTML = `<div class="win-col" style="max-width:820px">` + breakdown + (R.items.length ? `<div>${rows}</div>` : `<div class="empty"><h3>הכול נכנס ✓</h3><p>כל השורות נמצאות בכרטסייה.</p></div>`) + `</div>`;
   $("#sheetFoot").innerHTML = `${open.length?`<button class="btn pri" onclick="importAnyway('all')">ייבוא כל ה-${open.length}</button>`:""}
     <button class="btn ghost" onclick="closeSheet()">סגירה</button>`;
   openSheet();
@@ -3041,7 +3150,8 @@ function renderDossier(p){
     <div class="sess">
       <div class="sess-head">
         <span class="sess-type">${esc(x.type||"פגישה")}</span>
-        <span class="sess-date">${esc(x.date||"")}</span>
+        <span class="sess-date">${esc(x.date||"")}${x.date?` <span class="hebdate">· ${esc(hebDate(x.date))}</span>`:""}${x.minutes?` · ${x.minutes} דק׳`:""}</span>
+        ${x.draft?`<span class="tag" style="background:var(--brass-light)">📞 שיחה שלא הסתיימה</span><button class="btn sm" onclick="openCall('${p.id}','${x.id}')">המשך</button>`:""}
         ${x.clarity?`<span class="rating" title="בהירות הבקשה">${"●".repeat(+x.clarity)}${"○".repeat(5-x.clarity)}</span>`:""}
         <button class="btn ghost sm" style="margin-inline-start:auto" onclick="sessionForm('${p.id}','${x.id}')">עריכה</button>
       </div>
@@ -3117,6 +3227,295 @@ function sessionForm(pid, sid, matchId){
   EDIT.on = true; EDIT.dirty = false;
 }
 
+/* ============ מצב שיחת טלפון — השדכנית רושמת תוך כדי השיחה ============
+   נפתח רישום פגישה מסוג "שיחת טלפון" שנשמר לבד כל כמה שניות. גם אם החלון נסגר באמצע —
+   כלום לא הולך לאיבוד: הרישום נשאר בתיק כ"שיחה שלא הסתיימה" עם כפתור "המשך". */
+/* ============ מסך פתיחה: ברכה + עד שלושה דברים לטפל בהם היום ============ */
+function greetWord(){
+  const d = new Date(), h = d.getHours(), dow = d.getDay();
+  if((dow===6 && h>=17) || (dow===0 && h<5)) return "שבוע טוב";
+  if((dow===5 && h>=13) || (dow===6 && h<17)) return "שבת שלום";
+  return h<5 ? "לילה טוב" : h<12 ? "בוקר טוב" : h<16 ? "צהריים טובים" : h<22 ? "ערב טוב" : "לילה טוב";
+}
+function welcomeName(){
+  const sh = shadchanCfg(); const n = String(sh.name || localStorage.getItem("acct_user") || "").trim().split(/\s+/)[0];
+  return n || "";
+}
+function welcomeItems(){
+  const items = [];
+  const held = DB.people.filter(p=>p.hold).length, pend = (DB.form&&DB.form.pending||[]).length;
+  if(held+pend) items.push({ic:"📝", t:`${held+pend} פניות מחכות לבדיקה שלך`, go:pend&&!held?"openFormReview()":"ui.intake='held';setView('intake')"});
+  const due = DB.sessions.filter(s=>s.next && s.next<=today() && !s.draft).sort((a,b)=>a.next.localeCompare(b.next));
+  due.slice(0,2).forEach(s=>{ const p = personById(s.pid); if(p) items.push({ic:"📞", t:`לחזור אל ${p.fullName}${s.next<today()?" — עבר המועד":" — היום"}`, side: s.next, go:`openPerson('${p.id}','file')`}); });
+  const drafts = DB.sessions.filter(s=>s.draft);
+  drafts.slice(0,1).forEach(s=>{ const p = personById(s.pid); if(p) items.push({ic:"✍️", t:`שיחה עם ${p.fullName} לא הסתיימה`, go:`openCall('${p.id}','${s.id}')`}); });
+  /* הצעה שממתינה לתשובה יותר מ-10 ימים */
+  DB.matches.filter(m=>["הוצע","בבירור"].includes(m.status) && daysSince(m.updated||m.created) > 10)
+    .sort((a,b)=>(a.updated||"").localeCompare(b.updated||"")).slice(0,2).forEach(m=>{
+      const a = personById(m.a), b = personById(m.b); if(a&&b) items.push({ic:"◇", t:`ההצעה ${a.fullName.split(" ")[0]} ו${b.fullName.split(" ")[0]} ממתינה ${daysSince(m.updated||m.created)} ימים`, go:`openMatch('${m.id}')`});
+    });
+  /* לא דיברו כבר 3 שבועות — רק מי שבתהליך ליווי */
+  DB.people.filter(p=>!p.hold && ["פנוי","בתהליך"].includes(p.status||"פנוי")).map(p=>({p, ss:sessionsOf(p.id)}))
+    .filter(x=>x.ss.length && daysSince(x.ss[0].date) >= 21).sort((a,b)=>daysSince(b.ss[0].date)-daysSince(a.ss[0].date)).slice(0,2)
+    .forEach(x=>items.push({ic:"🕊", t:`לא דיברת עם ${x.p.fullName} כבר ${Math.round(daysSince(x.ss[0].date)/7)} שבועות`, go:`openPerson('${x.p.id}','file')`}));
+  return items.slice(0,3);
+}
+function welcomeHtml(){
+  try{ if(localStorage.getItem("welcome_hide") === today()) return ""; }catch(e){}
+  const nm = welcomeName(), items = welcomeItems();
+  const yr = new Date().getFullYear();
+  const joy = DB.matches.filter(m=>m.status==="התארסו" && String(m.updated||"").startsWith(String(yr))).length;
+  const d = new Date();
+  return `<div class="welcome">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1"><h2>${greetWord()}${nm?`, ${esc(nm)}`:""}</h2>
+        <div class="wdate">${d.toLocaleDateString("he-IL",{weekday:"long", day:"numeric", month:"long"})} · ${esc(hebDate(d, true))}</div></div>
+      <button class="x" onclick="try{localStorage.setItem('welcome_hide',today())}catch(e){};renderCards()" title="להסתיר להיום" aria-label="להסתיר להיום">×</button>
+    </div>
+    ${items.length ? `<div class="wlist">${items.map(x=>`<button class="witem" onclick="${x.go}"><span class="wi">${x.ic}</span><span>${esc(x.t)}</span><span class="wcount">←</span></button>`).join("")}</div>`
+      : `<div class="wdate" style="margin-top:10px">אין משהו דחוף היום. אפשר לעבוד בנחת 🌿</div>`}
+    ${joy ? `<div class="wjoy">💍 ${joy} ${joy===1?"שידוך נסגר":"שידוכים נסגרו"} השנה — מזל טוב!</div>` : ""}
+  </div>`;
+}
+
+/* ============ מזל טוב ============ */
+function celebrate(a, b){
+  const yr = new Date().getFullYear();
+  const n = DB.matches.filter(m=>m.status==="התארסו" && String(m.updated||"").startsWith(String(yr))).length;
+  const box = document.createElement("div");
+  box.className = "joy"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","מזל טוב");
+  const colors = ["#a97c34","#0f5f5c","#8c3a4a","#d7ad66","#6fbdb4"];
+  const conf = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches ? "" :
+    Array.from({length:36},(_,i)=>`<i style="left:${Math.random()*100}%;background:${colors[i%5]};animation-delay:${(Math.random()*0.9).toFixed(2)}s"></i>`).join("");
+  box.innerHTML = `<div class="joy-card">${conf}
+      <div style="font-size:44px">💍</div>
+      <h2>מזל טוב!</h2>
+      <div class="names">${esc(a?a.fullName:"")} ו${esc(b?b.fullName:"")}</div>
+      <p>השידוך ה-${n} שנסגר השנה. יהי רצון שיבנו בית נאמן בישראל.</p>
+      <button class="btn pri" style="margin-top:12px">אמן 🙏</button></div>`;
+  box.onclick = e=>{ if(e.target===box || e.target.tagName==="BUTTON") box.remove(); };
+  document.body.appendChild(box);
+  setTimeout(()=>{ if(box.isConnected) box.remove(); }, 8000);
+}
+
+/* ============ פרטיות: הסתרה מהירה (🙈 או Esc פעמיים) ============ */
+function privacyOn(){
+  if($("#privacy")) return;
+  const d = document.createElement("div");
+  d.id = "privacy"; d.className = "privacy";
+  d.innerHTML = `<div>🙈 המסך מוסתר · לחיצה כדי להחזיר</div>`;
+  d.onclick = ()=>d.remove();
+  document.body.appendChild(d);
+}
+let lastEsc = 0;
+document.addEventListener("keydown", e=>{
+  if(e.key === "Escape"){
+    const now = Date.now();
+    if(now - lastEsc < 450 && !CRY.locked){ privacyOn(); lastEsc = 0; e.stopPropagation(); return; }
+    lastEsc = now;
+  }
+  /* חיפוש מהיר מכל מקום */
+  if((e.ctrlKey || e.metaKey) && !e.altKey && (e.code==="KeyK" || String(e.key).toLowerCase()==="k") && !CRY.locked){ e.preventDefault(); e.stopPropagation(); quickFind(); }
+}, true);
+
+/* ============ מצב ריכוז: חלון המועמד על כל המסך ============ */
+function toggleFocus(){
+  const sh = $("#sheet"); const on = !sh.classList.contains("full");
+  sh.classList.toggle("full", on);
+  try{ localStorage.setItem("focus_mode", on ? "1" : ""); }catch(e){}
+  const b = $("#btnFocus"); if(b) b.textContent = on ? "⤡ יציאה ממצב ריכוז" : "⛶ מצב ריכוז";
+}
+
+/* ============ חיפוש מהיר (Ctrl+K) ============ */
+function quickFind(){
+  if($("#qk")) return;
+  const w = document.createElement("div");
+  w.id = "qk"; w.className = "qk";
+  w.innerHTML = `<div class="qk-box" role="dialog" aria-label="חיפוש מהיר">
+      <input id="qkIn" placeholder="שם, טלפון, עיר… (Enter לפתיחה, Esc לסגירה)" autocomplete="off">
+      <div class="qk-list" id="qkList"></div>
+      <div class="qk-hint">↑ ↓ לבחירה · Enter לפתיחה · Ctrl+K מכל מקום</div></div>`;
+  document.body.appendChild(w);
+  let sel = 0, res = [];
+  const draw = ()=>{
+    const q = $("#qkIn").value.trim().toLowerCase(), qd = q.replace(/\D/g,"");
+    res = !q ? DB.people.filter(p=>!p.hold).sort((a,b)=>String(b.updated||"").localeCompare(String(a.updated||""))).slice(0,8)
+      : DB.people.filter(p=>String(p.fullName||"").toLowerCase().includes(q) || String(p.city||"").toLowerCase().includes(q)
+          || (qd.length>=3 && String(p.phone||"").replace(/\D/g,"").includes(qd))).slice(0,12);
+    sel = Math.min(sel, Math.max(0, res.length-1));
+    $("#qkList").innerHTML = res.length ? res.map((p,i)=>`<button class="qk-item ${i===sel?"on":""}" data-i="${i}">${avatar(p,28)}
+        <span style="flex:1"><b>${esc(p.fullName||"")}</b> <span style="font-size:12.5px;color:var(--ink-faint)">${[p.age,p.city,p.status].filter(Boolean).map(esc).join(" · ")}</span></span></button>`).join("")
+      : `<div class="qk-hint" style="border:0">לא נמצא</div>`;
+    $$("#qkList .qk-item").forEach(b=>b.onclick = ()=>go(+b.dataset.i));
+  };
+  const close = ()=>w.remove();
+  const go = i=>{ const p = res[i]; if(!p) return; close(); openPerson(p.id); };
+  w.onclick = e=>{ if(e.target===w) close(); };
+  $("#qkIn").addEventListener("input", ()=>{ sel = 0; draw(); });
+  $("#qkIn").addEventListener("keydown", e=>{
+    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if(e.key==="ArrowDown"){ e.preventDefault(); sel = Math.min(res.length-1, sel+1); draw(); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); sel = Math.max(0, sel-1); draw(); }
+    else if(e.key==="Enter"){ e.preventDefault(); go(sel); }
+  });
+  draw(); $("#qkIn").focus();
+}
+
+/* ============ נוחות: גודל אותיות, מצב ערב, תאריך עברי ============ */
+function uiPrefs(){ let z = 1, t = ""; try{ z = parseFloat(localStorage.getItem("ui_zoom")) || 1; t = localStorage.getItem("ui_theme") || ""; }catch(e){} return {z, t}; }
+function applyUiPrefs(){
+  const {z, t} = uiPrefs();
+  document.documentElement.style.setProperty("--z", String(z));
+  if(t === "night") document.documentElement.setAttribute("data-theme","night"); else document.documentElement.removeAttribute("data-theme");
+  const b = document.getElementById("btnTheme"); if(b) b.textContent = t === "night" ? "☀️" : "🌙";
+}
+function uiZoom(d){
+  const steps = [0.9, 1, 1.1, 1.2, 1.3];
+  let {z} = uiPrefs(); let i = steps.indexOf(z); if(i < 0) i = 1;
+  i = Math.max(0, Math.min(steps.length-1, i + d));
+  try{ localStorage.setItem("ui_zoom", String(steps[i])); }catch(e){}
+  applyUiPrefs(); toast(`גודל אותיות: ${Math.round(steps[i]*100)}%`);
+}
+function uiTheme(){
+  const {t} = uiPrefs(); const n = t === "night" ? "" : "night";
+  try{ localStorage.setItem("ui_theme", n); }catch(e){}
+  applyUiPrefs(); toast(n ? "מצב ערב 🌙" : "מצב יום ☀️");
+}
+const HEB_UNITS = ["","א","ב","ג","ד","ה","ו","ז","ח","ט"], HEB_TENS = ["","י","כ","ל","מ","נ","ס","ע","פ","צ"], HEB_HUND = ["","ק","ר","ש","ת"];
+function gematria(n){
+  n = n % 1000; let out = "";
+  while(n >= 400){ out += "ת"; n -= 400; }
+  if(n >= 100){ out += HEB_HUND[Math.floor(n/100)]; n %= 100; }
+  if(n === 15) out += "טו"; else if(n === 16) out += "טז";
+  else { out += HEB_TENS[Math.floor(n/10)] + HEB_UNITS[n%10]; }
+  return out.length > 1 ? out.slice(0,-1) + "״" + out.slice(-1) : out + "׳";
+}
+/* "15 בחשוון" → "ט״ו בחשוון" (ועם שנה: "ט״ו בחשוון תשפ״ז") */
+function hebDate(d, withYear){
+  try{
+    const dt = d instanceof Date ? d : new Date(String(d).length===10 ? d + "T12:00:00" : d);
+    if(isNaN(dt)) return "";
+    const parts = new Intl.DateTimeFormat("he-u-ca-hebrew",{day:"numeric", month:"long", year:"numeric"}).formatToParts(dt);
+    const day = +parts.find(x=>x.type==="day").value, month = parts.find(x=>x.type==="month").value, year = +parts.find(x=>x.type==="year").value;
+    return `${gematria(day)} ב${month}${withYear ? " " + gematria(year) : ""}`;
+  }catch(e){ return ""; }
+}
+
+let CALL = null;
+function copyText(t, msg){
+  const done = ()=>toast(msg || "הועתק");
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(done).catch(()=>{ prompt("להעתקה:", t); });
+  else prompt("להעתקה:", t);
+}
+function openCall(pid, sid){
+  const p = personById(pid); if(!p) return;
+  closeCallTimer();
+  let s = sid ? DB.sessions.find(x=>x.id===sid) : null;
+  if(!s){
+    s = {id:"s"+(DB.seq++)+Date.now().toString(36).slice(-3), pid, date:today(), type:"שיחת טלפון", topics:[], notes:"", draft:true, start:new Date().toISOString()};
+    DB.sessions.push(s); save();
+  }
+  CALL = {pid, sid:s.id, t0: Date.now() - (s.elapsed||0)*1000, timer:null};
+  const phone = p.phone || p.contactPhone || "";
+  const last = sessionsOf(pid).filter(x=>x.id!==s.id && x.notes)[0];
+  const ref = (l,v)=> v ? `<h4>${l}</h4><p>${esc(String(disp(v)).slice(0,500))}</p>` : "";
+  const ms = DB.matches.filter(m=>(m.a===pid||m.b===pid) && !["הופסק","התארסו"].includes(m.status));
+  $("#sheetHead").innerHTML = `<div class="win-title" style="flex-wrap:wrap">
+      ${avatar(p,46)}
+      <div style="min-width:0">
+        <h3>📞 שיחה עם ${esc(p.fullName||"")}</h3>
+        <div class="meta">${[p.age, p.city, p.community].filter(Boolean).map(esc).join(" · ")}</div>
+      </div>
+      ${phone?`<a class="call-phone" href="tel:${esc(String(phone).replace(/[^\d+]/g,""))}" title="חיוג">${esc(phone)}</a>
+        <button class="btn ghost sm" onclick="copyText('${esc(String(phone).replace(/[^\d+-]/g,""))}','המספר הועתק')">העתקה</button>`:`<span class="meta">אין מספר טלפון בכרטיס</span>`}
+      <span class="call-timer" id="callTimer">00:00</span>
+      <button class="x" onclick="endCall(false)" aria-label="סגירה">×</button>
+    </div>`;
+  $("#sheetBody").innerHTML = `<div class="call-wrap">
+    <div>
+      <div class="form-grid" style="margin-bottom:10px">
+        <div class="field"><label for="call_type">סוג</label>
+          <select id="call_type" onchange="callSave()">${SESSION_TYPES.map(t=>`<option ${t===s.type?"selected":""}>${esc(t)}</option>`).join("")}</select></div>
+        <div class="field"><label for="call_date">תאריך</label><input type="date" id="call_date" value="${esc(s.date||today())}" onchange="callSave()"></div>
+      </div>
+      <div class="sect" style="margin-top:4px;display:flex;align-items:center;gap:8px">מה נאמר בשיחה
+        <button class="btn ghost sm" style="margin-inline-start:auto" onmousedown="event.preventDefault()" onclick="callStamp()" title="הוספת השעה הנוכחית בשורה חדשה">⏱ חותמת זמן</button></div>
+      ${richEditor("call_notes", s.notes||"", {minh: 260, placeholder: "כותבים תוך כדי השיחה — נשמר לבד כל כמה שניות", oninput: "callSaveSoon()"})}
+      <div class="sect">נושאים שעלו</div>
+      <div class="chips">${TOPICS.map(t=>`<button type="button" class="chip ${(s.topics||[]).includes(t)?"on":""}" onclick="this.classList.toggle('on');callSave()" data-ctopic="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+      <div class="form-grid" style="margin-top:12px">
+        <div class="field"><label for="call_actions">משימה להמשך</label><input id="call_actions" value="${esc(s.actions||"")}" placeholder="למשל: לשלוח לה את הכרטיס של…" oninput="callSaveSoon()"></div>
+        <div class="field"><label for="call_next">לחזור אליו/ה בתאריך</label><input type="date" id="call_next" value="${esc(s.next||"")}" onchange="callSave()"></div>
+      </div>
+      <div class="call-saved" id="callSaved">נשמר ✓</div>
+    </div>
+    <aside class="call-ref" aria-label="מידע לשיחה">
+      ${ref("מה מחפש/ת", [p.looking, p.lookingTraits].filter(Boolean).join(" · "))}
+      ${ref("טווח גילאים מבוקש", p.ageRange)}
+      ${ref("אופי", p.character)}
+      ${ref("השקפה", p.hashkafa)}
+      ${ms.length?`<h4>הצעות פתוחות</h4><p>${ms.map(m=>{ const o = personById(m.a===pid?m.b:m.a); return esc((o?o.fullName:"—")+" — "+m.status); }).join("\n")}</p>`:""}
+      ${last?`<h4>בשיחה הקודמת (${esc(last.date||"")})</h4><p>${esc(String(last.notes).slice(0,600))}</p>`:""}
+      ${last&&last.actions?`<h4>מה הובטח</h4><p>${esc(last.actions)}</p>`:""}
+      ${!p.looking && !p.character && !last ? `<p style="color:var(--ink-faint)">אין עדיין מידע נוסף בתיק.</p>`:""}
+    </aside>
+  </div>`;
+  $("#sheetFoot").innerHTML = `
+    <button class="btn pri" onclick="endCall(true)">✓ סיום שיחה ושמירה</button>
+    <button class="btn" onclick="endCall(false)">סגירה — להמשיך אחר כך</button>
+    <button class="btn ghost" onclick="cancelCall()">ביטול השיחה</button>`;
+  openSheet();
+  CALL.timer = setInterval(callTick, 1000); callTick();
+  setTimeout(()=>{ const t = $("#call_notes"); if(t){ t.focus(); t.selectionStart = t.selectionEnd = t.value.length; } }, 80);
+}
+function callTick(){
+  if(!CALL) return; const el = $("#callTimer"); if(!el){ closeCallTimer(); return; }
+  const sec = Math.floor((Date.now() - CALL.t0)/1000);
+  el.textContent = String(Math.floor(sec/60)).padStart(2,"0") + ":" + String(sec%60).padStart(2,"0");
+}
+function closeCallTimer(){ if(CALL && CALL.timer) clearInterval(CALL.timer); }
+let callSaveT = null;
+function callSaveSoon(){ const el = $("#callSaved"); if(el) el.textContent = "שומר…"; clearTimeout(callSaveT); callSaveT = setTimeout(callSave, 1200); }
+function callSave(){
+  clearTimeout(callSaveT);
+  if(!CALL) return; const s = DB.sessions.find(x=>x.id===CALL.sid); if(!s || !$("#call_notes")) return;
+  s.notes = $("#call_notes").value;
+  s.type = $("#call_type").value; s.date = $("#call_date").value || today();
+  s.topics = $$("[data-ctopic]").filter(b=>b.classList.contains("on")).map(b=>b.dataset.ctopic);
+  s.actions = $("#call_actions").value.trim(); s.next = $("#call_next").value;
+  s.elapsed = Math.floor((Date.now() - CALL.t0)/1000);
+  save();
+  const el = $("#callSaved"); if(el) el.textContent = "נשמר ✓ " + new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+function callStamp(){
+  const el = $("#call_notes"); if(!el) return;
+  const t = new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+  el.focus(); el.selectionStart = el.selectionEnd = el.value.length;
+  redInsert(el, (el.value && !el.value.endsWith("\n") ? "\n" : "") + `[${t}] `);
+}
+function endCall(finish){
+  if(!CALL){ closeSheet(); return; }
+  callSave();
+  const s = DB.sessions.find(x=>x.id===CALL.sid), pid = CALL.pid;
+  closeCallTimer();
+  if(s){
+    s.notes = String(s.notes||"").trim();
+    if(finish){ s.draft = false; s.minutes = Math.max(1, Math.round((s.elapsed||0)/60)); delete s.elapsed; }
+    const p = personById(pid); if(p) p.updated = today();
+  }
+  CALL = null; save();
+  openPerson(pid, "file");
+  toast(finish ? "השיחה נשמרה בתיק ✓" : "השיחה נשמרה כטיוטה — אפשר להמשיך מהתיק");
+}
+function cancelCall(){
+  if(!CALL) return;
+  const s = DB.sessions.find(x=>x.id===CALL.sid);
+  if(s && String(s.notes||"").trim() && !confirm("למחוק את מה שנכתב בשיחה הזו?")) return;
+  closeCallTimer();
+  DB.sessions = DB.sessions.filter(x=>x.id!==CALL.sid);
+  const pid = CALL.pid; CALL = null; save(); openPerson(pid, "file"); toast("השיחה בוטלה");
+}
+
 function saveSession(pid, sid){
   EDIT.on = false; EDIT.dirty = false;
   const s = sid ? DB.sessions.find(x=>x.id===sid) : {id:"s"+(DB.seq++)+Date.now().toString(36).slice(-3), pid};
@@ -3135,8 +3534,10 @@ function saveSession(pid, sid){
 
 function delSession(sid, pid){
   if(!confirm("למחוק את סיכום הפגישה?")) return;
+  const s0 = DB.sessions.find(x=>x.id===sid);
   DB.sessions = DB.sessions.filter(x=>x.id!==sid);
-  save(); openPerson(pid); toast("הפגישה נמחקה");
+  save(); openPerson(pid);
+  toastUndo("הפגישה נמחקה", ()=>{ if(s0 && !DB.sessions.some(x=>x.id===s0.id)){ DB.sessions.push(s0); save(); openPerson(pid, "file"); toast("הפגישה הוחזרה ✓"); } });
 }
 
 /* ---- ניתוח מבוסס מודל ---- */
@@ -4731,8 +5132,8 @@ async function reviewAlert(newHeld, newPending){
   const parts = [];
   if(held) parts.push(`${held} ${held===1?"פנייה חריגה מושהית":"פניות חריגות מושהות"} — חשודות או חסרות פרטים. הן לא מופיעות בכרטסייה ולא מוצעות לשידוך עד שתאשרי.`);
   if(pend) parts.push(`${pend} ${pend===1?"מועמד מילא":"מועמדים מילאו"} שוב את הטופס — ממתינים להחלטה אם לעדכן את הכרטיס.`);
-  const r = await ask({title: (newHeld||newPending) ? "⚠ נכנסו פניות שדורשות בדיקה" : "⚠ יש פניות שממתינות לבדיקה",
-    note: parts.join("  ·  "), fields: [], ok: "לבדיקה עכשיו"});
+  const r = await ask({title: (newHeld||newPending) ? "📝 נכנסו פניות שכדאי להציץ בהן" : "📝 יש פניות שממתינות לבדיקה — בלי לחץ",
+    note: parts.join("  ·  ") + "  ·  אפשר גם אחר כך — שום דבר לא הולך לאיבוד.", fields: [], ok: "לבדיקה עכשיו", cancel: "אחר כך"});
   if(r){ ui.intake = held ? "held" : "new"; setView("intake"); if(!held && pend) openFormReview(); }
 }
 function approveHeld(id){
@@ -5649,7 +6050,7 @@ function renderFollowup(){
     </div>
 
     ${todayMeet.length?`<div class="sect">היום</div>${todayMeet.map(s=>line(s.pid, s.type, "היום")).join("")}`:""}
-    ${overdue.length?`<div class="sect" style="color:var(--rose)">פגישות שעבר זמנן (${overdue.length})</div>${
+    ${overdue.length?`<div class="sect" style="color:var(--brass)">כדאי לחזור אליהם (${overdue.length})</div>${
       overdue.sort((a,b)=>a.next.localeCompare(b.next)).map(s=>line(s.pid, s.type, s.next)).join("")}`:""}
 
     <div class="sect">פגישות שנקבעו (${upcoming.length})</div>
@@ -5905,10 +6306,7 @@ document.addEventListener("keydown", e=>{
     if(!CRY.plain && !CRY.locked){ e.preventDefault(); lock(); }
     return;
   }
-  if(e.ctrlKey && !e.altKey && (e.key==="k" || e.key==="K" || e.code==="KeyK")){
-    if(CRY.locked) return;
-    e.preventDefault(); setView("cards"); $("#q").focus(); $("#q").select();
-  }
+  /* Ctrl+K — חלון החיפוש המהיר (מוגדר למעלה, ליד quickFind) */
 });
 $("#btnPick").addEventListener("click",()=>$("#file").click());
 $("#file").addEventListener("change", e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
