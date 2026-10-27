@@ -43,6 +43,10 @@ input[type=password],input[type=text]{min-width:260px;direction:ltr;text-align:l
 .chapters button span{color:var(--soft);font-size:12px;display:block}
 .pill{display:inline-block;font-size:12.5px;padding:3px 9px;border-radius:20px;background:#0f1a24;border:1px solid var(--line);color:var(--soft)}
 .pill.ok{color:#9be3d8;border-color:#2a6f68}
+#swap{display:none;background:#3a2c14;border:1px solid #8a6a2a;border-radius:10px;padding:12px 14px;margin-top:10px}
+#swap b{color:var(--gold)} #swap .row{margin-top:8px}
+textarea#keys2{background:#0f1a24;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;direction:ltr;text-align:left;width:100%;max-width:520px;height:58px;-webkit-text-security:disc}
+#keyInUse{font-size:13px;color:var(--soft)}
 #recInfo{display:none;background:#3a1e1a;border:1px solid #7a3b31;color:#ffd3c9;border-radius:10px;padding:10px 13px;margin-top:12px;font-size:14px}
 </style>
 </head>
@@ -67,6 +71,11 @@ input[type=password],input[type=text]{min-width:260px;direction:ltr;text-align:l
       <label>מפתח API: <input type="password" id="key" placeholder="AIza..." autocomplete="off"></label>
       <label><input type="checkbox" id="remember" checked> לזכור במחשב הזה</label>
     </div>
+    <div class="row" style="align-items:flex-start">
+      <label style="align-items:flex-start">מפתחות רזרבה:<br>(אחד בכל שורה)</label>
+      <textarea id="keys2" placeholder="AIza... (לא חובה)" spellcheck="false"></textarea>
+    </div>
+    <div class="note" style="margin-top:4px">כשנגמרת המכסה של מפתח אחד — הכלי עובר לבד למפתח הבא ברשימה. אפשר גם להחליף או להוסיף מפתח באמצע, בלי לעצור.</div>
     <div class="row">
       <label>קול: <select id="voice">
         <option value="Sulafat">שולמית — חמה (אישה)</option>
@@ -93,9 +102,12 @@ input[type=password],input[type=text]{min-width:260px;direction:ltr;text-align:l
       <button class="btn ghost" id="clear">מחיקת הקריינות השמורה</button>
     </div>
     <div class="prog"><i id="bar"></i></div>
+    <div id="keyInUse"></div>
+    <div id="swap"><div id="swapMsg"><b>נגמרה המכסה היומית במפתח הזה.</b> מדביקים מפתח אחר וממשיכים בדיוק מאותו משפט:</div>
+      <div class="row"><input type="password" id="swapKey" placeholder="AIza..." autocomplete="off"><button class="btn gold" id="swapGo">החלפת מפתח והמשך</button></div></div>
     <div id="status">עדיין לא הוכנה קריינות. עד שתוכן — הסרטון ישתמש בקול של המחשב (הכי טוב בדפדפן Edge).</div>
     <div id="errbox"><textarea id="errtxt" readonly></textarea><button class="btn ghost" id="copyErr">העתקת השגיאה</button></div>
-    <div class="note">הכנת הקריינות לוקחת כמה דקות (63 משפטים). בחשבון החינמי של גוגל יש מגבלה לדקה וליום — הכלי ממתין וממשיך לבד, ואם נגמרה המכסה של היום אפשר להמשיך מחר מאותה נקודה. מה שכבר הוכן לא הולך לאיבוד.
+    <div class="note">הכנת הקריינות לוקחת כמה דקות (63 משפטים). בחשבון החינמי של גוגל יש מגבלה לדקה וליום — הכלי ממתין וממשיך לבד, ואם נגמרה המכסה של היום — עוברים למפתח אחר (לבד מהרשימה, או מדביקים באמצע) או ממשיכים מחר מאותה נקודה. מה שכבר הוכן לא הולך לאיבוד.
       <br><b>שמירת סרטון:</b> הסרטון מתנגן פעם אחת עד הסוף (כ-10 דקות) ונשמר כקובץ — צריך להשאיר את החלון הזה פתוח וגלוי עד הסוף.</div>
   </div>
 
@@ -113,7 +125,14 @@ if(LS.get('gtts_voice')) $('voice').value = LS.get('gtts_voice');
 if(LS.get('gtts_style')) $('style').value = LS.get('gtts_style');
 $('voice').onchange = ()=>{ LS.set('gtts_voice',$('voice').value); refreshState(); };
 $('style').onchange = ()=>{ LS.set('gtts_style',$('style').value); refreshState(); };
-function saveKey(){ const k=$('key').value.trim(); if($('remember').checked && k) LS.set('gtts_key',k); else LS.del('gtts_key'); return k; }
+$('keys2').value = LS.get('gtts_keys2') || '';
+function saveKey(){ const k=$('key').value.trim(), k2=$('keys2').value.trim();
+  if($('remember').checked){ k ? LS.set('gtts_key',k) : LS.del('gtts_key'); k2 ? LS.set('gtts_keys2',k2) : LS.del('gtts_keys2'); }
+  else { LS.del('gtts_key'); LS.del('gtts_keys2'); }
+  return k || getKeys()[0] || ''; }
+function getKeys(){ const all=[$('key').value, ...$('keys2').value.split(/[\s,;]+/)].map(x=>x.trim()).filter(x=>x.length>=4); return [...new Set(all)]; }
+const tail = k => '…'+k.slice(-4);
+$('key').onchange = $('keys2').onchange = ()=>saveKey();
 
 /* ---------- מאגר קבצי קול (IndexedDB) ---------- */
 const mem = new Map();
@@ -170,7 +189,8 @@ const ROUTES = [
 ];
 let routeOrder = (()=>{ const p = LS.get('gtts_route'); const r = ROUTES.slice(); const i = r.findIndex(x=>x.api+':'+x.model===p); if(i>0) r.unshift(r.splice(i,1)[0]); return r; })();
 const deadRoutes = new Set();       // מודלים שלא קיימים / לא נתמכים
-const dayOut = new Set();           // מודלים שנגמרה להם המכסה היומית
+const dayOut = new Set();           // מפתח|מודל שנגמרה להם המכסה היומית
+const badKeys = new Set();          // מפתחות שגוגל לא קיבל
 class TTSError extends Error{ constructor(kind,msg,extra){ super(msg); this.kind=kind; Object.assign(this,extra||{}); } }
 
 function findAudio(o){ // מחפש בתשובה את קטע האודיו האחרון (תומך בשני מבני התשובה של גוגל)
@@ -223,21 +243,58 @@ async function callRoute(r, text, voice, style, key){
 }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 let stopFlag = false;
-async function tts(text, voice, style, key, onWait){
+let swapVal = '';
+async function askKey(msg){              // מחכה שיודבק מפתח חדש — בלי לעצור את ההכנה
+  $('swapMsg').innerHTML = msg; $('swap').style.display='block'; $('swapKey').value=''; swapVal='';
+  try{ $('swapKey').focus(); }catch(e){}
+  while(!swapVal){ if(stopFlag){ $('swap').style.display='none'; throw new TTSError('stop','נעצר'); } await sleep(250); }
+  $('swap').style.display='none';
+  const k = swapVal; swapVal='';
+  // מפתח שגוגל לא קיבל — מוחלף במפתח החדש ויוצא מהרשימה
+  if(badKeys.has($('key').value.trim())) $('key').value = '';
+  $('keys2').value = $('keys2').value.split(/[\s,;]+/).filter(x=>x && !badKeys.has(x.trim())).join('\n');
+  if(!$('key').value.trim()) $('key').value = k;
+  else if(!getKeys().includes(k)) $('keys2').value = ($('keys2').value.trim()+'\n'+k).trim();
+  badKeys.delete(k); saveKey(); return k;
+}
+$('swapGo').onclick = ()=>{ const k=$('swapKey').value.trim(); if(k.length<4){ $('swapKey').focus(); return; } swapVal=k; };
+$('swapKey').onkeydown = e=>{ if(e.key==='Enter') $('swapGo').click(); };
+function pickRoute(){                    // המפתח הראשון שעוד יש לו מכסה, והמודל הראשון שעובד איתו
+  const keys = getKeys().filter(k=>!badKeys.has(k));
+  for(const k of keys){
+    const r = routeOrder.find(r=>!deadRoutes.has(r.model+r.api) && !dayOut.has(k+'|'+r.model));
+    if(r) return {key:k, r, n:getKeys().indexOf(k)+1};
+  }
+  return null;
+}
+let lastKeyShown = '';
+async function tts(text, voice, style, onWait){
   let busyTries = 0, lastErr = null;
   for(;;){
-    const routes = routeOrder.filter(r=>!deadRoutes.has(r.model+r.api) && !dayOut.has(r.model));
-    if(!routes.length) throw lastErr || new TTSError('route','אף מודל קול לא זמין');
-    const r = routes[0];
+    if(stopFlag) throw new TTSError('stop','נעצר');
+    const p = pickRoute();
+    if(!p){
+      if(!getKeys().length) await askKey('<b>צריך מפתח API של גוגל.</b> מדביקים כאן וממשיכים:');
+      else if(lastErr && lastErr.kind==='route' && routeOrder.every(r=>deadRoutes.has(r.model+r.api))) throw lastErr;
+      else await askKey(getKeys().every(k=>badKeys.has(k))
+        ? '<b>גוגל לא קיבל את המפתח.</b> מדביקים מפתח אחר וממשיכים מאותו משפט:'
+        : '<b>נגמרה המכסה היומית בכל המפתחות ('+getKeys().length+').</b> מדביקים מפתח נוסף וממשיכים בדיוק מאותו משפט — או לוחצים "עצירה" וממשיכים מחר:');
+      continue;
+    }
+    const {key, r, n} = p;
+    if(key!==lastKeyShown){
+      if(lastKeyShown) status('עובר למפתח מספר '+n+' ('+tail(key)+') וממשיך…');
+      lastKeyShown = key; $('keyInUse').textContent = '🔑 משתמש עכשיו במפתח '+n+' מתוך '+getKeys().length+' ('+tail(key)+')';
+    }
     try{
       const wav = await callRoute(r, text, voice, style, key);
       LS.set('gtts_route', r.api+':'+r.model); return wav;
     }catch(e){
       lastErr = e;
       if(e.kind==='route'){ deadRoutes.add(r.model+r.api); continue; }
-      if(e.kind==='key') throw e;
+      if(e.kind==='key'){ badKeys.add(key); showErr(e); continue; }
       if(e.kind==='quota'){
-        if(e.perDay){ dayOut.add(r.model); continue; }
+        if(e.perDay){ dayOut.add(key+'|'+r.model); continue; }
         const w = Math.min(Math.max(e.wait||20, 5), 120);
         for(let s=w; s>0; s--){ if(stopFlag) throw new TTSError('stop','נעצר'); onWait&&onWait(s); await sleep(1000); }
         continue;
@@ -273,7 +330,7 @@ $('clear').onclick = async ()=>{ if(!confirm('למחוק את כל הקריינ�
 async function generate(indices, playFirst){
   const key = saveKey();
   if(!key){ status('צריך להדביק קודם את מפתח ה-API של גוגל.', true); $('key').focus(); return false; }
-  $('errbox').style.display='none'; stopFlag=false; setBusy(true); dayOut.clear();
+  $('errbox').style.display='none'; stopFlag=false; setBusy(true); dayOut.clear(); badKeys.clear(); lastKeyShown='';
   const voice=$('voice').value, style=$('style').value;
   let done=0, ok=true;
   try{
@@ -282,7 +339,7 @@ async function generate(indices, playFirst){
       const k = keyFor(i);
       if(await dbGet(k)){ done++; continue; }
       status(`מכין משפט ${i+1} מתוך ${LINES.length}…\n"${LINES[i].text}"`);
-      const wav = await tts(LINES[i].say, voice, style, key, (s,busySrv)=>status(busySrv
+      const wav = await tts(LINES[i].say, voice, style, (s,busySrv)=>status(busySrv
         ? `השרת של גוגל עמוס — מנסה שוב בעוד ${s} שניות… (משפט ${i+1})`
         : `הגענו למגבלת הבקשות לדקה של גוגל — ממשיך לבד בעוד ${s} שניות… (משפט ${i+1} מתוך ${LINES.length})`));
       await dbPut(k, wav); done++;
@@ -297,7 +354,7 @@ async function generate(indices, playFirst){
     else if(e.kind==='net') { status(e.message+'. בודקים את החיבור לאינטרנט ומנסים שוב.', true); showErr(e); }
     else if(e.kind==='route') { status('גוגל לא אפשר יצירת קול עם המפתח הזה. אפשר להעתיק את השגיאה ולשלוח לי.', true); showErr(e); }
     else { status('שגיאה: '+e.message, true); showErr(e); }
-  }finally{ setBusy(false); await refreshState(); }
+  }finally{ $('swap').style.display='none'; $('keyInUse').textContent=''; setBusy(false); await refreshState(); }
   return ok;
 }
 $('gen').onclick = ()=>generate(LINES.map((_,i)=>i));
