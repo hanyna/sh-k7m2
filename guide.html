@@ -99,6 +99,7 @@ textarea#keys2{background:#0f1a24;color:var(--ink);border:1px solid var(--line);
       <button class="btn" id="gen">הכנת כל הקריינות</button>
       <button class="btn ghost" id="stop" disabled>עצירה</button>
       <button class="btn gold" id="rec" disabled>💾 שמירת סרטון עם הקול</button>
+      <button class="btn gold" id="dlVoice" disabled>⬇️ הורדת הקול בלבד</button>
       <button class="btn ghost" id="clear">מחיקת הקריינות השמורה</button>
     </div>
     <div class="prog"><i id="bar"></i></div>
@@ -108,6 +109,7 @@ textarea#keys2{background:#0f1a24;color:var(--ink);border:1px solid var(--line);
     <div id="status">עדיין לא הוכנה קריינות. עד שתוכן — הסרטון ישתמש בקול של המחשב (הכי טוב בדפדפן Edge).</div>
     <div id="errbox"><textarea id="errtxt" readonly></textarea><button class="btn ghost" id="copyErr">העתקת השגיאה</button></div>
     <div class="note">הכנת הקריינות לוקחת כמה דקות (63 משפטים). בחשבון החינמי של גוגל יש מגבלה לדקה וליום — הכלי ממתין וממשיך לבד, ואם נגמרה המכסה של היום — עוברים למפתח אחר (לבד מהרשימה, או מדביקים באמצע) או ממשיכים מחר מאותה נקודה. מה שכבר הוכן לא הולך לאיבוד.
+      <br><b>הורדת הקול בלבד:</b> יורד קובץ אחד (shidduchim-voice.zip) עם כל המשפטים המוכנים — אותו שולחים לקלוד, והוא ממזג אותו עם הסרטון באיכות מלאה.
       <br><b>שמירת סרטון:</b> הסרטון מתנגן פעם אחת עד הסוף (כ-10 דקות) ונשמר כקובץ — צריך להשאיר את החלון הזה פתוח וגלוי עד הסוף.</div>
   </div>
 
@@ -313,7 +315,7 @@ let readyCount = 0;
 async function refreshState(){
   let n=0; for(let i=0;i<LINES.length;i++) if(await dbGet(keyFor(i))) n++;
   readyCount = n; $('bar').style.width = (100*n/LINES.length)+'%';
-  $('rec').disabled = n<LINES.length || busy;
+  $('rec').disabled = n<LINES.length || busy; $('dlVoice').disabled = !n || busy;
   $('mode').textContent = n===LINES.length ? 'קריינות: קול AI ✓' : n ? `קריינות: AI ${n}/${LINES.length} (השאר — קול המחשב)` : 'קריינות: קול המחשב';
   $('mode').className = 'pill'+(n===LINES.length?' ok':'');
   if(!busy){
@@ -323,7 +325,7 @@ async function refreshState(){
   return n;
 }
 let busy = false;
-function setBusy(b){ busy=b; $('gen').disabled=b; $('test').disabled=b; $('clear').disabled=b; $('stop').disabled=!b; $('rec').disabled = b || readyCount<LINES.length; }
+function setBusy(b){ busy=b; $('dlVoice').disabled = b || !readyCount; $('gen').disabled=b; $('test').disabled=b; $('clear').disabled=b; $('stop').disabled=!b; $('rec').disabled = b || readyCount<LINES.length; }
 $('stop').onclick = ()=>{ stopFlag = true; status('עוצר…'); };
 $('clear').onclick = async ()=>{ if(!confirm('למחוק את כל הקריינות השמורה?')) return; await dbClear(); decoded.clear(); await refreshState(); status('הקריינות השמורה נמחקה.'); };
 
@@ -361,6 +363,42 @@ $('gen').onclick = ()=>generate(LINES.map((_,i)=>i));
 $('test').onclick = async ()=>{ const i = LINES.findIndex(l=>l.say.length>40); const k=keyFor(i);
   if(await dbGet(k)){ const b=await bufferFor(i); const s=ac().createBufferSource(); s.buffer=b; s.connect(AC.destination); s.start(); status('זו הדוגמה בקול שנבחר.'); return; }
   if(await generate([i], true)) status('זו הדוגמה בקול שנבחר. אם הקול טוב — "הכנת כל הקריינות".'); };
+
+/* ---------- הורדת הקול בלבד (ZIP) ---------- */
+const CRC = (()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u){ let c=0xFFFFFFFF; for(let i=0;i<u.length;i++) c = CRC[(c^u[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function makeZip(files){                 // ZIP פשוט בלי דחיסה — נפתח בכל מחשב
+  const enc = new TextEncoder(), parts=[], cd=[]; let off=0;
+  for(const f of files){
+    const name=enc.encode(f.name), data=f.data, crc=crc32(data);
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); lh.setUint16(8,0,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true); lh.setUint16(26,name.length,true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true); ch.setUint16(28,name.length,true); ch.setUint32(42,off,true);
+    cd.push(new Uint8Array(ch.buffer), name);
+    off += 30+name.length+data.length;
+  }
+  const cdSize = cd.reduce((s,x)=>s+x.length,0), end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true); end.setUint32(12,cdSize,true); end.setUint32(16,off,true);
+  return new Blob([...parts, ...cd, new Uint8Array(end.buffer)], {type:'application/zip'});
+}
+$('dlVoice').onclick = async ()=>{
+  const files=[], man={voice:$('voice').value, style:$('style').value, made:new Date().toISOString(), total:LINES.length, lines:[]};
+  for(let i=0;i<LINES.length;i++){
+    const wav = await dbGet(keyFor(i)); const name = 'voice/'+String(i).padStart(2,'0')+'.wav';
+    man.lines.push({i, at:LINES[i].at, text:LINES[i].text, file: wav ? name : null});
+    if(wav) files.push({name, data:new Uint8Array(wav)});
+  }
+  if(files.length<LINES.length && !confirm(`הוכנו רק ${files.length} מתוך ${LINES.length} משפטים. להוריד בכל זאת? (למיזוג מלא צריך את כולם)`)) return;
+  files.unshift({name:'voice/manifest.json', data:new TextEncoder().encode(JSON.stringify(man,null,1))});
+  const blob = makeZip(files), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='shidduchim-voice.zip'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+  status(`✓ קובץ הקול ירד לתיקיית ההורדות: shidduchim-voice.zip (${files.length-1} משפטים, ${(blob.size/1048576).toFixed(1)} MB). שולחים אותו לקלוד למיזוג.`);
+};
 
 /* ---------- ניגון מסונכרן ---------- */
 const synth = window.speechSynthesis;
