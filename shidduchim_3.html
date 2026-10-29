@@ -836,7 +836,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <div class="sect" style="margin-top:30px">נקודות שחזור אוטומטיות</div>
       <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:10px">
         לפני כל פעולה גדולה — ייבוא קובץ, עדכון כולל מהטופס, שחזור מגיבוי או מחיקה — הכלי שומר לבד
-        עותק מוצפן של כל הכרטסייה במכשיר הזה. נשמרות 10 הנקודות האחרונות. אם משהו השתבש — לוחצים "שחזור" וחוזרים בדיוק לרגע שלפני.
+        עותק מוצפן של כל הכרטסייה במכשיר הזה. נשמרות 6 הנקודות האחרונות (בלי תמונות, כדי לא למלא את האחסון). אם משהו השתבש — לוחצים "שחזור" וחוזרים בדיוק לרגע שלפני.
       </div>
       <div id="rpHost"></div>
       <div class="sect" style="margin-top:30px">גיבוי יומי לגוגל דרייב</div>
@@ -1189,6 +1189,9 @@ async function vaultDel(){
   VSTORE.cache = null;
   try{ if(VSTORE.idb) await idbDo("readwrite", st=>st.delete("vault")); }catch(e){}
   try{ localStorage.removeItem(VAULT); }catch(e){}
+  /* מחיקה מלאה = גם נקודות השחזור. הן מוצפנות במפתח שנמחק עכשיו, וממילא לא ייפתחו בחשבון חדש. */
+  try{ if(VSTORE.idb){ const ks = await idbDo("readonly", st=>st.getAllKeys()); for(const k of (ks||[])) if(String(k).startsWith("rp:")) await idbDo("readwrite", st=>st.delete(k)); } }catch(e){}
+  try{ if(typeof RP !== "undefined") RP.list = []; }catch(e){}
 }
 const LEGACY = "shidduchim_db_v1";     /* נתונים גלויים מגרסאות קודמות */
 const CRY = {key:null, salt:null, locked:true, plain:false};
@@ -1315,13 +1318,13 @@ async function persist(){
     const payload = CRY.plain ? JSON.stringify(DB) : await sealDB();
     if(CRY.plain) localStorage.setItem(LEGACY, payload); else await vaultSet(payload);
     setSaveState(CRY.plain ? "נשמר ללא הצפנה" : "נשמר ומוצפן", CRY.plain ? "#d9a441" : "");
-    SB.savedAt = Date.now(); SB.saveErr = ""; renderStatusBar();
+    SB.savedAt = Date.now(); SB.saveErr = ""; try{ renderStatusBar(); }catch(e){}
     if(CLOUD.auto && CLOUD.user) cloudPush(true);
   }catch(e){
     canPersist = false;
     const full = /quota|exceed/i.test(e.name + " " + e.message);
     setSaveState(full ? "האחסון מלא — ייצאו גיבוי" : "השמירה נכשלה", "#d9a441");
-    SB.saveErr = full ? "האחסון מלא" : "השמירה נכשלה"; renderStatusBar();
+    SB.saveErr = full ? "האחסון מלא" : "השמירה נכשלה"; try{ renderStatusBar(); }catch(e){}
     toast(full ? "אחסון הדפדפן מלא. ייצאו גיבוי והסירו תמונות כבדות." : "השמירה נכשלה — ייצאו גיבוי עכשיו ופנו אליי");
   }
   saving = false;
@@ -1430,7 +1433,7 @@ function secCenter(focus){
 /* ============ נקודות שחזור ============
    עותק של כל הכרטסייה, מוצפן באותו מפתח של הכספת, נשמר ב-IndexedDB לפני פעולה גדולה.
    בלי הכספת (מצב ללא הצפנה) נשמר כטקסט רגיל — כמו שאר הנתונים באותו מצב. */
-const RP = {list:[], MAX:10};
+const RP = {list:[], MAX:6};
 async function rpLoad(){
   RP.list = [];
   if(VSTORE.useLS || !VSTORE.idb) return;
@@ -1444,7 +1447,8 @@ async function rpSave(reason){
   if(VSTORE.useLS || !VSTORE.idb || CRY.locked) return false;
   if(!DB.people.length && !(DB.trash||[]).length) return false;
   try{
-    const json = JSON.stringify(DB); let rec;
+    /* תמונות לא נכנסות לנקודה (כבדות; נשארות בכרטיסים עצמם) — כך 6 נקודות לא ממלאות את האחסון */
+    const json = JSON.stringify(DB, (k,v)=> (k==="photo" && typeof v==="string" && v.length>2000) ? undefined : v); let rec;
     if(CRY.plain || !CRY.key) rec = {plain:true, data:json};
     else{
       const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -1452,7 +1456,12 @@ async function rpSave(reason){
       rec = {iv:b64(iv), ct:b64(ct)};
     }
     rec.at = new Date().toISOString(); rec.reason = reason; rec.n = DB.people.length;
-    await idbDo("readwrite", st=>st.put(rec, "rp:" + rec.at));
+    try{ await idbDo("readwrite", st=>st.put(rec, "rp:" + rec.at)); }
+    catch(e){   /* האחסון מלא — מפנים את הישנות ומנסים פעם אחת נוספת */
+      await rpLoad();
+      for(const old of RP.list.slice(2)) await idbDo("readwrite", st=>st.delete(old.key)).catch(()=>{});
+      await idbDo("readwrite", st=>st.put(rec, "rp:" + rec.at));
+    }
     await rpLoad();
     for(const old of RP.list.slice(RP.MAX)) await idbDo("readwrite", st=>st.delete(old.key));
     RP.list = RP.list.slice(0, RP.MAX);
@@ -1473,9 +1482,28 @@ async function rpRestore(key){
     }
     const d = JSON.parse(json);
     await rpSave("שחזור לנקודה קודמת");
+    if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
     adoptDB(d); save(); render(); renderRP();
     toast("שוחזר למצב של " + fmtWhen(m.at));
-  }catch(e){ toast("השחזור נכשל — " + (e.message || "לא ניתן לפתוח את הנקודה")); }
+  }catch(e){ toast("השחזור נכשל — " + (/OperationError|decrypt/i.test(e.name+" "+e.message) ? "הנקודה נשמרה עם קוד כניסה קודם ואינה ניתנת לפתיחה" : (e.message || "לא ניתן לפתוח את הנקודה"))); }
+}
+/* החלפת מפתח (כספת ישנה, גרסה 1): נקודות השחזור מוצפנות מחדש כדי שיישארו ניתנות לפתיחה */
+async function rpRekey(oldKey, newKey){
+  if(VSTORE.useLS || !VSTORE.idb || !oldKey || !newKey) return;
+  try{
+    await rpLoad();
+    for(const m of RP.list){
+      if(m.plain) continue;
+      const rec = await idbDo("readonly", st=>st.get(m.key)); if(!rec || !rec.ct) continue;
+      try{
+        const plain = await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(rec.iv)}, oldKey, unb64(rec.ct));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        rec.iv = b64(iv); rec.ct = b64(await crypto.subtle.encrypt({name:"AES-GCM", iv}, newKey, plain));
+        await idbDo("readwrite", st=>st.put(rec, m.key));
+      }catch(e){ await idbDo("readwrite", st=>st.delete(m.key)).catch(()=>{}); }   /* לא נפתחת — עדיף למחוק מלהשאיר נקודה מתה */
+    }
+    await rpLoad(); renderRP();
+  }catch(e){}
 }
 function renderRP(){
   const host = $("#rpHost"); if(!host) return;
@@ -1506,7 +1534,7 @@ function lock(){
   ui.openPerson = null;
   EDIT.on = false; EDIT.dirty = false;
   closeSheet();
-  try{ ["#cardsHost","#matchesHost","#followupHost","#intakeHost","#stats","#stats2"].forEach(x=>{ const el=$(x); if(el) el.innerHTML=""; }); }catch(e){}
+  try{ ["#cardsHost","#matchesHost","#followupHost","#intakeHost","#stats","#stats2","#sbar","#rpHost"].forEach(x=>{ const el=$(x); if(el) el.innerHTML=""; }); }catch(e){}
   $("#app").classList.add("blurred");
   showLock("unlock");
 }
@@ -1807,7 +1835,9 @@ async function reissue(withNewPass){
     catch(e){ toast("הסיסמה שגויה"); return; }
   }
   try{
+    const oldKey1 = CRY.key;
     const rec = await buildEnvelope(acctVerify(pass), CRY.v === 1 ? null : CRY.rawDEK);
+    if(CRY.key !== oldKey1) await rpRekey(oldKey1, CRY.key);
     await vaultSet(await sealDB());
     showRecovery(rec, false);
   }catch(e){ toast("שגיאה: " + e.message); }
@@ -3007,6 +3037,7 @@ async function importJson(text){
       if(!r || !r[0]) return;
       const opened = await openSealed(text, r[0]);
       await rpSave("טעינת גיבוי מקובץ");
+      if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
       if(DB.people.length && !confirm(`הגיבוי מכיל ${(opened.people||[]).length} מועמדים ויחליף את הנתונים הקיימים. ` +
         `הכניסה לכלי נשארת עם הסיסמה הנוכחית. להמשיך?`)) return;
       adoptDB(opened);
@@ -3017,6 +3048,7 @@ async function importJson(text){
     if(!d.people) throw new Error("קובץ גיבוי לא תקין");
     if(DB.people.length && !confirm("לטעון את הגיבוי במקום הנתונים הקיימים?")) return;
     await rpSave("טעינת גיבוי מקובץ");
+    if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
     sanitizeDB(d);
     adoptDB(d);
     save(); setView("cards"); toast("הגיבוי נטען: "+DB.people.length+" מועמדים");
@@ -3058,8 +3090,18 @@ function showMapping(){
 
 function cancelImport(){ pending=null; $("#mapHost").classList.add("hidden"); $("#file").value=""; }
 
+let importBusy = false;
 async function runImport(){
+  if(importBusy || !pending) return;
+  importBusy = true;
+  try{ await runImportBody(); }finally{ importBusy = false; }
+}
+async function runImportBody(){
+  const btn = document.querySelector('#mapHost button.pri, #importHost button.pri'); if(btn) btn.disabled = true;
   await rpSave("ייבוא קובץ");
+  if(btn) btn.disabled = false;
+  if(!pending) return;
+  if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
   const map = {};
   $$("#mapHost select[data-col]").forEach(s=>{ map[s.dataset.col] = s.value; });
   const skipDup = $("#skipDup").checked;
@@ -6234,6 +6276,7 @@ async function bulkPending(mode){
   if(mode==="ignore" && !confirm(`להתעלם מכל ${F.pending.length} התשובות הממתינות? הכרטיסים הקיימים לא ישתנו.`)) return;
   if(mode==="newer" && !confirm(`לעדכן את כל ${F.pending.length} הכרטיסים לפי התשובה החדשה? (הערכים הישנים נשמרים וניתנים להחזרה)`)) return;
   if(mode!=="fill") await rpSave(mode==="newer" ? "עדכון כולל מהטופס" : "התעלמות מכל הממתינות");
+  if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
   const undoList = [];
   const pendBefore = F.pending.slice(), ignBefore = (F.ignored||[]).slice(), seenBefore = F.seen.slice(), handledBefore = JSON.parse(JSON.stringify(F.handled||{}));
   const snaps = new Map();   /* מצב כל כרטיס לפני העדכון — לביטול מדויק גם כשיש כמה תשובות לאותו כרטיס */
@@ -6518,6 +6561,7 @@ async function driveRestore(){
       driveStatus(""); return;
     }
     await rpSave("שחזור מהדרייב");
+    if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
     adoptDB(d);
     save(); render(); setView("cards");
     driveStatus("שוחזר: " + files[idx].name, "var(--teal)");
@@ -6780,6 +6824,8 @@ async function cloudPull(){
     if(!r || !r[0]) return;
     const pass = r[0];
     const d = await openSealed(data.blob, pass);
+    await rpSave("שחזור מהענן");
+    if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
     adoptDB(d);
     save(); render(); setView("cards");
     toast("הגיבוי שוחזר מהענן");
@@ -6886,8 +6932,10 @@ async function changePass(){
     /* ההחלפה גם משדרגת את חוזק הגזירה לתקן העדכני */
     CRY.wrapPass = await wrapDEK(CRY.rawDEK, await deriveKey(secret, CRY.salt, KDF_IT), KDF_IT);
   }else{
+    const oldKey = CRY.key;
     CRY.salt = rnd(16);
     CRY.key = await deriveKey(secret, CRY.salt, KDF_IT_OLD);
+    await rpRekey(oldKey, CRY.key);
   }
   try{ await vaultSet(await sealDB()); }
   catch(e){ toast("ההחלפה לא נשמרה — " + e.message); return; }
@@ -7028,7 +7076,9 @@ $("#btnWipe").addEventListener("click", async ()=>{
   });
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
-  await rpSave("מחיקת כל הנתונים");
+  if(!(await rpSave("מחיקת כל הנתונים")) && DB.people.length &&
+     !confirm("במכשיר הזה לא ניתן לשמור נקודת שחזור, ולכן המחיקה תהיה סופית. למחוק בכל זאת?")) return;
+  if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
   /* איפוס מלא — גם זיכרון הטופס: בחיבור הבא כל התשובות שבגיליון ייכנסו מחדש */
   DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null, trash:[]};
   try{ const c = formCfg(); c.last = ""; c.total = 0; c.lastMsg = ""; formSave(c); }catch(e){}

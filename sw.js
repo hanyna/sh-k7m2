@@ -3,7 +3,7 @@
    תמיד מנסים קודם את הגרסה העדכנית מהרשת, והעותק השמור משמש רק כשאין חיבור —
    כך עדכונים מגיעים מיד, ולא נתקעים על גרסה ישנה.
    הנתונים עצמם לא עוברים כאן: הם מוצפנים בדפדפן ולא נשמרים בקובץ הזה. */
-const CACHE = "shidduchim-app-v15";
+const CACHE = "shidduchim-app-v16";
 const CORE = ["./shidduchim_3.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", e => {
