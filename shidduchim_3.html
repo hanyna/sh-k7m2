@@ -112,6 +112,30 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   background:var(--card);border-bottom:1px solid var(--line);padding:14px 26px;
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20;
 }
+/* פס מצב — תמיד רואים: מוצפן, נשמר, גובה, טופס, אינטרנט, סל מחזור */
+.sbar{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:-2px}
+.sbar .sc{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;
+  border:1px solid var(--line);background:var(--soft);color:var(--ink-soft);cursor:pointer;line-height:1.2;transition:.15s}
+.sbar .sc:hover{border-color:var(--teal);color:var(--ink)}
+.sbar .sc i{width:7px;height:7px;border-radius:50%;background:#9aa8b3;flex:none}
+.sbar .sc.ok i{background:#2a9d93} .sbar .sc.warn i{background:#d9a441} .sbar .sc.bad i{background:#c9564d}
+.sbar .sc.ok{color:#1f6f68;border-color:rgba(42,157,147,.35);background:rgba(42,157,147,.07)}
+.sbar .sc.warn{color:#8a6412;border-color:rgba(217,164,65,.45);background:rgba(217,164,65,.09)}
+.sbar .sc.bad{color:#9c3a33;border-color:rgba(201,86,77,.4);background:rgba(201,86,77,.08)}
+.sbar .sc.lnk{margin-inline-start:auto;background:transparent}
+:root[data-theme="night"] .sbar .sc.ok{color:#8fcdc7} :root[data-theme="night"] .sbar .sc.warn{color:#e2c078} :root[data-theme="night"] .sbar .sc.bad{color:#f0a097}
+.credit{font-size:11px;color:#6f8079;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);line-height:1.5}
+.credit b{color:#9fb1be;font-weight:600}
+.credit-m{display:none;text-align:center;font-size:11.5px;color:var(--ink-faint);padding:10px 14px 4px}
+.ask-card.sec-card{width:min(640px,100%)}
+.sec-row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.sec-row:last-of-type{border-bottom:0}
+.sec-row .d{width:10px;height:10px;border-radius:50%;flex:none;margin-top:5px;background:#9aa8b3}
+.sec-row.ok .d{background:#2a9d93} .sec-row.warn .d{background:#d9a441} .sec-row.bad .d{background:#c9564d}
+.sec-row b{display:block;font-size:14px} .sec-row p{margin:2px 0 0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+.sec-row .btn{margin-top:6px}
+.rp-row{display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;font-size:13.5px;background:var(--card)}
+.rp-row span{flex:1} .rp-row small{color:var(--ink-faint)}
 .search{position:relative;flex:1;min-width:200px;max-width:420px}
 .search input{
   width:100%;padding:9px 36px 9px 12px;border:1px solid var(--line);border-radius:8px;
@@ -627,6 +651,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 @media (max-width:820px){
   .rail{position:fixed;bottom:0;top:auto;height:auto;width:100%;flex-direction:row;padding:0;z-index:30;border-top:1px solid #000}
   .brand,.rail-foot{display:none}
+  .credit-m{display:block}
+  .sbar .sc.lnk{margin-inline-start:0}
   .nav{flex-direction:row;padding:6px;width:100%}
   .nav button{flex-direction:column;gap:2px;font-size:11px;padding:6px 4px}
   .shell{flex-direction:column-reverse}
@@ -682,6 +708,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       </div>
       <button class="btn ghost sm" id="btnLock" style="margin-top:8px;color:#b3c0cb;width:100%">נעילה</button>
       <button class="btn sm hidden" id="btnInstall" style="margin-top:8px;width:100%;background:#1d3a3a;color:#cfe6e3;border-color:#2b5554">📌 התקנה כאפליקציה</button>
+      <div class="credit">נבנה על ידי <b>חנינה לנדסברג</b></div>
     </div>
   </aside>
 
@@ -702,8 +729,10 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <button class="btn" id="btnSmart" title="חיפוש במילים רגילות בעזרת AI">✨ חיפוש חכם</button>
       <button class="btn" id="btnNew">+ מועמד חדש</button>
       <button class="btn pri" id="btnImportTop">העלאת קובץ</button>
+      <div class="sbar" id="sbar" role="status" aria-live="polite"></div>
     </div>
 
+    <div class="credit-m">נבנה על ידי חנינה לנדסברג</div>
     <!-- ===== CARDS ===== -->
     <section class="page" id="view-cards">
       <h2>הכרטסייה</h2>
@@ -804,6 +833,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <p style="font-size:12.5px;color:var(--ink-soft);max-width:640px;margin-top:8px">
         <b>הגיבוי המוצפן</b> הוא הדרך הבטוחה: הקובץ נפתח רק עם הסיסמה שלכם, ואפשר לשמור אותו בכל מקום —
         דיסק־און־קי, מייל, דרייב. טוענים אותו חזרה בעמוד הייבוא. קובצי ה-JSON והאקסל קריאים לכל מי שמחזיק בהם.</p>
+      <div class="sect" style="margin-top:30px">נקודות שחזור אוטומטיות</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:10px">
+        לפני כל פעולה גדולה — ייבוא קובץ, עדכון כולל מהטופס, שחזור מגיבוי או מחיקה — הכלי שומר לבד
+        עותק מוצפן של כל הכרטסייה במכשיר הזה. נשמרות 10 הנקודות האחרונות. אם משהו השתבש — לוחצים "שחזור" וחוזרים בדיוק לרגע שלפני.
+      </div>
+      <div id="rpHost"></div>
       <div class="sect" style="margin-top:30px">גיבוי יומי לגוגל דרייב</div>
       <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:12px">
         מתחברים פעם אחת לחשבון הגוגל, והכלי מעלה לדרייב פעם ביום שני קבצים:
@@ -1280,11 +1315,13 @@ async function persist(){
     const payload = CRY.plain ? JSON.stringify(DB) : await sealDB();
     if(CRY.plain) localStorage.setItem(LEGACY, payload); else await vaultSet(payload);
     setSaveState(CRY.plain ? "נשמר ללא הצפנה" : "נשמר ומוצפן", CRY.plain ? "#d9a441" : "");
+    SB.savedAt = Date.now(); SB.saveErr = ""; renderStatusBar();
     if(CLOUD.auto && CLOUD.user) cloudPush(true);
   }catch(e){
     canPersist = false;
     const full = /quota|exceed/i.test(e.name + " " + e.message);
     setSaveState(full ? "האחסון מלא — ייצאו גיבוי" : "השמירה נכשלה", "#d9a441");
+    SB.saveErr = full ? "האחסון מלא" : "השמירה נכשלה"; renderStatusBar();
     toast(full ? "אחסון הדפדפן מלא. ייצאו גיבוי והסירו תמונות כבדות." : "השמירה נכשלה — ייצאו גיבוי עכשיו ופנו אליי");
   }
   saving = false;
@@ -1293,6 +1330,158 @@ async function persist(){
 function setSaveState(txt, color){
   const el = $("#saveState"); if(!el) return;
   el.textContent = txt; el.style.color = color || "";
+}
+
+/* ============ פס מצב ומרכז ביטחון ============
+   השדכנית צריכה לראות בכל רגע, בלי לחפש: שהכול מוצפן, שהכול נשמר, מתי גובה לאחרונה,
+   שהטופס מחובר, ושהכלי עובד גם בלי אינטרנט. לחיצה על כל פריט פותחת הסבר ופעולה. */
+const SB = {savedAt:0, saveErr:"", online: navigator.onLine !== false};
+function agoHe(iso){
+  if(!iso) return "";
+  const t = typeof iso === "number" ? iso : new Date(iso).getTime();
+  if(!t || isNaN(t)) return "";
+  const s = Math.round((Date.now() - t)/1000);
+  if(s < 50) return "לפני רגע";
+  const m = Math.round(s/60); if(m < 60) return `לפני ${m} דק׳`;
+  const hh = Math.round(m/60); if(hh < 24) return `לפני ${hh} שע׳`;
+  const d = Math.floor(hh/24);
+  if(d === 1) return "אתמול";
+  if(d < 30) return `לפני ${d} ימים`;
+  try{ return new Date(t).toLocaleDateString("he-IL"); }catch(e){ return ""; }
+}
+function sbDays(iso){ if(!iso) return Infinity; const t = new Date(iso).getTime(); return isNaN(t) ? Infinity : (Date.now()-t)/86400000; }
+/* מצב כל ערוץ — משמש גם את הפס וגם את מרכז הביטחון */
+function sbState(){
+  const st = {};
+  st.enc = CRY.locked ? {lvl:"warn", t:"נעול"} : CRY.plain ? {lvl:"warn", t:"ללא הצפנה"} : {lvl:"ok", t:"מוצפן"};
+  st.save = SB.saveErr ? {lvl:"bad", t:SB.saveErr} : (dirty || saving) ? {lvl:"ok", t:"שומר…"} : {lvl:"ok", t: SB.savedAt ? "נשמר " + agoHe(SB.savedAt) : "נשמר"};
+  const dc = driveCfg(); let bkAt = ""; try{ bkAt = localStorage.getItem("backup_any") || ""; }catch(e){}
+  if(dc.last && (!bkAt || dc.last > bkAt)) bkAt = dc.last;
+  const bd = sbDays(bkAt);
+  st.bk = !DB.people.length ? {lvl:"", t:"אין עדיין נתונים", at:bkAt}
+        : !bkAt ? {lvl:"bad", t:"עוד לא גובה", at:""}
+        : bd > 7 ? {lvl:"bad", t:"גובה " + agoHe(bkAt), at:bkAt}
+        : bd > 2 ? {lvl:"warn", t:"גובה " + agoHe(bkAt), at:bkAt}
+        : {lvl:"ok", t:"גובה " + agoHe(bkAt), at:bkAt};
+  st.drive = dc.enabled && dc.clientId;
+  const fc = formCfg(); const pend = (DB.form && DB.form.pending || []).length;
+  st.form = !fc.sheetId ? {lvl:"", t:"טופס לא מחובר"}
+          : pend ? {lvl:"warn", t:`טופס: ${pend} ממתינות לאישור`}
+          : fc.last ? {lvl:"ok", t:"טופס מחובר · נבדק " + agoHe(fc.last)} : {lvl:"ok", t:"טופס מחובר"};
+  st.pend = pend;
+  st.net = SB.online ? {lvl:"ok", t:"מחובר לאינטרנט"} : {lvl:"warn", t:"אין אינטרנט — עובד מקומית"};
+  st.trash = (DB.trash||[]).length;
+  return st;
+}
+function renderStatusBar(){
+  const el = $("#sbar"); if(!el || CRY.locked) return;
+  const s = sbState();
+  const chip = (cls, ic, txt, what) => `<button type="button" class="sc ${cls}" data-sc="${what}" title="לחיצה — פרטים והסבר"><i></i>${ic} ${esc(txt)}</button>`;
+  el.innerHTML =
+    chip(s.enc.lvl, "🔐", s.enc.t, "enc") +
+    chip(s.save.lvl, "💾", s.save.t, "save") +
+    chip(s.bk.lvl, "☁", s.bk.t, "bk") +
+    chip(s.form.lvl, "📝", s.form.t, "form") +
+    chip(s.net.lvl, "🌐", s.net.t, "net") +
+    (s.trash ? chip("", "🗑", `סל מחזור: ${s.trash}`, "trash") : "") +
+    `<button type="button" class="sc lnk" data-sc="all" title="כל פרטי האבטחה במקום אחד">🛡 מרכז ביטחון</button>`;
+  el.querySelectorAll("[data-sc]").forEach(b=>b.onclick = ()=>secCenter(b.dataset.sc));
+}
+window.addEventListener("online", ()=>{ SB.online = true; renderStatusBar(); });
+window.addEventListener("offline", ()=>{ SB.online = false; renderStatusBar(); });
+setInterval(renderStatusBar, 30000);
+
+/* מרכז ביטחון — הסבר אנושי לכל שאלה שמפחידה: "זה נמחק?", "מי רואה את זה?", "יש גיבוי?" */
+function secCenter(focus){
+  const s = sbState(), box = $("#ask");
+  const row = (lvl, title, text, btn) => `<div class="sec-row ${lvl}"><span class="d"></span><div style="flex:1"><b>${title}</b><p>${text}</p>${btn||""}</div></div>`;
+  const rp = RP.list.length ? `יש ${RP.list.length} נקודות שחזור אוטומטיות במכשיר (האחרונה ${agoHe(RP.list[0].at)}).` : "עדיין אין נקודות שחזור — הראשונה תיווצר לבד לפני הפעולה הגדולה הבאה.";
+  box.innerHTML = `<div class="ask-card sec-card">
+    <h3>🛡 מרכז ביטחון</h3>
+    <p class="ask-note">כל מה שחשוב לדעת על שמירת המידע, במקום אחד. שום דבר כאן לא דורש פעולה — אלא אם מסומן בכתום או באדום.</p>
+    ${row(s.enc.lvl, "הצפנה: " + s.enc.t, CRY.plain
+        ? "הכלי עובד כרגע בלי קוד כניסה, ולכן הנתונים במחשב גלויים למי שפותח את הדפדפן. מומלץ לקבוע קוד — ואז הכול נשמר מוצפן, וגם הגיבויים בדרייב נפתחים רק איתו."
+        : "כל הכרטסייה נשמרת מוצפנת (AES-256) בתוך הדפדפן של המחשב הזה בלבד. בלי הסיסמה או קוד השחזור — אי אפשר לקרוא אותה, גם מי שיושב ליד המחשב, וגם אם מישהו מגיע לקובצי הגיבוי.",
+        CRY.plain ? `<button class="btn sm pri" onclick="$('#ask').classList.add('hidden');setView('backup');$('#btnChangePass').click()">קביעת קוד כניסה</button>` : "")}
+    ${row(s.save.lvl, "שמירה: " + s.save.t, SB.saveErr
+        ? "השמירה האחרונה לא הצליחה. ייצאו עכשיו גיבוי מוצפן כדי לא לאבד כלום, ופנו לתמיכה."
+        : "כל שינוי נשמר מעצמו תוך פחות משנייה — אין כפתור \"שמור\" ואין מה לשכוח. גם אם הדפדפן נסגר באמצע, הכול נשאר.")}
+    ${row(s.bk.lvl, "גיבוי: " + s.bk.t, (s.drive
+        ? "הגיבוי האוטומטי לדרייב פעיל: פעם ביום, וגם ביציאה מהכלי אחרי שינויים. נשמר שבוע אחורה, ו-3 הגיבויים האחרונים לעולם לא נמחקים. "
+        : "גיבוי אוטומטי לדרייב עדיין לא הופעל — מומלץ להפעיל פעם אחת, ומאז הכול קורה לבד. ")
+        + rp,
+        `<div style="display:flex;gap:6px;flex-wrap:wrap">${s.drive ? `<button class="btn sm pri" onclick="$('#ask').classList.add('hidden');driveBackup(false)">גיבוי לדרייב עכשיו</button>` : ""}
+         <button class="btn sm" onclick="$('#ask').classList.add('hidden');$('#btnExportSealed').click()">ייצוא גיבוי מוצפן לקובץ</button>
+         <button class="btn sm ghost" onclick="$('#ask').classList.add('hidden');setView('backup')">הגדרות גיבוי ונקודות שחזור</button></div>`)}
+    ${row("ok", "מחיקה: שום דבר לא נמחק באמת", `כרטיס שנמחק עובר לסל המחזור (${s.trash} כרגע) ואפשר להחזיר אותו בשלמותו — עם ההצעות והפגישות שלו. תשובה מהטופס שנדחתה — רשומה בהיסטוריה וניתנת להחזרה. ולפני כל פעולה גדולה נשמרת נקודת שחזור. אפילו "מחיקת כל הנתונים" (שדורשת הקלדה של המילה "מחיקה") משאירה נקודת שחזור במכשיר, כך שגם ממנה אפשר לחזור.`,
+        s.trash ? `<button class="btn sm" onclick="$('#ask').classList.add('hidden');setView('intake');setTimeout(()=>{const b=[...document.querySelectorAll('#view-intake button')].find(x=>/היסטוריה|סל מחזור/.test(x.textContent));if(b)b.click();},50)">לסל המחזור</button>` : "")}
+    ${row(s.form.lvl, s.form.t, s.pend ? `${s.pend} תשובות מהטופס מחכות להחלטה שלך — שום דבר לא נכנס ולא נדרס בלי אישור.` : "תשובות חדשות מהטופס נכנסות ככרטיסים; מי שכבר קיים — מחכה לאישורך. מה שערכת בכלי לעולם לא נדרס על ידי הטופס.",
+        s.pend ? `<button class="btn sm pri" onclick="$('#ask').classList.add('hidden');setView('intake')">לבדיקת התשובות</button>` : "")}
+    ${row("ok", "מה יוצא מהמחשב — ומה לא", "הכרטסייה עצמה לא נשלחת לשום שרת. לגוגל עולים רק הגיבויים (מוצפנים) ונקראות תשובות הטופס. לבינה המלאכותית נשלח רק תוכן, " + (aiAnon() ? "בלי שמות, טלפונים, מיילים ומזהים — הם מוחלפים בכינוי לפני השליחה." : "<b style='color:#9c3a33'>כרגע כולל שמות ופרטים מזהים — מומלץ להפעיל שליחה אנונימית בעמוד הגיבוי.</b>"))}
+    ${row(s.net.lvl, s.net.t, "הכלי עובד במלואו גם בלי אינטרנט — צפייה, עריכה, שיחות, חיפוש. רק הגיבוי לדרייב, הטופס והבינה המלאכותית צריכים חיבור, והם משלימים לבד כשהחיבור חוזר.")}
+    <div class="ask-btns"><button class="btn pri" id="askOk">סגירה</button></div></div>`;
+  box.classList.remove("hidden");
+  box.querySelector("#askOk").onclick = ()=>{ box.classList.add("hidden"); box.innerHTML = ""; };
+  const f = {enc:0, save:1, bk:2, trash:3, form:4, net:6}[focus];
+  if(f != null){ const r = box.querySelectorAll(".sec-row")[f]; if(r){ r.style.background = "var(--soft)"; r.style.borderRadius = "10px"; r.style.padding = "10px"; setTimeout(()=>r.scrollIntoView({block:"nearest"}), 30); } }
+}
+
+
+/* ============ נקודות שחזור ============
+   עותק של כל הכרטסייה, מוצפן באותו מפתח של הכספת, נשמר ב-IndexedDB לפני פעולה גדולה.
+   בלי הכספת (מצב ללא הצפנה) נשמר כטקסט רגיל — כמו שאר הנתונים באותו מצב. */
+const RP = {list:[], MAX:10};
+async function rpLoad(){
+  RP.list = [];
+  if(VSTORE.useLS || !VSTORE.idb) return;
+  try{
+    const keys = await idbDo("readonly", st=>st.getAllKeys());
+    const ks = (keys||[]).filter(k=>typeof k === "string" && k.startsWith("rp:")).sort().reverse();
+    for(const k of ks){ const m = await idbDo("readonly", st=>st.get(k)); if(m) RP.list.push({key:k, at:m.at, reason:m.reason, n:m.n, plain:!!m.plain}); }
+  }catch(e){}
+}
+async function rpSave(reason){
+  if(VSTORE.useLS || !VSTORE.idb || CRY.locked) return false;
+  if(!DB.people.length && !(DB.trash||[]).length) return false;
+  try{
+    const json = JSON.stringify(DB); let rec;
+    if(CRY.plain || !CRY.key) rec = {plain:true, data:json};
+    else{
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, CRY.key, enc.encode(json));
+      rec = {iv:b64(iv), ct:b64(ct)};
+    }
+    rec.at = new Date().toISOString(); rec.reason = reason; rec.n = DB.people.length;
+    await idbDo("readwrite", st=>st.put(rec, "rp:" + rec.at));
+    await rpLoad();
+    for(const old of RP.list.slice(RP.MAX)) await idbDo("readwrite", st=>st.delete(old.key));
+    RP.list = RP.list.slice(0, RP.MAX);
+    renderRP();
+    return true;
+  }catch(e){ return false; }
+}
+async function rpRestore(key){
+  const m = RP.list.find(x=>x.key===key); if(!m) return;
+  if(!confirm(`לחזור למצב של ${fmtWhen(m.at)} (${m.n} מועמדים, לפני: ${m.reason})?\nהמצב הנוכחי יישמר קודם כנקודת שחזור משלו — כך שאפשר להתחרט.`)) return;
+  try{
+    const rec = await idbDo("readonly", st=>st.get(key));
+    let json;
+    if(rec.plain) json = rec.data;
+    else{
+      if(!CRY.key) throw new Error("הכספת סגורה");
+      json = dec.decode(await crypto.subtle.decrypt({name:"AES-GCM", iv:unb64(rec.iv)}, CRY.key, unb64(rec.ct)));
+    }
+    const d = JSON.parse(json);
+    await rpSave("שחזור לנקודה קודמת");
+    adoptDB(d); save(); render(); renderRP();
+    toast("שוחזר למצב של " + fmtWhen(m.at));
+  }catch(e){ toast("השחזור נכשל — " + (e.message || "לא ניתן לפתוח את הנקודה")); }
+}
+function renderRP(){
+  const host = $("#rpHost"); if(!host) return;
+  if(!RP.list.length){ host.innerHTML = `<div style="font-size:13px;color:var(--ink-faint)">עדיין אין נקודות שחזור.</div>`; return; }
+  host.innerHTML = RP.list.map(m=>`<div class="rp-row"><span>${esc(fmtWhen(m.at))} · ${m.n} מועמדים <small>· לפני: ${esc(m.reason)}</small></span>
+    <button class="btn sm" onclick="rpRestore('${m.key}')">שחזור</button></div>`).join("");
 }
 
 /* ---- נעילה ---- */
@@ -1695,6 +1884,7 @@ async function boot(){
   addEventListener("resize", ()=>{ clearTimeout(window.__uiR); window.__uiR = setTimeout(applyUiPrefs, 200); });
   applyConnectLink();
   await vaultLoad();
+  rpLoad().then(renderRP);
   /* הצפנה זמינה רק בהקשר מאובטח — https או localhost. פתיחת הקובץ בלחיצה כפולה לא נחשבת. */
   if(!window.crypto || !crypto.subtle){
     $("#app").classList.add("blurred");
@@ -1832,6 +2022,8 @@ function render(){
     acct.innerHTML = u ? `<span style="color:#8fb9b0">◈ ${esc(u)}</span>` : "";
   }
   renderStats();
+  renderStatusBar();
+  if(ui.view==="backup") renderRP();
   if(ui.view==="cards") renderCards();
   if(ui.view==="matches") renderMatches();
   if(ui.view==="followup") renderFollowup();
@@ -2814,6 +3006,7 @@ async function importJson(text){
         fields:[{label:"סיסמה / קוד שחזור", type:"password"}], ok:"פתיחה"});
       if(!r || !r[0]) return;
       const opened = await openSealed(text, r[0]);
+      await rpSave("טעינת גיבוי מקובץ");
       if(DB.people.length && !confirm(`הגיבוי מכיל ${(opened.people||[]).length} מועמדים ויחליף את הנתונים הקיימים. ` +
         `הכניסה לכלי נשארת עם הסיסמה הנוכחית. להמשיך?`)) return;
       adoptDB(opened);
@@ -2823,6 +3016,7 @@ async function importJson(text){
 
     if(!d.people) throw new Error("קובץ גיבוי לא תקין");
     if(DB.people.length && !confirm("לטעון את הגיבוי במקום הנתונים הקיימים?")) return;
+    await rpSave("טעינת גיבוי מקובץ");
     sanitizeDB(d);
     adoptDB(d);
     save(); setView("cards"); toast("הגיבוי נטען: "+DB.people.length+" מועמדים");
@@ -2864,7 +3058,8 @@ function showMapping(){
 
 function cancelImport(){ pending=null; $("#mapHost").classList.add("hidden"); $("#file").value=""; }
 
-function runImport(){
+async function runImport(){
+  await rpSave("ייבוא קובץ");
   const map = {};
   $$("#mapHost select[data-col]").forEach(s=>{ map[s.dataset.col] = s.value; });
   const skipDup = $("#skipDup").checked;
@@ -3312,7 +3507,7 @@ function download(blob, filename){
   setTimeout(()=>URL.revokeObjectURL(url), 1500);
 }
 /* רישום "מתי גובה לאחרונה" — מכל ערוץ: קובץ, אקסל, דרייב או ענן */
-function markBackup(){ try{ localStorage.setItem("backup_any", new Date().toISOString()); }catch(e){} }
+function markBackup(){ try{ localStorage.setItem("backup_any", new Date().toISOString()); }catch(e){} try{ renderStatusBar(); }catch(e){} }
 
 /* תזכורת עדינה אחרי הכניסה: אם עבר שבוע בלי שום גיבוי — מזכירים, פעם ביום לכל היותר */
 function backupNudge(){
@@ -5847,6 +6042,7 @@ function formAuto(){
 }
 
 function formStatus(txt, color){
+  try{ renderStatusBar(); }catch(e){}
   const el = $("#formStatus"); if(!el) return;
   el.innerHTML = `<span style="color:${color||"var(--ink-soft)"}">${esc(txt)}</span>`;
 }
@@ -6033,10 +6229,11 @@ function applyPending(i, mode){
   save(); render(); renderForm();
   if(F.pending.length) openFormReview(); else { closeSheet(); }
 }
-function bulkPending(mode){
+async function bulkPending(mode){
   const F = formDB(); let n = 0;
   if(mode==="ignore" && !confirm(`להתעלם מכל ${F.pending.length} התשובות הממתינות? הכרטיסים הקיימים לא ישתנו.`)) return;
   if(mode==="newer" && !confirm(`לעדכן את כל ${F.pending.length} הכרטיסים לפי התשובה החדשה? (הערכים הישנים נשמרים וניתנים להחזרה)`)) return;
+  if(mode!=="fill") await rpSave(mode==="newer" ? "עדכון כולל מהטופס" : "התעלמות מכל הממתינות");
   const undoList = [];
   const pendBefore = F.pending.slice(), ignBefore = (F.ignored||[]).slice(), seenBefore = F.seen.slice(), handledBefore = JSON.parse(JSON.stringify(F.handled||{}));
   const snaps = new Map();   /* מצב כל כרטיס לפני העדכון — לביטול מדויק גם כשיש כמה תשובות לאותו כרטיס */
@@ -6274,7 +6471,7 @@ async function driveBackup(silent){
     cfg.lastCount = snap.people.length;
     driveSave(cfg);
     markBackup();
-    DRIVE.changed = false;
+    DRIVE.changed = false; renderStatusBar();
     driveStatus("הגיבוי האחרון: " + cfg.last.slice(0,16).replace("T"," ") + " · " + made.join(" + "), "var(--teal)");
     if(!silent) toast("הגיבוי עלה לדרייב (" + made.join(" + ") + ")");
     drivePrune().catch(()=>{});
@@ -6320,6 +6517,7 @@ async function driveRestore(){
                 `הוא יחליף את הנתונים הנוכחיים במחשב. הכניסה לכלי נשארת עם הסיסמה הנוכחית. להמשיך?`)){
       driveStatus(""); return;
     }
+    await rpSave("שחזור מהדרייב");
     adoptDB(d);
     save(); render(); setView("cards");
     driveStatus("שוחזר: " + files[idx].name, "var(--teal)");
@@ -6823,19 +7021,21 @@ $("#btnExportXlsx").addEventListener("click", exportXlsx);
 $("#btnWipe").addEventListener("click", async ()=>{
   const r = await ask({
     title: "מחיקת כל הנתונים",
-    note: "פעולה זו מוחקת את כל המועמדים, השידוכים והפגישות מהמכשיר. ודאו שקיים גיבוי. " +
+    note: "פעולה זו מוחקת את כל המועמדים, השידוכים והפגישות מהמכשיר. לפני המחיקה נשמרת נקודת שחזור (בעמוד זה, למטה), ובכל זאת — ודאו שקיים גיבוי. " +
           "כדי לאשר, הקלידו את המילה מחיקה בדיוק.",
     fields: [{label:"הקלידו: מחיקה", type:"text"}],
     ok: "מחיקה סופית"
   });
   if(!r) return;
   if((r[0]||"").trim() !== "מחיקה"){ toast("המילה לא תואמת — לא בוצעה מחיקה"); return; }
+  await rpSave("מחיקת כל הנתונים");
   /* איפוס מלא — גם זיכרון הטופס: בחיבור הבא כל התשובות שבגיליון ייכנסו מחדש */
   DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null, trash:[]};
   try{ const c = formCfg(); c.last = ""; c.total = 0; c.lastMsg = ""; formSave(c); }catch(e){}
   save(); setView("cards"); toast("כל הנתונים נמחקו. בחיבור הבא לטופס — כל התשובות ייכנסו מחדש");
 });
 
+{ const cm = document.querySelector(".credit-m"), mn = document.querySelector(".main"); if(cm && mn) mn.appendChild(cm); }
 boot();
 renderDrive();
 renderForm();
