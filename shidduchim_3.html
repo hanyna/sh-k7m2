@@ -6103,13 +6103,26 @@ function findExisting(p){
 }
 
 /* הבדיקה עצמה. manual=true — בלחיצת כפתור (מותר לפתוח חלון התחברות לגוגל) */
+/* ---- שינויים שנעשו ישירות בגיליון בדרייב, בכרטיסים שכבר קיימים ----
+   לכל כרטיס נשמר "צילום" של השורה שלו בגיליון כפי שהייתה כשנקלטה (p.src).
+   בכל סנכרון משווים את השורה של היום לצילום: מה שהשתנה בגיליון — ולא מה שהשדכנית ערכה בכלי —
+   מוצג לאישור. שום דבר לא נדרס לבד. */
+function srcSnap(np){
+  const s = {};
+  FIELDS.forEach(f=>{ const v = np[f.k]; if(v!=null && String(Array.isArray(v)?v.join(","):v).trim()) s[f.k] = Array.isArray(v) ? v.join(",") : String(v).trim(); });
+  Object.entries(np.extra||{}).forEach(([k,v])=>{ if(String(v||"").trim()) s["x:"+k] = String(v).trim(); });
+  return s;
+}
+function snapHash(s){ const t = JSON.stringify(Object.keys(s).sort().map(k=>[k,s[k]])); let h=5381; for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return (h>>>0).toString(36); }
+function cardVal(ex, k){ if(k.startsWith("x:")) return String((ex.extra||{})[k.slice(2)]||"").trim(); const v = ex[k]; return v==null ? "" : String(Array.isArray(v)?v.join(","):v).trim(); }
+
 async function syncForm(manual, dryRun){
   const cfg = formCfg();
   if(!cfg.sheetId){ if(manual) toast("עדיין לא חובר טופס — הגדרה בעמוד ״גיבוי וניהול״"); return null; }
   if(!driveCfg().clientId){ formStatus("כדי לקרוא את הגיליון צריך קודם להגדיר Client ID בהגדרות הדרייב (למעלה)", "var(--rose)"); if(manual) toast("צריך קודם להגדיר את החיבור לגוגל בהגדרות הדרייב"); return null; }
   if(CRY.locked || FORM.busy) return null;
   FORM.busy = true;
-  formStatus(dryRun ? "בודק את החיבור לגיליון…" : "בודק אם יש תשובות חדשות…");
+  formStatus(dryRun ? "בודק את החיבור לגיליון…" : "בודק אם יש תשובות חדשות ושינויים בגיליון…");
   try{
     const token = await driveToken(!manual);
     const {headers, rows, counts, tabCount} = await fetchFormRows(token);
@@ -6141,6 +6154,7 @@ async function syncForm(manual, dryRun){
       seen.add(key);
       const p = rowToPerson(headers, r, key, true);
       if(!p){ skipped++; return; }
+      p.src = srcSnap(p);
       /* אותו אדם הגיש פעמיים באותה דקה (למשל תיקון מיד אחרי השליחה) — המזהה זהה, אבל זו תשובה נוספת: לאישור */
       if(runKeys.has(key)){
         const ex = DB.people.find(x=>personKeys(x).includes(key));
@@ -6182,22 +6196,49 @@ async function syncForm(manual, dryRun){
       }else{ p.reviewed = true; p.autoOk = true; }
       DB.people.push(p); added++;
     });
+    /* כרטיסים קיימים — האם השורה שלהם השתנתה בגיליון מאז שנקלטה? */
+    let edited = 0, baselinedNow = 0;
+    if(!firstRun){
+      const byKey = new Map(); DB.people.forEach(x=>personKeys(x).forEach(k=>{ if(!byKey.has(k)) byKey.set(k, x); }));
+      /* כרטיס שמילא את הטופס כמה פעמים מקושר לכמה שורות — משווים רק לשורה האחרונה שלו בגיליון */
+      const lastRow = new Map();
+      rows.forEach(r=>{ const key = rowKey(headers, r); const ex = byKey.get(key); if(ex && !ignored.has(key)) lastRow.set(ex.id, {r, key, ex}); });
+      lastRow.forEach(({r, key, ex})=>{
+        const np = rowToPerson(headers, r, key, true); if(!np) return;
+        const snap = srcSnap(np);
+        if(!ex.src){ ex.src = snap; baselinedNow++; return; }          /* כרטיס מלפני העדכון — מתחילים לעקוב מעכשיו */
+        const h = snapHash(snap);
+        if(h === snapHash(ex.src)) return;
+        const ekey = key + "@" + h;
+        if(ignored.has(ekey)){ ex.src = snap; baselinedNow++; return; }  /* השינוי כבר טופל (עודכן או נדחה) */
+        if(F.pending.some(it=>it.key===ekey)) return;
+        const changed = [...new Set(Object.keys(snap).concat(Object.keys(ex.src)))].filter(k=>(snap[k]||"") !== (ex.src[k]||""));
+        const need = changed.filter(k=>cardVal(ex,k) !== (snap[k]||""));   /* מה שכבר זהה בכרטיס — לא צריך אישור */
+        if(!need.length){ ex.src = snap; baselinedNow++; return; }
+        const np2 = JSON.parse(JSON.stringify(ex)); delete np2.src; delete np2.mark;
+        need.forEach(k=>{ if(k.startsWith("x:")){ np2.extra = np2.extra||{}; np2.extra[k.slice(2)] = snap[k]||""; } else np2[k] = snap[k]||""; });
+        F.pending = F.pending.filter(it=>!(it.sheetEdit && it.exId===ex.id));   /* שינוי ישן יותר באותה שורה — מוחלף בחדש */
+        F.pending.push({key: ekey, p: np2, exId: ex.id, date: today(), why: "עודכן ישירות בגיליון בדרייב", sheetEdit: true,
+          changed: need.map(k=>k.startsWith("x:") ? k.slice(2) : ((FIELDS.find(f=>f.k===k)||{}).l || k))});
+        edited++; pending++;
+      });
+    }
     F.seen = [...seen];
     if(firstRun){ F.baselined = true; }
     const c = formCfg();
     c.last = new Date().toISOString(); c.total = rows.length;
-    c.lastMsg = added||pending ? `${added===1?"נוסף 1":"נוספו "+added}${pending?` · ממתינים לבדיקה ${pending}`:""}` : "אין תשובות חדשות";
+    c.lastMsg = added||pending ? `${added===1?"נוסף 1":"נוספו "+added}${pending?` · ממתינים לבדיקה ${pending}`:""}${edited?` (מתוכם ${edited} שינויים בגיליון)`:""}` : "אין תשובות חדשות ואין שינויים בגיליון";
     formSave(c);
-    if(added || pending || skipped || already || merged || held || firstRun) save();
+    if(added || pending || skipped || already || merged || held || firstRun || baselinedNow) save();
     render();
     renderForm();
     if(firstRun) toast(`📝 החיבור לטופס פעיל ✓ — ${added ? `יובאו ${added} מועמדים מהטופס` : "אין תשובות חדשות לייבא"}${already?` · ${already} כבר היו בכרטסייה`:""}${pending?` · ${pending} מילאו יותר מפעם אחת — ממתינים לאישורך`:""}. מעכשיו כל תשובה חדשה נכנסת לבד.`);
     else if(added || pending){
-      toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&pending?" · ":""}${pending ? `${pending} ממתינים לבדיקה` : ""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
-    }else if(manual) toast("אין תשובות חדשות בטופס");
+      toast(`📝 מהטופס: ${added ? (added===1 ? "נוסף מועמד חדש" : `נוספו ${added} מועמדים חדשים`) : ""}${added&&(pending-edited)?" · ":""}${pending-edited ? `${pending-edited} ממתינים לבדיקה` : ""}${edited?`${added||(pending-edited)?" · ":""}✏️ ${edited===1?"כרטיס אחד עודכן":edited+" כרטיסים עודכנו"} בגיליון — ממתין לאישורך`:""}${similar?` · ${similar} עם שם דומה לקיים`:""}`);
+    }else if(manual) toast("אין תשובות חדשות ואין שינויים בגיליון");
     FORM.busy = false;
     if(held || pending) setTimeout(()=>reviewAlert(held, pending), 700);
-    return {added, pending, similar, held};
+    return {added, pending, similar, held, edited};
   }catch(err){
     FORM.busy = false;
     formStatus(err.message, "var(--rose)");
@@ -6210,6 +6251,12 @@ function formAuto(){
   const c = formCfg();
   if(c.auto && c.sheetId && driveCfg().clientId) syncForm(false);
 }
+/* חוזרים לחלון אחרי 10 דקות ומעלה — בודקים שוב (בשקט) אם השתנה משהו בגיליון */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden || CRY.locked) return;
+  const c = formCfg(); const last = c.last ? new Date(c.last).getTime() : 0;
+  if(Date.now() - last > 10*60000) formAuto();
+});
 
 function formStatus(txt, color){
   try{ renderStatusBar(); }catch(e){}
@@ -6229,7 +6276,7 @@ function renderForm(){
       </div>
       <div class="field wide">
         <label class="todo"><input type="checkbox" id="formAuto" ${c.auto?"checked":""}>
-          <span>לבדוק תשובות חדשות אוטומטית בכל כניסה לכלי</span></label>
+          <span>בכל כניסה לכלי — לבדוק אוטומטית תשובות חדשות <b>ושינויים שנעשו בגיליון בדרייב</b></span></label>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -6277,6 +6324,9 @@ function renderForm(){
 
 /* ---------- בדיקת תשובות של מי שכבר קיים בכרטסייה ---------- */
 const FORM_SKIP_CMP = new Set(["status","notes","refs","openTo"]);
+/* קריאה/כתיבה של שדה — גם שדה נוסף ("x:שם") */
+function pgv(o,k){ return k.startsWith("x:") ? (o.extra||{})[k.slice(2)] : o[k]; }
+function psv(o,k,v){ if(k.startsWith("x:")){ o.extra = o.extra||{}; o.extra[k.slice(2)] = v; } else o[k] = v; }
 function pendingDiff(it){
   const ex = personById(it.exId), p = it.p;
   if(!ex) return [];
@@ -6287,7 +6337,9 @@ function pendingDiff(it){
     return n(a) === n(b);
   };
   return FIELDS.filter(f=>!FORM_SKIP_CMP.has(f.k) && f.k!=="fullName" && p[f.k] && !same(f.k, disp(p[f.k]), disp(ex[f.k])||""))
-    .map(f=>({k:f.k, l:f.l, cur:String(disp(ex[f.k])||""), nw:String(disp(p[f.k]))}));
+    .map(f=>({k:f.k, l:f.l, cur:String(disp(ex[f.k])||""), nw:String(disp(p[f.k]))}))
+    .concat(it.sheetEdit ? Object.keys(p.extra||{}).filter(k=>String((p.extra||{})[k]||"")!==String((ex.extra||{})[k]||""))
+      .map(k=>({k:"x:"+k, l:k, cur:String((ex.extra||{})[k]||""), nw:String(p.extra[k]||"")})) : []);
 }
 function openFormReview(i){
   const F = formDB();
@@ -6295,7 +6347,7 @@ function openFormReview(i){
   if(!F.pending.length){ save(); render(); renderForm(); closeSheet(); toast("אין תשובות ממתינות"); return; }
   if(i == null){
     $("#sheetHead").innerHTML = `<div style="flex:1"><h3>📝 תשובות מהטופס — ממתינות לבדיקה</h3>
-      <div class="meta">נראה שהממלאים כבר קיימים בכרטסייה (שם, טלפון או מייל). שום דבר לא אוחד — בחרו מה לעשות עם כל תשובה.</div></div>
+      <div class="meta">תשובות של מי שכבר קיים בכרטסייה, ושינויים שנעשו ישירות בגיליון בדרייב. שום דבר לא עודכן לבד — בחרו מה לעשות עם כל אחד.</div></div>
       <button class="x" onclick="closeSheet()" aria-label="סגירה">×</button>`;
     $("#sheetBody").innerHTML = `<div class="win-col">${F.pending.map((it,j)=>{
       const ex = personById(it.exId), d = pendingDiff(it);
@@ -6313,7 +6365,10 @@ function openFormReview(i){
     openSheet(); return;
   }
   const it = F.pending[i], ex = personById(it.exId), d = pendingDiff(it);
-  $("#sheetHead").innerHTML = `<div style="flex:1"><h3>${esc(it.p.fullName)} מילא/ה שוב את הטופס</h3>
+  $("#sheetHead").innerHTML = it.sheetEdit
+    ? `<div style="flex:1"><h3>✏️ ${esc(ex.fullName)} — עודכן בגיליון בדרייב</h3>
+    <div class="meta">מישהו שינה את השורה של הכרטיס הזה ישירות בגיליון. מוצגים רק הפרטים שהשתנו שם. סמנו אילו לעדכן גם בכלי.</div></div>`
+    : `<div style="flex:1"><h3>${esc(it.p.fullName)} מילא/ה שוב את הטופס</h3>
     <div class="meta">כרטיס קיים: ${esc(ex.fullName)}${ex.phone?" · "+esc(ex.phone):""}. סמנו אילו פרטים לעדכן.</div></div>
     <button class="x" onclick="openFormReview()" aria-label="חזרה">×</button>`;
   $("#sheetBody").innerHTML = `<div class="win-col">
@@ -6326,7 +6381,7 @@ function openFormReview(i){
   </div>`;
   $("#sheetFoot").innerHTML = `
     ${d.length?`<button class="btn pri" onclick="applyPending(${i},'update')">עדכון הפרטים המסומנים</button>`:""}
-    <button class="btn" onclick="applyPending(${i},'new')">זה אדם אחר — כרטיס חדש</button>
+    ${it.sheetEdit ? "" : `<button class="btn" onclick="applyPending(${i},'new')">זה אדם אחר — כרטיס חדש</button>`}
     <button class="btn ghost" onclick="applyPending(${i},'ignore')">התעלמות</button>
     <button class="btn ghost" onclick="openFormReview()">חזרה לרשימה</button>`;
   openSheet();
@@ -6381,10 +6436,10 @@ function applyPending(i, mode){
   if(mode==="update" && ex){
     ks = $$("[data-pk]").filter(x=>x.checked).map(x=>x.dataset.pk);
     var prevVals = {}; ex.fieldDates = ex.fieldDates || {};
-    ks.forEach(k=>{ prevVals[k] = ex[k]; ex[k] = it.p[k]; ex.fieldDates[k] = today(); });
-    if(it.p.filledAt) ex.filledAt = it.p.filledAt;
     var prevExtra = Object.assign({}, ex.extra||{});
-    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });   /* החדש גובר */
+    ks.forEach(k=>{ prevVals[k] = pgv(ex,k); psv(ex, k, pgv(it.p,k)); ex.fieldDates[k] = today(); });
+    if(it.p.filledAt) ex.filledAt = it.p.filledAt;
+    if(!it.sheetEdit) Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });   /* החדש גובר */
     ex.updated = today();
     toast(ks.length ? `עודכנו ${ks.length} פרטים בכרטיס של ${ex.fullName}` : "לא סומנו פרטים — הכרטיס לא השתנה");
   }else if(mode==="new"){
@@ -6413,15 +6468,15 @@ async function bulkPending(mode){
     if(!snaps.has(ex.id)) snaps.set(ex.id, JSON.parse(JSON.stringify(ex)));
     const prev = {}, prevExtra = Object.assign({}, ex.extra||{});
     ex.fieldDates = ex.fieldDates || {};
-    pendingDiff(it).forEach(x=>{ prev[x.k] = ex[x.k]; ex[x.k] = it.p[x.k]; ex.fieldDates[x.k] = today(); n++; });
+    pendingDiff(it).forEach(x=>{ prev[x.k] = pgv(ex,x.k); psv(ex, x.k, pgv(it.p,x.k)); ex.fieldDates[x.k] = today(); n++; });
     if(it.p.filledAt) ex.filledAt = it.p.filledAt;
-    Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });
+    if(!it.sheetEdit) Object.entries(it.p.extra||{}).forEach(([k,v])=>{ ex.extra = ex.extra||{}; if(String(v||"").trim()) ex.extra[k] = v; });
     ex.updated = today(); it.__prev = prev; it.__prevExtra = prevExtra; undoList.push({ex, prev, prevExtra});
   });
   if(mode==="fill") F.pending.forEach(it=>{
     const ex = personById(it.exId); if(!ex) return;
     let c = 0; ex.fieldDates = ex.fieldDates || {}; ex.extra = ex.extra || {};
-    pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ ex[x.k] = it.p[x.k]; ex.fieldDates[x.k] = today(); c++; });
+    pendingDiff(it).filter(x=>!x.cur).forEach(x=>{ psv(ex, x.k, pgv(it.p,x.k)); ex.fieldDates[x.k] = today(); c++; });
     Object.entries(it.p.extra||{}).forEach(([k,v])=>{ if(String(v||"").trim() && !String(ex.extra[k]||"").trim()){ ex.extra[k] = v; ex.fieldDates["x:"+k] = today(); c++; } });
     if(c) ex.updated = today(); n += c;
   });
