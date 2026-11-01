@@ -223,6 +223,13 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .mkband{display:flex;align-items:center;gap:10px;background:color-mix(in srgb,var(--mkc) 14%,var(--card));border:1px solid var(--mkc);
   border-right:8px solid var(--mkc);border-radius:10px;padding:9px 12px;margin:10px 0 4px;font-size:14px}
 .mkband b{color:var(--mkc)} .mkband span{flex:1;min-width:0} .mkband small{color:var(--ink-faint);font-size:11.5px;display:block}
+.fbm{border:0;background:transparent;cursor:pointer;font-size:13px;opacity:.22;padding:0 4px;margin-inline-start:4px;vertical-align:middle}
+.fieldrow:hover .fbm,.field:hover .fbm,.fbm:focus{opacity:.8}
+.fieldrow.fmark,.field.fmark{background:color-mix(in srgb,var(--mkc,#e07b39) 15%,transparent);border-radius:8px;box-shadow:inset -5px 0 0 var(--mkc,#e07b39)}
+.fieldrow.fmark .fbm,.field.fmark .fbm{opacity:1}
+.fieldrow.fmark dt::before,.field.fmark label::before{content:"📍 הגעתי עד כאן · ";color:var(--mkc,#e07b39);font-weight:700}
+@keyframes fflash{0%,60%{background:color-mix(in srgb,var(--mkc,#e07b39) 40%,transparent)}}
+.fflash{animation:fflash 1.6s ease-out}
 .mkpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .mkdot{width:30px;height:30px;border-radius:50%;border:3px solid transparent;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .mkdot.on{border-color:var(--ink);transform:scale(1.12)}
@@ -1128,10 +1135,52 @@ function fieldInputHtml(f, v, p){
 }
 /* ---- סימון "לאן הגעתי" ---- */
 const MARKS = [["#c9564d","אדום"],["#e07b39","כתום"],["#d9a441","צהוב"],["#2a9d93","ירוק"],["#2f5d8a","כחול"],["#8a5b7a","סגול"]];
+/* ---- "הגעתי עד כאן" ברמת השדה — לפגישה שעוברת על השאלות אחת-אחת ---- */
+function fieldLabel(k){ if(!k) return ""; if(k.startsWith("x:")) return k.slice(2); const f = FIELDS.find(x=>x.k===k); return f ? f.l : k; }
+function bookmarkField(id, k){
+  const p = personById(id); if(!p) return;
+  if(p.mark && p.mark.field === k){ delete p.mark.field; if(!p.mark.note) delete p.mark; toast("הסימון הוסר"); }
+  else{ p.mark = Object.assign({color:"#e07b39", note:""}, p.mark||{}, {field:k, at:new Date().toISOString()}); toast("📍 סומן: הגעתי עד \"" + fieldLabel(k) + "\""); }
+  save(); renderCards && ui.view==="cards" && renderCards(true);
+  decorateBookmarks(p);
+  const b = document.querySelector("#sheetBody .mkband, #sheetBody .mkband-slot"); if(b){ b.outerHTML = markBand(p); }
+}
+function jumpToMark(){
+  const el = document.querySelector("#sheetBody .fmark"); if(!el) return;
+  el.scrollIntoView({block:"center", behavior:"smooth"});
+  el.classList.remove("fflash"); void el.offsetWidth; el.classList.add("fflash");
+  const inp = el.querySelector("input,textarea,select"); if(inp) setTimeout(()=>inp.focus({preventScroll:true}), 400);
+}
+/* מוסיף לכל שדה (בצפייה ובעריכה) כפתור 🚩 קטן, ומדגיש את השדה שבו עצרנו */
+function decorateBookmarks(p){
+  const host = $("#sheetBody"); if(!host || !p) return;
+  const mk = p.mark && p.mark.field, col = p.mark ? ((MARKS.find(m=>m[0]===p.mark.color)||[])[0] || "#e07b39") : "#e07b39";
+  host.style.setProperty("--mkc", col);
+  const items = [];
+  host.querySelectorAll(".fieldrow[data-fk]").forEach(r=>items.push([r, r.dataset.fk, r.querySelector("dt")]));
+  host.querySelectorAll(".field").forEach(f=>{
+    const inp = f.querySelector("[id^=f_],[data-xkey]"); if(!inp) return;
+    const k = inp.dataset.xkey ? "x:" + inp.dataset.xkey : inp.id.slice(2);
+    if(k === "fullName") return;
+    items.push([f, k, f.querySelector("label")]);
+  });
+  items.forEach(([row, k, lab])=>{
+    row.classList.toggle("fmark", k === mk);
+    if(lab && !lab.querySelector(".fbm")){
+      const b = document.createElement("button"); b.type = "button"; b.className = "fbm"; b.textContent = "🚩";
+      b.title = "הגעתי עד כאן — סימון להמשך בפגישה הבאה (לחיצה נוספת מסירה)";
+      b.onclick = e=>{ e.preventDefault(); e.stopPropagation(); bookmarkField(p.id, k); };
+      lab.appendChild(b);
+    }
+  });
+}
 function markBand(p){
-  if(!p.mark) return `<div style="margin:8px 0 2px"><button class="btn ghost sm" onclick="editMark('${p.id}')" title="צבע בולט + משפט: לאן הגעתי ומה הצעד הבא">🚩 סימון — לאן הגעתי</button></div>`;
+  if(!p.mark) return `<div class="mkband-slot" style="margin:8px 0 2px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn ghost sm" onclick="editMark('${p.id}')" title="צבע בולט + משפט: לאן הגעתי ומה הצעד הבא">🚩 סימון — לאן הגעתי</button>
+    <span style="font-size:12.5px;color:var(--ink-faint)">או לחיצה על 🚩 הקטן ליד שדה — "הגעתי עד כאן"</span></div>`;
   const [c, nm] = MARKS.find(m=>m[0]===p.mark.color) || MARKS[0];
-  return `<div class="mkband" style="--mkc:${c}"><b>🚩</b><span>${p.mark.note ? esc(p.mark.note) : "<i style='color:var(--ink-faint)'>בלי הערה</i>"}<small>סומן ${esc(fmtWhen(p.mark.at||""))}</small></span>
+  const fl = p.mark.field ? `<div style="margin-top:2px">📍 הגעתי עד: <b style="color:var(--mkc)">${esc(fieldLabel(p.mark.field))}</b></div>` : "";
+  return `<div class="mkband" style="--mkc:${c}"><b>🚩</b><span>${p.mark.note ? esc(p.mark.note) : (p.mark.field ? "" : "<i style='color:var(--ink-faint)'>בלי הערה</i>")}${fl}<small>סומן ${esc(fmtWhen(p.mark.at||""))}</small></span>
+    ${p.mark.field ? `<button class="btn sm pri" onclick="jumpToMark()">להמשיך מכאן ↓</button>` : ""}
     <button class="btn ghost sm" onclick="editMark('${p.id}')">שינוי</button><button class="btn ghost sm" onclick="clearMark('${p.id}')">הסרה</button></div>`;
 }
 function editMark(id){
@@ -2324,7 +2373,7 @@ function renderCards(keepLimit){
         </div>
       </div>
       <div class="rows">${rows||'<div style="color:#c3cad1">אין פרטים נוספים</div>'}</div>
-      ${mk?`<div class="mknote" title="${esc(p.mark.note||"")}">🚩 ${esc(p.mark.note||"מסומן")}</div>`:""}
+      ${mk?`<div class="mknote" title="${esc(p.mark.note||"")}">${p.mark.note ? "🚩 " + esc(p.mark.note) : p.mark.field ? "📍 הגעתי עד: " + esc(fieldLabel(p.mark.field)) : "🚩 מסומן"}</div>`:""}
       ${(p.community||open||(p.tags||[]).length)?`<div class="tagline">
         ${p.community?`<span class="tag">${esc(p.community)}</span>`:""}
         ${(p.tags||[]).map(t=>`<span class="tag" style="background:var(--teal-light);color:var(--teal)">${esc(t)}</span>`).join("")}
@@ -2419,9 +2468,9 @@ function openPerson(id, tab){
       const shown = !v ? "—"
         : f.t==="tel" ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g,""))}" style="color:inherit">${esc(v)}</a>`
         : esc(v);
-      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
+      return `<div class="fieldrow" data-fk="${f.k}"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
   };
-  const extraRow = k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; };
+  const extraRow = k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow" data-fk="x:${esc(k)}"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; };
   const ord = orderedFieldList();
   if(ord){
     body += `<div class="sect">הפרטים — בסדר של הטופס</div><dl style="margin:0">` + ord.main.map(e=>e.f ? fieldRow(e.f) : extraRow(e.x)).join("") + `</dl>`;
@@ -2435,14 +2484,14 @@ function openPerson(id, tab){
       const shown = !v ? "—"
         : f.t==="tel" ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g,""))}" style="color:inherit">${esc(v)}</a>`
         : esc(v);
-      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
+      return `<div class="fieldrow" data-fk="${f.k}"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
     }).join("") + `</dl>`;
   });
 
   const extraKeys = ord ? [] : allExtraKeys();
   if(extraKeys.length){
     body += `<div class="sect">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)</div><dl style="margin:0">` +
-      extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; }).join("") + `</dl>`;
+      extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow" data-fk="x:${esc(k)}"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; }).join("") + `</dl>`;
   }
 
   const ms = DB.matches.filter(m=>m.a===id||m.b===id);
@@ -2466,6 +2515,7 @@ function openPerson(id, tab){
   }).join("") : `<div style="color:var(--ink-faint);font-size:13.5px">עדיין לא הוצעו שידוכים למועמד זה.</div>`;
 
   $("#sheetBody").innerHTML = `<div class="win-col">${body}</div>`;
+  decorateBookmarks(p);
   $("#sheetFoot").innerHTML = `
     <button class="btn pri" onclick="editPerson('${id}')">עריכת הפרטים</button>
     <button class="btn" onclick="openSuggest('${id}')">הצעת שידוך</button>
@@ -2568,7 +2618,8 @@ function editPerson(id){
       return `<div class="field${v.length>60?" wide":""}"><label>${esc(k)}</label>${v.length>60
         ? `<textarea id="x_${i}" data-xkey="${esc(k)}">${esc(v)}</textarea>`
         : `<input id="x_${i}" data-xkey="${esc(k)}" value="${esc(v)}">`}</div>`; }).join("") + `</div>`;
-  $("#sheetBody").innerHTML = `<div class="win-col">${html}</div>`;
+  $("#sheetBody").innerHTML = `<div class="win-col">${(id && p.mark) ? markBand(p) : ""}${html}</div>`;
+  if(id){ decorateBookmarks(p); if(p.mark && p.mark.field) setTimeout(jumpToMark, 350); }   /* בעריכה — קופצים ישר לשדה שבו עצרנו */
   photoBuf = null;
   $("#photoFile").addEventListener("change", e=>{
     const f = e.target.files[0]; if(!f) return;
