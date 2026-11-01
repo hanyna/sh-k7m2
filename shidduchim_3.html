@@ -215,6 +215,18 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .pcard.g-f .mono{background:#f3ebf1;color:#8a5b7a}
 /* כל כרטיס באותו גובה ורוחב — גם כשמהטופס הגיע טקסט ארוך (שם, חוג, עדה, תגיות): שורה אחת לכל פרט, והשאר נחתך ב"…" */
 .pcard{display:flex;flex-direction:column;min-width:0;height:204px}
+.pcard.mk{height:232px}
+/* סימון "לאן הגעתי" — פס צבע בולט על הכרטיס, ושורת המשך */
+.pcard.mk{border-right:7px solid var(--mkc)}
+.pcard .mknote{font-size:12.5px;font-weight:600;color:var(--mkc);background:color-mix(in srgb,var(--mkc) 12%,transparent);
+  border-radius:7px;padding:3px 8px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mkband{display:flex;align-items:center;gap:10px;background:color-mix(in srgb,var(--mkc) 14%,var(--card));border:1px solid var(--mkc);
+  border-right:8px solid var(--mkc);border-radius:10px;padding:9px 12px;margin:10px 0 4px;font-size:14px}
+.mkband b{color:var(--mkc)} .mkband span{flex:1;min-width:0} .mkband small{color:var(--ink-faint);font-size:11.5px;display:block}
+.mkpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.mkdot{width:30px;height:30px;border-radius:50%;border:3px solid transparent;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.mkdot.on{border-color:var(--ink);transform:scale(1.12)}
+.chip.mkchip i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-inline-start:4px;vertical-align:middle}
 .fdate{display:inline-block;margin-inline-start:8px;font-size:11px;color:var(--ink-faint);background:var(--soft2);border-radius:99px;padding:0 7px;vertical-align:middle;white-space:nowrap}
 .pcard h3{margin:0;font-size:15.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:52px}
 .pcard-head>div:not(.mono){min-width:0;flex:1}
@@ -749,6 +761,8 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         <button class="chip" data-status="מושהה">מושהים</button>
         <button class="chip" data-status="נסגר">נסגרו</button>
         <span class="divider-v"></span>
+        <button class="chip mkchip" data-mark="1" title="רק כרטיסים שסימנת ״לאן הגעתי״">🚩 מסומנים</button>
+        <span class="divider-v"></span>
         <select class="mini" id="fSector"><option value="">כל החוגים</option></select>
         <select class="mini" id="fOpen"><option value="">פתוח/ה לכל חוג</option></select>
         <span class="agebox">גיל
@@ -764,6 +778,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
           <option value="filled">מיון: מילא/ה את הטופס (חדש קודם)</option>
           <option value="created">מיון: נקלט/ה (חדש קודם)</option>
           <option value="city">מיון: עיר</option>
+          <option value="mark">מיון: לפי הסימון (מסומנים קודם)</option>
         </select>
       </div>
       <div id="cardsHost"></div>
@@ -833,6 +848,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <p style="font-size:12.5px;color:var(--ink-soft);max-width:640px;margin-top:8px">
         <b>הגיבוי המוצפן</b> הוא הדרך הבטוחה: הקובץ נפתח רק עם הסיסמה שלכם, ואפשר לשמור אותו בכל מקום —
         דיסק־און־קי, מייל, דרייב. טוענים אותו חזרה בעמוד הייבוא. קובצי ה-JSON והאקסל קריאים לכל מי שמחזיק בהם.</p>
+      <div class="sect" style="margin-top:30px">סדר השדות בכרטיס</div>
+      <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:8px">
+        בכרטיס המועמד השדות יכולים להופיע <b>בדיוק בסדר של הטופס / הגיליון</b> — כמו שהשדכנית רגילה לראות אותם בדרייב —
+        או מקובצים לפי נושאים (זיהוי, קשר, רקע…). הסדר מהטופס נלמד לבד בכל סנכרון ובכל ייבוא קובץ.
+      </div>
+      <div id="orderHost" style="display:flex;gap:14px;flex-wrap:wrap;font-size:14px"></div>
       <div class="sect" style="margin-top:30px">נקודות שחזור אוטומטיות</div>
       <div style="font-size:13.5px;color:var(--ink-soft);max-width:640px;margin-bottom:10px">
         לפני כל פעולה גדולה — ייבוא קובץ, עדכון כולל מהטופס, שחזור מגיבוי או מחיקה — הכלי שומר לבד
@@ -1038,6 +1059,109 @@ const FIELDS = [
   /* הערות */
   {k:"notes",    l:"הערות השדכנית",      t:"textarea", sec:"הערות"}
 ];
+/* ---- סדר השדות כמו במקור (טופס / גיליון / אקסל) ----
+   DB.fieldOrder: רשימה לפי סדר העמודות במקור: {k:"מפתח שדה"} או {x:"שם שדה נוסף"}.
+   נלמד בכל סנכרון/ייבוא, אלא אם השדכנית סידרה ידנית (DB.fieldOrderManual). */
+function fieldOrderMode(){ try{ return localStorage.getItem("field_order") || "source"; }catch(e){ return "source"; } }
+function learnFieldOrder(headers, keyOf){
+  if(!headers || !headers.length || DB.fieldOrderManual) return;
+  const out = [], seen = new Set();
+  headers.forEach((h,i)=>{
+    const k = keyOf(h, i);
+    if(!k || k==="__skip") return;
+    if(/חותמת זמן|timestamp|תאריך מילוי/i.test(String(h||""))) return;
+    const ent = (k==="__extra") ? {x: String(h||"").replace(/ \(\d+\)$/,"") || ("עמודה "+(i+1))} : {k};
+    const id = ent.k ? "k:"+ent.k : "x:"+ent.x;
+    if(seen.has(id) || !(ent.k ? FIELDS.some(f=>f.k===ent.k) : true)) return;
+    seen.add(id); out.push(ent);
+  });
+  if(out.length >= 3){ DB.fieldOrder = out; DB.fieldOrderSrc = new Date().toISOString(); }
+}
+/* רשימת "שורות" לתצוגה/עריכה: [{f}] לשדה מוכר או [{x}] לשדה נוסף — לפי המצב שנבחר */
+function orderedFieldList(){
+  const extras = allExtraKeys();
+  if(fieldOrderMode()==="source" && DB.fieldOrder && DB.fieldOrder.length){
+    const used = new Set(), list = [];
+    DB.fieldOrder.forEach(e=>{
+      if(e.k){ const f = FIELDS.find(x=>x.k===e.k); if(f && f.k!=="fullName" && !used.has("k:"+f.k)){ used.add("k:"+f.k); list.push({f}); } }
+      else if(e.x && extras.includes(e.x) && !used.has("x:"+e.x)){ used.add("x:"+e.x); list.push({x:e.x}); }
+    });
+    const rest = FIELDS.filter(f=>f.k!=="fullName" && !used.has("k:"+f.k)).map(f=>({f}))
+      .concat(extras.filter(x=>!used.has("x:"+x)).map(x=>({x})));
+    return {main:list, rest};
+  }
+  return null;
+}
+function fieldInputHtml(f, v, p){
+  let html = "";
+      const wide = (f.t==="textarea"||f.t==="multi"||f.k==="fullName"||f.k==="family") ? " wide":"";
+      let input;
+      if(f.t==="select"){
+        /* ערך שלא ברשימה (למשל "רווקה" מהטופס) נשאר כאפשרות בחורה — כדי ששמירה לא תמחק אותו */
+        const unknown = v!=="" && !f.opts.includes(v);
+        input = `<select id="f_${f.k}"><option value=""></option>` +
+          (unknown ? `<option selected>${esc(v)}</option>` : "") +
+          f.opts.map(o=>`<option ${o===v?"selected":""}>${esc(o)}</option>`).join("") + `</select>`;
+      }else if(f.t==="combo"){
+        input = `<input id="f_${f.k}" list="dl_${f.k}" value="${esc(v)}" placeholder="בחירה או הקלדה חופשית">
+          <datalist id="dl_${f.k}">${f.opts.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
+      }else if(f.t==="multi"){
+        const arr = Array.isArray(v)?v:[];
+        input = `<div class="multi">` + f.opts.map(o=>
+          `<label><input type="checkbox" data-multi="${f.k}" value="${esc(o)}" ${arr.includes(o)?"checked":""}>${esc(o)}</label>`
+        ).join("") + `</div>`;
+      }else if(f.t==="refs"){
+        const arr = Array.isArray(v)?v:[];
+        input = `<div class="refs" id="refsBox">${arr.map(r=>refRow(r)).join("")}</div>
+          <button class="btn ghost sm" onclick="addRefRow()" style="margin-top:6px">+ הוספת ממליץ</button>
+          <datalist id="dlRoles">${["ר\u05F4מ בישיבה","רב הקהילה","ראש הכולל","מדריכה בסמינר","חברותא",
+            "חברה קרובה","מכיר משפחתי","שכן","מעסיק"].map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
+      }else if(f.t==="textarea"){
+        input = `<textarea id="f_${f.k}">${esc(v)}</textarea>`;
+      }else{
+        /* שדה מספרי כטקסט — גיל כמו "עשרים ושלוש" או "22 וחצי" לא יימחק בשמירה */
+        const ty = f.t==="number" ? `text" inputmode="decimal` : f.t;
+        input = `<input id="f_${f.k}" type="${ty}" value="${esc(v)}">`;
+      }
+  html += `<div class="field${wide}"><label for="f_${f.k}">${f.l}${(p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</label>${input}</div>`;
+  return html;
+}
+/* ---- סימון "לאן הגעתי" ---- */
+const MARKS = [["#c9564d","אדום"],["#e07b39","כתום"],["#d9a441","צהוב"],["#2a9d93","ירוק"],["#2f5d8a","כחול"],["#8a5b7a","סגול"]];
+function markBand(p){
+  if(!p.mark) return `<div style="margin:8px 0 2px"><button class="btn ghost sm" onclick="editMark('${p.id}')" title="צבע בולט + משפט: לאן הגעתי ומה הצעד הבא">🚩 סימון — לאן הגעתי</button></div>`;
+  const [c, nm] = MARKS.find(m=>m[0]===p.mark.color) || MARKS[0];
+  return `<div class="mkband" style="--mkc:${c}"><b>🚩</b><span>${p.mark.note ? esc(p.mark.note) : "<i style='color:var(--ink-faint)'>בלי הערה</i>"}<small>סומן ${esc(fmtWhen(p.mark.at||""))}</small></span>
+    <button class="btn ghost sm" onclick="editMark('${p.id}')">שינוי</button><button class="btn ghost sm" onclick="clearMark('${p.id}')">הסרה</button></div>`;
+}
+function editMark(id){
+  const p = personById(id); if(!p) return;
+  const box = $("#ask"); let color = (p.mark && p.mark.color) || MARKS[0][0];
+  box.innerHTML = `<div class="ask-card"><h3>🚩 לאן הגעתי עם ${esc(p.fullName||"")}</h3>
+    <p class="ask-note">בוחרים צבע בולט וכותבים משפט אחד — מה נעשה ומה הצעד הבא. הסימון מופיע על הכרטיס בכרטסייה ובראש התיק, ואפשר לסנן "מסומנים".</p>
+    <div class="mkpick">${MARKS.map(([c,n])=>`<span class="mkdot ${c===color?"on":""}" data-c="${c}" style="background:${c}" title="${n}"></span>`).join("")}</div>
+    <label class="ask-f"><span>לאן הגעתי / הצעד הבא</span><input id="mkNote" value="${esc(p.mark&&p.mark.note||"")}" placeholder="למשל: דיברתי עם האמא, מחכה לתשובה על ברוך"></label>
+    <div class="ask-btns"><button class="btn pri" id="mkOk">שמירה</button>${p.mark?`<button class="btn ghost" id="mkDel">הסרת הסימון</button>`:""}<button class="btn ghost" id="mkCancel">ביטול</button></div></div>`;
+  box.classList.remove("hidden");
+  const close = ()=>{ box.classList.add("hidden"); box.innerHTML = ""; };
+  box.querySelectorAll(".mkdot").forEach(d=>d.onclick = ()=>{ color = d.dataset.c; box.querySelectorAll(".mkdot").forEach(x=>x.classList.toggle("on", x===d)); });
+  box.querySelector("#mkOk").onclick = ()=>{ p.mark = {color, note: box.querySelector("#mkNote").value.trim(), at: new Date().toISOString()}; p.updated = today(); close(); save(); render(); if(ui.openPerson===id) openPerson(id); toast("הסימון נשמר"); };
+  box.querySelector("#mkCancel").onclick = close;
+  const del = box.querySelector("#mkDel"); if(del) del.onclick = ()=>{ close(); clearMark(id); };
+  box.querySelector("#mkNote").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); box.querySelector("#mkOk").click(); } if(e.key==="Escape") close(); });
+  setTimeout(()=>box.querySelector("#mkNote").focus(), 60);
+}
+function clearMark(id){ const p = personById(id); if(!p) return; delete p.mark; save(); render(); if(ui.openPerson===id) openPerson(id); toast("הסימון הוסר"); }
+
+function renderOrderSetting(){
+  const host = $("#orderHost"); if(!host) return;
+  const m = fieldOrderMode(), has = !!(DB.fieldOrder && DB.fieldOrder.length);
+  host.innerHTML = `
+    <label class="todo"><input type="radio" name="fo" value="source" ${m==="source"?"checked":""}> <span>כמו בטופס / בגיליון ${has ? `(נלמד ${fmtWhen(DB.fieldOrderSrc||"")}, ${DB.fieldOrder.length} שדות)` : "<i style='color:var(--ink-faint)'>— עדיין לא נלמד סדר; עד אז מוצג לפי נושאים</i>"}</span></label>
+    <label class="todo"><input type="radio" name="fo" value="topics" ${m==="topics"?"checked":""}> <span>לפי נושאים (זיהוי, קשר, רקע…)</span></label>`;
+  host.querySelectorAll("input[name=fo]").forEach(r=>r.onchange = ()=>{ try{ localStorage.setItem("field_order", r.value); }catch(e){} toast("סדר השדות עודכן"); renderOrderSetting(); });
+}
+
 const SECTIONS = ["זיהוי","קשר","רקע","מראה חיצוני","אופי והשקפה","משפחה","מה מחפשים","שאלות עומק","היסטוריית שידוכים","בחור ישיבה","הערות"];
 
 const SYN = {
@@ -2053,7 +2177,7 @@ function render(){
   }
   renderStats();
   renderStatusBar();
-  if(ui.view==="backup") renderRP();
+  if(ui.view==="backup"){ renderRP(); renderOrderSetting(); }
   if(ui.view==="cards") renderCards();
   if(ui.view==="matches") renderMatches();
   if(ui.view==="followup") renderFollowup();
@@ -2097,6 +2221,7 @@ function filtered(){
     if(p.hold) return false;                    /* פנייה מושהית — עד אישור השדכנית */
     if(ui.gender && p.gender!==ui.gender) return false;
     if(ui.status && (p.status||"פנוי")!==ui.status) return false;
+    if(ui.mark && !p.mark) return false;
     if(ui.sector && p.community!==ui.sector) return false;
     if(ui.openTo && !(p.openTo||[]).includes(ui.openTo)) return false;
     const age = parseFloat(p.age);
@@ -2125,6 +2250,7 @@ function filtered(){
   }
   const s = ui.sort;
   list.sort((a,b)=>{
+    if(s==="mark") return (b.mark?1:0)-(a.mark?1:0) || String(b.mark&&b.mark.at||"").localeCompare(String(a.mark&&a.mark.at||"")) || String(a.fullName||"").localeCompare(String(b.fullName||""),"he");
     if(s==="age") return (parseFloat(a.age)||999)-(parseFloat(b.age)||999);
     if(s==="updated") return (b.updated||"").localeCompare(a.updated||"");
     if(s==="filled") return String(b.filledAt||"").localeCompare(String(a.filledAt||""));
@@ -2159,7 +2285,7 @@ function renderCards(keepLimit){
       ${fc.sheetId?"":`<button class="btn pri" onclick="setView('import')">העלאת קובץ</button>`}</div>`;
     return;
   }
-  const plain = !ui.q.trim() && !S && !ui.gender && !ui.status && !ui.sector && !ui.openTo;
+  const plain = !ui.q.trim() && !S && !ui.gender && !ui.status && !ui.sector && !ui.openTo && !ui.mark;
   const fbanner = (plain ? welcomeHtml() : "") + connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
       <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
       <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
@@ -2187,7 +2313,8 @@ function renderCards(keepLimit){
       (p.filledAt || p.created) ? `<span style="color:var(--ink-faint);font-size:12px">📅 ${p.filledAt?"מילא/ה ":"נקלט/ה "}${esc(fmtDay(p.filledAt || p.created).split(" · ")[0])}</span>` : ""
     ].filter(Boolean).map(x=>`<div>${x}</div>`).join("");
     const st = p.status || "פנוי";
-    return `<button class="pcard ${gclass(p)}" onclick="openPerson('${p.id}')">
+    const mk = p.mark ? (MARKS.find(m=>m[0]===p.mark.color)||MARKS[0])[0] : "";
+    return `<button class="pcard ${gclass(p)}${mk?" mk":""}" ${mk?`style="--mkc:${mk}"`:""} onclick="openPerson('${p.id}')">
       <span class="badge ${statusClass(st)}">${esc(st)}</span>
       <div class="pcard-head">
         ${avatar(p,38)}
@@ -2197,6 +2324,7 @@ function renderCards(keepLimit){
         </div>
       </div>
       <div class="rows">${rows||'<div style="color:#c3cad1">אין פרטים נוספים</div>'}</div>
+      ${mk?`<div class="mknote" title="${esc(p.mark.note||"")}">🚩 ${esc(p.mark.note||"מסומן")}</div>`:""}
       ${(p.community||open||(p.tags||[]).length)?`<div class="tagline">
         ${p.community?`<span class="tag">${esc(p.community)}</span>`:""}
         ${(p.tags||[]).map(t=>`<span class="tag" style="background:var(--teal-light);color:var(--teal)">${esc(t)}</span>`).join("")}
@@ -2285,7 +2413,21 @@ function openPerson(id, tab){
   if(winTab === "file"){ renderFileTab(p); openSheet(); return; }
 
   let body = "";
-  SECTIONS.forEach(sec=>{
+  body += markBand(p);
+  const fieldRow = f=>{
+      const v = disp(p[f.k]);
+      const shown = !v ? "—"
+        : f.t==="tel" ? `<a href="tel:${esc(String(v).replace(/[^\d+]/g,""))}" style="color:inherit">${esc(v)}</a>`
+        : esc(v);
+      return `<div class="fieldrow"><dt>${f.l}</dt><dd class="${v?"":"na"}">${shown}${v && (p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</dd></div>`;
+  };
+  const extraRow = k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; };
+  const ord = orderedFieldList();
+  if(ord){
+    body += `<div class="sect">הפרטים — בסדר של הטופס</div><dl style="margin:0">` + ord.main.map(e=>e.f ? fieldRow(e.f) : extraRow(e.x)).join("") + `</dl>`;
+    if(ord.rest.length) body += `<div class="sect">שדות נוספים (לא בטופס)</div><dl style="margin:0">` + ord.rest.map(e=>e.f ? fieldRow(e.f) : extraRow(e.x)).join("") + `</dl>`;
+  }
+  (ord ? [] : SECTIONS).forEach(sec=>{
     const fs = FIELDS.filter(f=>f.sec===sec && f.k!=="fullName");
     body += `<div class="sect">${sec}</div><dl style="margin:0">` + fs.map(f=>{
       const v = disp(p[f.k]);
@@ -2297,7 +2439,7 @@ function openPerson(id, tab){
     }).join("") + `</dl>`;
   });
 
-  const extraKeys = allExtraKeys();
+  const extraKeys = ord ? [] : allExtraKeys();
   if(extraKeys.length){
     body += `<div class="sect">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)</div><dl style="margin:0">` +
       extraKeys.map(k=>{ const v = (p.extra||{})[k]; return `<div class="fieldrow"><dt>${esc(k)}</dt><dd class="${v?"":"na"}">${v?esc(v):"—"}${v && (p.fieldDates||{})["x:"+k] ? dateChip(p.fieldDates["x:"+k], "עודכן") : ""}</dd></div>`; }).join("") + `</dl>`;
@@ -2397,45 +2539,29 @@ function editPerson(id){
         <div class="photo-note">התמונה נשמרת במחשב בלבד ומוקטנת אוטומטית. כברירת מחדל היא נשארת בתיק הפנימי ולא נכנסת לכרטיס שנשלח החוצה.</div>
       </div>
     </div>`;
-  SECTIONS.forEach(sec=>{
+  const ordE = orderedFieldList();
+  const editInput = f=>{
+      const v = p[f.k]==null ? "" : p[f.k];
+      return fieldInputHtml(f, v, p);
+  };
+  if(ordE){
+    const xi = new Map(allExtraKeys().map((k,i)=>[k,i]));
+    const xField = k=>{ const i = xi.get(k); const v = String((p.extra||{})[k]==null?"":(p.extra||{})[k]);
+      return `<div class="field${v.length>60?" wide":""}"><label>${esc(k)}</label>${v.length>60
+        ? `<textarea id="x_${i}" data-xkey="${esc(k)}">${esc(v)}</textarea>`
+        : `<input id="x_${i}" data-xkey="${esc(k)}" value="${esc(v)}">`}</div>`; };
+    html += `<div class="sect">הפרטים — בסדר של הטופס</div><div class="form-grid">` + editInput(FIELDS.find(f=>f.k==="fullName")) + ordE.main.map(e=>e.f ? editInput(e.f) : xField(e.x)).join("") + `</div>`;
+    html += `<div class="sect" style="display:flex;align-items:center;gap:8px">שדות נוספים (לא בטופס)
+      <button class="btn ghost sm" style="margin-inline-start:auto" onclick="addExtraField()">+ שדה חדש לכל הכרטיסים</button></div>
+      <div class="form-grid" id="xFields">` + ordE.rest.map(e=>e.f ? editInput(e.f) : xField(e.x)).join("") + `</div>`;
+  }
+  (ordE ? [] : SECTIONS).forEach(sec=>{
     html += `<div class="sect">${sec}</div><div class="form-grid">`;
-    FIELDS.filter(f=>f.sec===sec).forEach(f=>{
-      const v = p[f.k]==null?"":p[f.k];
-      const wide = (f.t==="textarea"||f.t==="multi"||f.k==="fullName"||f.k==="family") ? " wide":"";
-      let input;
-      if(f.t==="select"){
-        /* ערך שלא ברשימה (למשל "רווקה" מהטופס) נשאר כאפשרות בחורה — כדי ששמירה לא תמחק אותו */
-        const unknown = v!=="" && !f.opts.includes(v);
-        input = `<select id="f_${f.k}"><option value=""></option>` +
-          (unknown ? `<option selected>${esc(v)}</option>` : "") +
-          f.opts.map(o=>`<option ${o===v?"selected":""}>${esc(o)}</option>`).join("") + `</select>`;
-      }else if(f.t==="combo"){
-        input = `<input id="f_${f.k}" list="dl_${f.k}" value="${esc(v)}" placeholder="בחירה או הקלדה חופשית">
-          <datalist id="dl_${f.k}">${f.opts.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
-      }else if(f.t==="multi"){
-        const arr = Array.isArray(v)?v:[];
-        input = `<div class="multi">` + f.opts.map(o=>
-          `<label><input type="checkbox" data-multi="${f.k}" value="${esc(o)}" ${arr.includes(o)?"checked":""}>${esc(o)}</label>`
-        ).join("") + `</div>`;
-      }else if(f.t==="refs"){
-        const arr = Array.isArray(v)?v:[];
-        input = `<div class="refs" id="refsBox">${arr.map(r=>refRow(r)).join("")}</div>
-          <button class="btn ghost sm" onclick="addRefRow()" style="margin-top:6px">+ הוספת ממליץ</button>
-          <datalist id="dlRoles">${["ר\u05F4מ בישיבה","רב הקהילה","ראש הכולל","מדריכה בסמינר","חברותא",
-            "חברה קרובה","מכיר משפחתי","שכן","מעסיק"].map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`;
-      }else if(f.t==="textarea"){
-        input = `<textarea id="f_${f.k}">${esc(v)}</textarea>`;
-      }else{
-        /* שדה מספרי כטקסט — גיל כמו "עשרים ושלוש" או "22 וחצי" לא יימחק בשמירה */
-        const ty = f.t==="number" ? `text" inputmode="decimal` : f.t;
-        input = `<input id="f_${f.k}" type="${ty}" value="${esc(v)}">`;
-      }
-      html += `<div class="field${wide}"><label for="f_${f.k}">${f.l}${(p.fieldDates||{})[f.k] ? dateChip(p.fieldDates[f.k], "עודכן") : ""}</label>${input}</div>`;
-    });
+    FIELDS.filter(f=>f.sec===sec).forEach(f=>{ html += fieldInputHtml(f, p[f.k]==null?"":p[f.k], p); });
     html += `</div>`;
   });
-  const extraKeys = allExtraKeys();
-  html += `<div class="sect" style="display:flex;align-items:center;gap:8px">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)
+  const extraKeys = ordE ? [] : allExtraKeys();
+  if(!ordE) html += `<div class="sect" style="display:flex;align-items:center;gap:8px">פרטים נוספים (עמודות מהאקסל ושדות שהוספת)
       <button class="btn ghost sm" style="margin-inline-start:auto" onclick="addExtraField()">+ שדה חדש לכל הכרטיסים</button></div>
     <div class="form-grid" id="xFields">` +
     extraKeys.map((k,i)=>{ const v = String((p.extra||{})[k]==null?"":(p.extra||{})[k]);
@@ -3111,6 +3237,7 @@ async function runImportBody(){
 
   const F = formDB(), seen = new Set(F.seen);
   registerExtraHeaders(pending.headers, (h,i)=>map[i]==="__extra");
+  learnFieldOrder(pending.headers, (h,i)=>map[i]);
   const tsCol = pending.headers.findIndex(h=>/חותמת זמן|timestamp|תאריך מילוי/i.test(String(h||"")));
   pending.rows.forEach((r, idx)=>{
     const rowNo = idx + 2;   /* מספר השורה כפי שרואים אותה באקסל (שורה 1 = כותרות) */
@@ -5988,6 +6115,7 @@ async function syncForm(manual, dryRun){
     const {headers, rows, counts, tabCount} = await fetchFormRows(token);
     if(CRY.locked){ FORM.busy = false; return null; }   /* ננעל בזמן הקריאה — לא נוגעים בנתונים */
     if(!dryRun && registerExtraHeaders(headers, h=>guessField(h)==="__extra")) save();
+    if(!dryRun){ learnFieldOrder(headers, h=>guessField(h)); save(); }
     if(!headers.length) throw new Error("הגיליון ריק — עוד אין בו תשובות");
     if(!headers.some(h=>guessField(h)==="fullName"))
       throw new Error("לא נמצאה בגיליון עמודת שם (למשל ״שם פרטי ומשפחה״) — האם זה הגיליון הנכון?");
@@ -6957,6 +7085,9 @@ $$("[data-status]").forEach(b=>b.addEventListener("click",()=>{
   $$("[data-status]").forEach(x=>x.classList.toggle("on",x===b));
   renderCards();
 }));
+$$("[data-mark]").forEach(b=>b.addEventListener("click",()=>{
+  ui.mark = !ui.mark; b.classList.toggle("on", ui.mark); renderCards();
+}));
 $$("[data-mstatus]").forEach(b=>b.addEventListener("click",()=>{
   ui.mstatus=b.dataset.mstatus;
   $$("[data-mstatus]").forEach(x=>x.classList.toggle("on",x===b));
@@ -6971,7 +7102,7 @@ $("#fOpen").addEventListener("change", e=>{ ui.openTo=e.target.value; renderCard
 $("#fAgeMin").addEventListener("input", e=>{ ui.ageMin=parseFloat(e.target.value)||null; renderCards(); });
 $("#fAgeMax").addEventListener("input", e=>{ ui.ageMax=parseFloat(e.target.value)||null; renderCards(); });
 $("#btnClearFilters").addEventListener("click",()=>{
-  ui.sector=ui.openTo=""; ui.ageMin=ui.ageMax=null; ui.gender=ui.status="";
+  ui.sector=ui.openTo=""; ui.ageMin=ui.ageMax=null; ui.gender=ui.status=""; ui.mark=false; $$("[data-mark]").forEach(x=>x.classList.remove("on"));
   $("#fSector").value=""; $("#fOpen").value=""; $("#fAgeMin").value=""; $("#fAgeMax").value="";
   $$("[data-gender]").forEach(x=>x.classList.toggle("on", x.dataset.gender===""));
   $$("[data-status]").forEach(x=>x.classList.toggle("on", x.dataset.status===""));
