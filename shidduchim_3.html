@@ -495,6 +495,27 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
 .ptag-add:hover{border-color:var(--teal);color:var(--teal)}
 .pcard-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}
 .pcard-tag{background:var(--soft2);border-radius:5px;padding:1px 7px;font-size:11px;color:var(--ink-soft)}
+.seeker{background:linear-gradient(135deg,var(--teal-light),var(--card));border:1px solid rgba(42,157,147,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.seeker h4{margin:0 0 6px;font-size:14.5px;color:var(--teal)}
+.seeker .sk{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px;font-size:13.5px}
+.seeker .sk b{color:var(--ink-soft);font-weight:600;display:block;font-size:12px}
+.seeker .sk div{line-height:1.45}
+.seeker .skred{grid-column:1/-1;background:rgba(201,86,77,.1);border:1px solid rgba(201,86,77,.35);border-radius:8px;padding:6px 10px}
+.seeker .skred b{color:#9c3a33}
+.seeker .sknote{grid-column:1/-1;background:var(--brass-light);border-radius:8px;padding:6px 10px}
+.pcard .tag.act{background:#fff3e0;color:#b25e0b}
+.actband{display:flex;gap:10px;align-items:center;background:#fff6ea;border:1px solid #f0c98e;border-radius:10px;padding:9px 12px;margin:8px 0 2px;font-size:14px}
+.actband.late{background:#fdebea;border-color:#e9a39c}
+.actband span{flex:1;min-width:0} .actband small{display:block;color:var(--ink-faint);font-size:11.5px}
+:root[data-theme="night"] .actband{background:#3a2c14;border-color:#8a6a2a} :root[data-theme="night"] .actband.late{background:#3a1e1a;border-color:#7a3b31}
+:root[data-theme="night"] .pcard .tag.act{background:#3a2c14;color:#e2c078}
+.paytbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+.paytbl th,.paytbl td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
+.paytbl th{font-size:12px;color:var(--ink-faint);font-weight:600}
+.paytbl .due{color:#9c3a33;font-weight:700} .paytbl .okp{color:#1f6f68;font-weight:700}
+.payform{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;align-items:end;background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:10px}
+.payform label{font-size:12px;color:var(--ink-soft);display:block} .payform input,.payform select{width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;background:var(--card)}
+.fin-month{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line);font-size:14px}
 .dash-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .dash-stat{flex:1;min-width:110px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;text-align:center}
 .dash-stat b{display:block;font-family:var(--display);font-size:26px;line-height:1.1;color:var(--ink)}
@@ -731,6 +752,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <button data-view="cards" class="on"><span class="ic">▤</span> כרטסייה</button>
       <button data-view="matches"><span class="ic">◇</span> שידוכים</button>
       <button data-view="followup"><span class="ic">◷</span> מעקב ולוח בקרה</button>
+      <button data-view="finance"><span class="ic">₪</span> תשלומים</button>
       <button data-view="resources"><span class="ic">❐</span> חומרים והודעות <b class="nav-badge hidden" id="resBadge">חדש</b></button>
       <button data-view="intake"><span class="ic">⚑</span> קליטה וניהול <b class="nav-badge hidden" id="intakeBadge"></b></button>
       <button data-view="import"><span class="ic">↧</span> ייבוא קובץ</button>
@@ -790,6 +812,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
         <button class="chip" data-status="נסגר">נסגרו</button>
         <span class="divider-v"></span>
         <button class="chip mkchip" data-mark="1" title="רק כרטיסים שסימנת ״לאן הגעתי״">🚩 מסומנים</button>
+        <button class="chip" data-active="1" title="רק מי שנמצא באיתור אקטיבי">🔎 באיתור</button>
         <span class="divider-v"></span>
         <select class="mini" id="fSector"><option value="">כל החוגים</option></select>
         <select class="mini" id="fOpen"><option value="">פתוח/ה לכל חוג</option></select>
@@ -832,6 +855,12 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <h2>מעקב ולוח בקרה</h2>
       <div class="sub">תמונת מצב במבט אחד, ומה מחכה לטיפול: פגישות היום, משימות פתוחות, ומי שלא דיברתם איתו מזמן.</div>
       <div id="followupHost"></div>
+    </section>
+
+    <section class="page hidden" id="view-finance">
+      <h2>תשלומים והנהלת חשבונות</h2>
+      <div class="sub">כל התשלומים של המועמדים במקום אחד: מה שולם, מי עוד חייב, וסיכום לפי חודש. ייצוא לאקסל לרואה החשבון בלחיצה.</div>
+      <div id="finHost"></div>
     </section>
 
     <!-- ===== INTAKE ===== -->
@@ -1208,6 +1237,31 @@ function decorateBookmarks(p){
     }
   });
 }
+/* ---- איתור אקטיבי ---- */
+function activeDays(p){ return p.active ? daysSince(p.active.touched || p.active.since) : 0; }
+function activeLate(p){ return p.active && activeDays(p) >= (p.active.every || 7); }
+function activeBand(p){
+  if(!p.active) return `<div style="margin:6px 0 2px"><button class="btn ghost sm" onclick="editActive('${p.id}')" title="סימון שהמועמד באיתור אקטיבי — יופיע בלוח הבקרה עם תזכורת">🔎 להכניס לאיתור אקטיבי</button></div>`;
+  const d = activeDays(p), late = activeLate(p);
+  return `<div class="actband ${late?"late":""}"><b>🔎</b><span><b>באיתור אקטיבי</b> מאז ${esc(fmtDay(p.active.since))}${p.active.next ? ` · הצעד הבא: <b>${esc(p.active.next)}</b>` : ""}
+      <small>${late ? `⚠ לא טופל ${d} ימים (תזכורת כל ${p.active.every||7})` : `טופל לאחרונה ${d===0?"היום":"לפני "+d+" ימים"} · תזכורת כל ${p.active.every||7} ימים`}</small></span>
+    <button class="btn sm pri" onclick="activeTouch('${p.id}')" title="מסמן שטיפלת היום ומאפס את התזכורת">✓ טופל היום</button>
+    <button class="btn ghost sm" onclick="editActive('${p.id}')">שינוי</button></div>`;
+}
+async function editActive(id){
+  const p = personById(id); if(!p) return;
+  const a = p.active || {};
+  const r = await ask({title: (p.active ? "איתור אקטיבי — " : "הכנסה לאיתור אקטיבי — ") + p.fullName,
+    note: "המועמד יופיע ברשימת האיתור האקטיבי בלוח הבקרה, עם התראה כשעובר הזמן בלי טיפול.",
+    fields: [{label:"הצעד הבא (למשל: לפנות לשדכניות גבעות)", type:"text", value:a.next||""},
+             {label:"להזכיר אם לא טופל — כל כמה ימים", type:"number", value:String(a.every||7)}],
+    ok: p.active ? "שמירה" : "התחלת איתור", cancel: p.active ? "סיום האיתור" : "ביטול"});
+  if(!r){ if(p.active && confirm(`לסיים את האיתור האקטיבי של ${p.fullName}?`)){ delete p.active; save(); render(); if(ui.openPerson===id) openPerson(id); toast("האיתור הסתיים"); } return; }
+  p.active = {since: a.since || today(), touched: a.touched || today(), next: (r[0]||"").trim(), every: Math.max(1, parseInt(r[1],10)||7)};
+  save(); render(); if(ui.openPerson===id) openPerson(id); toast(p.active.next ? "נשמר — הצעד הבא: " + p.active.next : "נשמר");
+}
+function activeTouch(id){ const p = personById(id); if(!p || !p.active) return; p.active.touched = today(); save(); render(); if(ui.openPerson===id) openPerson(id); toast("סומן כטופל היום"); }
+
 function markBand(p){
   if(!p.mark) return `<div class="mkband-slot" style="margin:8px 0 2px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn ghost sm" onclick="editMark('${p.id}')" title="צבע בולט + משפט: לאן הגעתי ומה הצעד הבא">🚩 סימון — לאן הגעתי</button>
     <span style="font-size:12.5px;color:var(--ink-faint)">או לחיצה על 🚩 הקטן ליד שדה — "הגעתי עד כאן"</span></div>`;
@@ -1684,13 +1738,15 @@ function adoptDB(d){
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
         form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || [], extraFields: d.extraFields || [],
         fieldOrder: d.fieldOrder || null, fieldOrderSrc: d.fieldOrderSrc || "", fieldOrderManual: !!d.fieldOrderManual,
-        resources: Array.isArray(d.resources) ? d.resources : [], resSeedV: d.resSeedV || 0};
+        resources: Array.isArray(d.resources) ? d.resources : [], resSeedV: d.resSeedV || 0,
+        payments: Array.isArray(d.payments) ? d.payments : []};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
 let saveTimer = null, saving = false, dirty = false;
 function save(){
   dirty = true;
+  try{ sheetSchedule(); }catch(e){}
   try{ HAY.clear(); }catch(e){}   /* טקסט החיפוש יחושב מחדש — כך גם עריכה מאותו יום נמצאת בחיפוש */
   DRIVE.changed = true;   /* לגיבוי האוטומטי בסגירה */
   touchActivity();
@@ -1806,7 +1862,7 @@ function secCenter(focus){
         s.trash ? `<button class="btn sm" onclick="$('#ask').classList.add('hidden');setView('intake');setTimeout(()=>{const b=[...document.querySelectorAll('#view-intake button')].find(x=>/היסטוריה|סל מחזור/.test(x.textContent));if(b)b.click();},50)">לסל המחזור</button>` : "")}
     ${row(s.form.lvl, s.form.t, s.pend ? `${s.pend} תשובות מהטופס מחכות להחלטה שלך — שום דבר לא נכנס ולא נדרס בלי אישור.` : "תשובות חדשות מהטופס נכנסות ככרטיסים; מי שכבר קיים — מחכה לאישורך. מה שערכת בכלי לעולם לא נדרס על ידי הטופס.",
         s.pend ? `<button class="btn sm pri" onclick="$('#ask').classList.add('hidden');setView('intake')">לבדיקת התשובות</button>` : "")}
-    ${row("ok", "מה יוצא מהמחשב — ומה לא", "הכרטסייה עצמה לא נשלחת לשום שרת. לגוגל עולים רק הגיבויים (מוצפנים) ונקראות תשובות הטופס. לבינה המלאכותית נשלח רק תוכן, " + (aiAnon() ? "בלי שמות, טלפונים, מיילים ומזהים — הם מוחלפים בכינוי לפני השליחה." : "<b style='color:#9c3a33'>כרגע כולל שמות ופרטים מזהים — מומלץ להפעיל שליחה אנונימית בעמוד הגיבוי.</b>"))}
+    ${row("ok", "מה יוצא מהמחשב — ומה לא", "הכרטסייה עצמה לא נשלחת לשום שרת. לגוגל עולים רק הגיבויים (מוצפנים), נקראות תשובות הטופס" + (formCfg().sheetWrite ? ", ומתעדכנת לשונית ״" + SHEET_TAB + "״ בגיליון שלך" : "") + ". לבינה המלאכותית נשלח רק תוכן, " + (aiAnon() ? "בלי שמות, טלפונים, מיילים ומזהים — הם מוחלפים בכינוי לפני השליחה." : "<b style='color:#9c3a33'>כרגע כולל שמות ופרטים מזהים — מומלץ להפעיל שליחה אנונימית בעמוד הגיבוי.</b>"))}
     ${row(s.net.lvl, s.net.t, "הכלי עובד במלואו גם בלי אינטרנט — צפייה, עריכה, שיחות, חיפוש. רק הגיבוי לדרייב, הטופס והבינה המלאכותית צריכים חיבור, והם משלימים לבד כשהחיבור חוזר.")}
     <div class="ask-btns"><button class="btn pri" id="askOk">סגירה</button></div></div>`;
   box.classList.remove("hidden");
@@ -2423,7 +2479,7 @@ function openMatchesOf(id){
 function setView(v){
   ui.view = v;
   $$(".nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
-  ["cards","matches","followup","resources","intake","import","backup"].forEach(x=>{
+  ["cards","matches","followup","finance","resources","intake","import","backup"].forEach(x=>{
     $("#view-"+x).classList.toggle("hidden", x!==v);
   });
   render();
@@ -2442,6 +2498,7 @@ function render(){
   { const rb = $("#resBadge"); if(rb) rb.classList.toggle("hidden", !(RES_SEALED && DB.resSeedV !== RES_SEALED.v)); }
   if(ui.view==="backup"){ renderRP(); renderOrderSetting(); }
   if(ui.view==="resources") renderResources();
+  if(ui.view==="finance") renderFinance();
   if(ui.view==="cards") renderCards();
   if(ui.view==="matches") renderMatches();
   if(ui.view==="followup") renderFollowup();
@@ -2486,6 +2543,7 @@ function filtered(){
     if(ui.gender && p.gender!==ui.gender) return false;
     if(ui.status && (p.status||"פנוי")!==ui.status) return false;
     if(ui.mark && !p.mark) return false;
+    if(ui.active && !p.active) return false;
     if(ui.sector && p.community!==ui.sector) return false;
     if(ui.openTo && !(p.openTo||[]).includes(ui.openTo)) return false;
     const age = parseFloat(p.age);
@@ -2549,17 +2607,19 @@ function renderCards(keepLimit){
       ${fc.sheetId?"":`<button class="btn pri" onclick="setView('import')">העלאת קובץ</button>`}</div>`;
     return;
   }
-  const plain = !ui.q.trim() && !S && !ui.gender && !ui.status && !ui.sector && !ui.openTo && !ui.mark;
+  const plain = !ui.q.trim() && !S && !ui.gender && !ui.status && !ui.sector && !ui.openTo && !ui.mark && !ui.active;
   const fbanner = (plain ? welcomeHtml() : "") + connectBanner + (pend ? `<div class="smart-banner" style="background:var(--brass-light);border-color:#ecdcbe">
       <div><b>📝 ${pend} ${pend===1?"תשובה מהטופס ממתינה":"תשובות מהטופס ממתינות"} לבדיקה</b> — נראה שהממלאים כבר קיימים בכרטסייה (טלפון או מייל זהים).</div>
       <button class="btn sm pri" onclick="openFormReview()">בדיקה ואישור</button>
     </div>` : "");
-  const banner = fbanner + (S ? `<div class="smart-banner">
+  const seeker = S && S.forId && personById(S.forId) ? seekerPanelHtml(personById(S.forId), {closed:true, noSmart:true}) : "";
+  const banner = fbanner + seeker + (S ? `<div class="smart-banner">
       <div><b>✨ חיפוש חכם:</b> "${esc(S.label)}" · ${list.length} תוצאות, המתאימים ביותר ראשונים
         <div class="smart-chips">${[
           S.gender, S.ageMin&&("מגיל "+S.ageMin), S.ageMax&&("עד גיל "+S.ageMax),
           ...S.sectors, ...S.openTo.map(x=>"פתוח/ה ל"+x), ...S.cities, ...S.keywords
         ].filter(Boolean).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}</div></div>
+      ${S.forId?`<button class="btn sm pri" onclick="openSuggest('${S.forId}')">↩ חזרה להצעה</button>`:""}
       <button class="btn ghost sm" onclick="smartSearch()">שינוי</button>
       <button class="btn ghost sm" onclick="clearSmart()">× ניקוי</button>
     </div>` : "");
@@ -2589,8 +2649,9 @@ function renderCards(keepLimit){
       </div>
       <div class="rows">${rows||'<div style="color:#c3cad1">אין פרטים נוספים</div>'}</div>
       ${mk?`<div class="mknote" title="${esc(p.mark.note||"")}">${p.mark.note ? "🚩 " + esc(p.mark.note) : p.mark.field ? "📍 הגעתי עד: " + esc(fieldLabel(p.mark.field)) : "🚩 מסומן"}</div>`:""}
-      ${(p.community||open||(p.tags||[]).length)?`<div class="tagline">
+      ${(p.community||open||p.active||(p.tags||[]).length)?`<div class="tagline">
         ${p.community?`<span class="tag">${esc(p.community)}</span>`:""}
+        ${p.active?`<span class="tag act">🔎 איתור${activeLate(p)?" ⚠":""}</span>`:""}
         ${(p.tags||[]).map(t=>`<span class="tag" style="background:var(--teal-light);color:var(--teal)">${esc(t)}</span>`).join("")}
         ${(p.openTo||[]).length?`<span class="tag">+${p.openTo.length} חוגים</span>`:""}
         ${open?`<span class="tag">${open===1?"הצעה פתוחה אחת":open+" הצעות פתוחות"}</span>`:""}
@@ -2655,7 +2716,7 @@ function openPerson(id, tab){
   if(tab) winTab = tab;
   ui.openPerson = id;
   const st = p.status || "פנוי";
-  const T = [["details","פרטים"],["file","התיק והפגישות"],["card","כרטיס שידוכים"]];
+  const T = [["details","פרטים"],["file","התיק והפגישות"],["pay","תשלומים" + ((DB.payments||[]).some(x=>x.pid===id && !x.paid) ? " ⚠" : "")],["card","כרטיס שידוכים"]];
 
   $("#sheetHead").innerHTML = `
     <div class="win-title">
@@ -2675,9 +2736,11 @@ function openPerson(id, tab){
 
   if(winTab === "card"){ renderCardTab(p); openSheet(); return; }
   if(winTab === "file"){ renderFileTab(p); openSheet(); return; }
+  if(winTab === "pay"){ renderPayTab(p); openSheet(); return; }
 
   let body = "";
   body += markBand(p);
+  body += activeBand(p);
   const fieldRow = f=>{
       const v = disp(p[f.k]);
       const shown = !v ? "—"
@@ -2737,6 +2800,85 @@ function openPerson(id, tab){
     <button class="btn ghost" onclick="window.print()">הדפסה</button>
     <button class="btn danger sm" style="margin-inline-start:auto" onclick="delPerson('${id}')">מחיקה</button>`;
   openSheet();
+}
+
+/* ---- תשלומים ---- */
+const PAY_KINDS = [["פגישה", 200], ["חבילת איתור אקטיבי", 0], ["אחר", 0]];
+const ils = n => "₪" + (Math.round((+n||0)*100)/100).toLocaleString("he-IL");
+function payOf(pid){ return (DB.payments||[]).filter(x=>x.pid===pid).sort((a,b)=>String(b.date).localeCompare(String(a.date))); }
+function payRow(x, withName){
+  const p = withName ? personById(x.pid) : null;
+  return `<tr><td>${esc(fmtDay(x.date))}</td>${withName?`<td><a href="#" onclick="openPerson('${x.pid}','pay');return false">${esc(p?p.fullName:"—")}</a></td>`:""}<td>${esc(x.kind)}${x.note?`<div style="font-size:12px;color:var(--ink-faint)">${esc(x.note)}</div>`:""}</td>
+    <td>${ils(x.amount)}</td><td class="${x.paid?"okp":"due"}">${x.paid ? "שולם" + (x.paidDate?" "+esc(fmtDay(x.paidDate)):"") : "ממתין"}${x.ref?`<div style="font-size:11.5px;color:var(--ink-faint);font-weight:400">אסמכתא: ${esc(x.ref)}</div>`:""}</td>
+    <td style="white-space:nowrap">${x.paid?`<button class="btn ghost sm" onclick="payToggle('${x.id}')">בטל סימון</button>`:`<button class="btn sm pri" onclick="payToggle('${x.id}')">✓ שולם</button>`}
+      <button class="btn ghost sm" onclick="payDel('${x.id}')" title="מחיקה">🗑</button></td></tr>`;
+}
+function renderPayTab(p){
+  const rows = payOf(p.id), paid = rows.filter(x=>x.paid).reduce((s,x)=>s+(+x.amount||0),0), due = rows.filter(x=>!x.paid).reduce((s,x)=>s+(+x.amount||0),0);
+  $("#sheetBody").innerHTML = `<div class="win-col">
+    <div class="dash-stats"><div class="dash-stat"><b>${ils(paid)}</b><span>שולם בסך הכול</span></div><div class="dash-stat ${due?"warn":""}"><b>${ils(due)}</b><span>ממתין לתשלום</span></div><div class="dash-stat"><b>${rows.length}</b><span>חיובים</span></div></div>
+    <div class="payform">
+      <div><label>סוג</label><select id="payKind" onchange="const a=document.getElementById('payAmt'); const k=this.value; const d={${PAY_KINDS.map(([k,v])=>`'${k}':${v}`).join(",")}}[k]; if(d) a.value=d;">${PAY_KINDS.map(([k])=>`<option>${k}</option>`).join("")}</select></div>
+      <div><label>סכום (₪)</label><input id="payAmt" type="number" inputmode="decimal" value="200"></div>
+      <div><label>תאריך</label><input id="payDate" type="date" value="${today()}"></div>
+      <div><label>הערה</label><input id="payNote" placeholder="למשל: פגישת היכרות בזום"></div>
+      <div><label>אסמכתא</label><input id="payRef" placeholder="מס' העברה / קבלה"></div>
+      <div><label class="todo" style="margin-top:18px"><input type="checkbox" id="payPaid"> <span>כבר שולם</span></label></div>
+      <div><button class="btn pri" style="width:100%" onclick="payAdd('${p.id}')">+ הוספת חיוב</button></div>
+    </div>
+    ${rows.length ? `<table class="paytbl"><thead><tr><th>תאריך</th><th>סוג</th><th>סכום</th><th>מצב</th><th></th></tr></thead><tbody>${rows.map(x=>payRow(x,false)).join("")}</tbody></table>`
+      : `<div style="color:var(--ink-faint);font-size:13.5px;margin-top:12px">עדיין לא נרשמו תשלומים למועמד זה.</div>`}
+  </div>`;
+  $("#sheetFoot").innerHTML = `<button class="btn" onclick="setView('finance')">לעמוד התשלומים הכללי</button><button class="btn ghost" onclick="openPerson('${p.id}')">חזרה לכרטיס</button>`;
+}
+function payAdd(pid){
+  const amt = parseFloat($("#payAmt").value); if(!(amt > 0)){ toast("צריך סכום"); $("#payAmt").focus(); return; }
+  DB.payments = DB.payments || [];
+  const paid = $("#payPaid").checked;
+  DB.payments.push({id: uid(), pid, date: $("#payDate").value || today(), kind: $("#payKind").value, amount: amt, note: ($("#payNote").value||"").trim(), ref: ($("#payRef").value||"").trim(), paid, paidDate: paid ? today() : "", created: new Date().toISOString()});
+  save(); openPerson(pid, "pay"); toast(paid ? "התשלום נרשם" : "החיוב נרשם — ממתין לתשלום");
+}
+function payToggle(id){ const x = (DB.payments||[]).find(y=>y.id===id); if(!x) return; x.paid = !x.paid; x.paidDate = x.paid ? today() : ""; save(); if(ui.view==="finance") renderFinance(); if(ui.openPerson) openPerson(x.pid, "pay"); render(); }
+function payDel(id){
+  const i = (DB.payments||[]).findIndex(y=>y.id===id); if(i<0) return;
+  const [gone] = DB.payments.splice(i,1); save(); if(ui.view==="finance") renderFinance(); if(ui.openPerson) openPerson(gone.pid, "pay");
+  toastUndo("החיוב נמחק", ()=>{ DB.payments.splice(i,0,gone); save(); if(ui.view==="finance") renderFinance(); if(ui.openPerson) openPerson(gone.pid, "pay"); });
+}
+function renderFinance(){
+  const host = $("#finHost"); if(!host) return;
+  const all = (DB.payments||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const month = today().slice(0,7);
+  const paidThisMonth = all.filter(x=>x.paid && String(x.paidDate||x.date).slice(0,7)===month).reduce((s,x)=>s+(+x.amount||0),0);
+  const open = all.filter(x=>!x.paid), openSum = open.reduce((s,x)=>s+(+x.amount||0),0);
+  const byMonth = {}; all.forEach(x=>{ if(!x.paid) return; const m = String(x.paidDate||x.date).slice(0,7); byMonth[m] = (byMonth[m]||0) + (+x.amount||0); });
+  const months = Object.keys(byMonth).sort().reverse();
+  const heMonth = m => { try{ return new Date(m+"-01").toLocaleDateString("he-IL",{month:"long",year:"numeric"}); }catch(e){ return m; } };
+  host.innerHTML = `
+    <div class="dash-stats">
+      <div class="dash-stat"><b>${ils(paidThisMonth)}</b><span>הכנסות החודש</span></div>
+      <div class="dash-stat ${openSum?"warn":""}"><b>${ils(openSum)}</b><span>ממתין לתשלום (${open.length})</span></div>
+      <div class="dash-stat"><b>${ils(all.filter(x=>x.paid).reduce((s,x)=>s+(+x.amount||0),0))}</b><span>סך הכול שולם</span></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px">
+      <button class="btn pri" onclick="exportPayments()">📊 ייצוא לאקסל (לרואה החשבון)</button>
+      <span style="font-size:12.5px;color:var(--ink-faint);align-self:center">רישום חיוב חדש — מתוך הכרטיס של המועמד, לשונית "תשלומים"</span>
+    </div>
+    ${open.length ? `<div class="sect" style="color:#9c3a33">ממתינים לתשלום (${open.length})</div>
+      <table class="paytbl"><thead><tr><th>תאריך</th><th>מועמד</th><th>סוג</th><th>סכום</th><th>מצב</th><th></th></tr></thead><tbody>${open.map(x=>payRow(x,true)).join("")}</tbody></table>` : `<div class="sect">אין תשלומים פתוחים ✓</div>`}
+    <div class="sect">לפי חודשים</div>
+    ${months.length ? months.map(m=>`<div class="fin-month"><span>${esc(heMonth(m))}</span><b>${ils(byMonth[m])}</b></div>`).join("") : `<div style="color:var(--ink-faint);font-size:13.5px">עדיין אין תשלומים.</div>`}
+    ${all.length ? `<div class="sect">כל החיובים (${all.length})</div>
+      <table class="paytbl"><thead><tr><th>תאריך</th><th>מועמד</th><th>סוג</th><th>סכום</th><th>מצב</th><th></th></tr></thead><tbody>${all.slice(0,300).map(x=>payRow(x,true)).join("")}</tbody></table>` : ""}`;
+}
+function paymentsAoa(db){
+  db = db || DB;
+  return [["תאריך","מועמד","טלפון","סוג","סכום","שולם","תאריך תשלום","אסמכתא","הערה"]].concat((db.payments||[]).map(x=>{ const p = (db.people||[]).find(y=>y.id===x.pid);
+    return [x.date, p?p.fullName:"", p?p.phone||"":"", x.kind, +x.amount||0, x.paid?"כן":"לא", x.paidDate||"", x.ref||"", x.note||""]; }));
+}
+function exportPayments(){
+  if(typeof XLSX==="undefined"){ toast("ספריית האקסל לא נטענה"); return; }
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(paymentsAoa()), "תשלומים");
+  XLSX.writeFile(wb, `תשלומים-${today()}.xlsx`); toast("קובץ התשלומים ירד");
 }
 
 function renderFileTab(p){
@@ -2936,7 +3078,8 @@ function delPerson(id){
   DB.sessions = DB.sessions.filter(x=>x.pid!==id);
   const unlinked = [];
   DB.sessions.forEach(x=>{ if(gone.has(x.mid)){ unlinked.push([x.id, x.mid]); delete x.mid; } });   /* התחקיר של הצד השני נשאר בתיק שלו */
-  { const t = DB.trash[DB.trash.length-1]; if(t && t.id===tid){ t.unlinked = unlinked; t.pendItems = pendOf; } }
+  { const t = DB.trash[DB.trash.length-1]; if(t && t.id===tid){ t.unlinked = unlinked; t.pendItems = pendOf; t.payments = (DB.payments||[]).filter(x=>x.pid===id); } }
+  DB.payments = (DB.payments||[]).filter(x=>x.pid!==id);
   { const F = formDB(); F.ignored = F.ignored || [];
     /* נמחק בכוונה — גם התשובות שלו שחיכו לאישור לא ייובאו שוב מהגיליון */
     personKeys(p).concat(F.pending.filter(it=>it.exId===id).map(it=>keyCanon(it.key))).forEach(k=>{ if(!F.ignored.includes(k)) F.ignored.push(k); });
@@ -3008,6 +3151,34 @@ function traitFit(a, b){
   return {score: Math.min(20, hits.length * 5), hits};
 }
 
+/* "דף המועמד לאיתור": מה המועמד מחפש, קווים אדומים, הערות פנימיות — קופץ כשמאתרים לו הצעה.
+   פנימי בלבד: לא נכנס לכרטיס שנשלח החוצה ולא נשלח ל-AI. */
+const SEEKER_KEYS = ["ageRange","openTo","preferredLocation","lookingTraits","lookingLooks","lookingReligious","lookingHashkafa","looking","lookingMore","mustTrait","goodRelationship","compromise","challenge"];
+function seekerPanelHtml(p, opts){
+  opts = opts || {};
+  const lab = k => (FIELDS.find(f=>f.k===k)||{}).l || k;
+  const cells = SEEKER_KEYS.filter(k=>hasVal(p[k])).map(k=>`<div><b>${esc(lab(k))}</b>${esc(disp(p[k]))}</div>`);
+  const red = hasVal(p.dealBreaker) ? `<div class="skred"><b>⛔ קו אדום: </b>${esc(disp(p.dealBreaker))}</div>` : "";
+  const notes = [hasVal(p.notes) ? `<b>הערות השדכנית: </b>${esc(String(p.notes).slice(0,400))}` : "",
+                 p.mark && (p.mark.note || p.mark.field) ? `<b>🚩 לאן הגעתי: </b>${esc(p.mark.note || ("עד " + fieldLabel(p.mark.field)))}` : "",
+                 p.active ? `<b>🔎 איתור אקטיבי</b> מאז ${esc(fmtDay(p.active.since))}${p.active.next ? " · הבא: " + esc(p.active.next) : ""}` : ""].filter(Boolean);
+  const ds = (p.datingStory ? `<div><b>סיפור דייטים (פנימי)</b>${esc(String(p.datingStory).slice(0,300))}</div>` : "");
+  if(!cells.length && !red && !notes.length && !ds) return "";
+  return `<details class="seeker" ${opts.closed?"":"open"}><summary style="cursor:pointer;list-style:none"><h4 style="display:inline">🎯 מה ${p.gender==="בת"?"היא מחפשת":"הוא מחפש"} — ${esc(p.fullName)}</h4>
+      <span style="font-size:12px;color:var(--ink-faint);margin-inline-start:8px">פנימי · לא יוצא מהכלי</span></summary>
+    <div class="sk" style="margin-top:8px">${red}${cells.join("")}${ds}${notes.length?`<div class="sknote">${notes.join("<br>")}</div>`:""}</div>
+    ${opts.noSmart ? "" : `<div style="margin-top:8px"><button class="btn sm" onclick="smartSearchFor('${p.id}')">✨ חיפוש חכם בכרטסייה לפי מה ש${p.gender==="בת"?"היא":"הוא"} מחפש/ת</button></div>`}
+  </details>`;
+}
+/* חיפוש חכם שמתחיל מהבקשה של המועמד עצמו */
+function smartSearchFor(id){
+  const p = personById(id); if(!p) return;
+  const want = p.gender==="בן" ? "בחורה" : p.gender==="בת" ? "בחור" : "";
+  const parts = [want, hasVal(p.ageRange) ? "גיל " + disp(p.ageRange) : "", disp(p.lookingTraits), disp(p.lookingReligious), disp(p.lookingHashkafa), disp(p.looking), disp(p.mustTrait), disp(p.preferredLocation) ? "אזור " + disp(p.preferredLocation) : ""]
+    .map(x=>String(x||"").trim()).filter(Boolean);
+  closeSheet();
+  smartSearch(parts.join(", ").slice(0, 400), id);
+}
 function openSuggest(id){
   const p = personById(id);
   const want = p.gender==="בן" ? "בת" : p.gender==="בת" ? "בן" : "";
@@ -3034,6 +3205,7 @@ function openSuggest(id){
   }).join("");
 
   $("#sheetBody").innerHTML = `<div class="win-col">
+    ${seekerPanelHtml(p)}
     <div id="smartBox">${p.aiMatch ? smartMatchHtml(p) : `<div class="ai-hint">✨ <b>התאמה חכמה:</b> ה-AI בוחן את 8 המובילים ברשימה, מדרג אותם לפי אופי, ערכים ורצונות, ומסביר למה — כולל פערים שכדאי לברר. רק בלחיצה על הכפתור למטה.</div>`}</div>
     <input id="pickQ" placeholder="סינון לפי שם…"
       style="width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:12px">
@@ -4005,6 +4177,7 @@ function buildWorkbook(db){
             x.notes||"", x.actions||"", x.done?"כן":"", x.next||""];
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([sHead,...sBody]), "פגישות");
+  if((db.payments||[]).length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(paymentsAoa(db)), "תשלומים");
   return wb;
 }
 
@@ -5974,10 +6147,10 @@ function copyProp(mid){
 /* ---------- 5) חיפוש במילים רגילות ----------
    ה-AI מקבל רק את משפט החיפוש — לא את המאגר. הוא מתרגם אותו לסינון,
    והסינון עצמו רץ במחשב. כך החיפוש פרטי ומהיר גם על אלפי כרטיסים. */
-async function smartSearch(){
+async function smartSearch(preset, forId){
   const r = await ask({title:"✨ חיפוש חכם",
-    note:"כתבו במילים רגילות את מי אתם מחפשים. למשל: בחורה רגועה שאוהבת טבע, עד גיל 26, מירושלים או מהסביבה.",
-    fields:[{label:"מה מחפשים?", type:"text", value:(ui.smart&&ui.smart.label)||""}], ok:"חיפוש"});
+    note: forId ? "החיפוש הוכן מתוך מה שהמועמד/ת כתב/ה. אפשר לערוך לפני החיפוש." : "כתבו במילים רגילות את מי אתם מחפשים. למשל: בחורה רגועה שאוהבת טבע, עד גיל 26, מירושלים או מהסביבה.",
+    fields:[{label:"מה מחפשים?", type:"text", value: preset || (ui.smart&&ui.smart.label)||""}], ok:"חיפוש"});
   if(!r || !r[0] || !r[0].trim()) return;
   const q = r[0].trim();
   toast("✨ מתרגם את החיפוש…");
@@ -5993,7 +6166,7 @@ keywords: מילות מפתח לחיפוש בטקסט החופשי של הכרט
   try{
     const d = aiParse(await callAI(prompt));
     ui.smart = {
-      label:q,
+      label:q, forId: forId || null,
       gender: ["בן","בת"].includes(normGender(d.gender)) ? normGender(d.gender) : "",
       ageMin: parseFloat(d.ageMin)||null, ageMax: parseFloat(d.ageMax)||null,
       sectors: (d.sectors||[]).filter(x=>SECTORS.includes(x)),
@@ -6245,7 +6418,7 @@ function applyConnectLink(){
   }catch(e){ return false; }
 }
 function formCfg(){
-  const def = {url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0};
+  const def = {url:"", sheetId:"", gid:"", auto:true, last:"", lastMsg:"", total:0, sheetWrite:false, wLast:"", wMsg:""};
   try{ return Object.assign(def, JSON.parse(localStorage.getItem("form_cfg")||"null")||{}); }catch(e){ return def; }
 }
 function formSave(c){ try{ localStorage.setItem("form_cfg", JSON.stringify(c)); }catch(e){} }
@@ -6288,7 +6461,7 @@ async function fetchFormRows(token){
   if(!tabs.length) throw new Error("הגיליון ריק — אין בו לשוניות");
   /* כשמחברים טופס מחדש, גוגל פותחת לשונית חדשה ("תגובות לטופס 2") והתשובות מתפצלות.
      לכן — אם לא נבחרה לשונית מסוימת — קוראים את כל לשוניות התשובות ומאחדים, בלי כפילויות. */
-  const pick = cfg.gid ? tabs.filter(t=>String(t.sheetId)===String(cfg.gid)) : tabs;
+  const pick = (cfg.gid ? tabs.filter(t=>String(t.sheetId)===String(cfg.gid)) : tabs).filter(t=>t.title !== SHEET_TAB);   /* הלשונית שהכלי כותב — לא תשובות */
   const read = async tab => {
     const range = encodeURIComponent("'" + tab.title.replace(/'/g,"''") + "'");
     const v = await sheetsApi(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`, token);
@@ -6519,6 +6692,74 @@ async function syncForm(manual, dryRun){
   }
 }
 /* בכניסה לכלי — בדיקה שקטה, אם מופעל */
+/* ---- כתיבה חזרה לגיליון: לשונית "מהכרטסייה" ----
+   אחרי כל שינוי בכלי (בהשהיה קצרה) הלשונית מתעדכנת עם כל הכרטיסים, כפי שהם בכלי.
+   לשונית התשובות של הטופס לא נוגעים בה לעולם. */
+const SHEET_TAB = "מהכרטסייה";
+const SHEETW = {busy:false, timer:null, pending:false};
+function peopleAoa(db){
+  db = db || DB;
+  const extraKeys = [...new Set((db.extraFields||[]).concat(db.people.flatMap(p=>Object.keys(p.extra||{}))))].filter(k=>!/חותמת זמן|timestamp|תאריך מילוי/i.test(k));
+  const head = ["חותמת זמן"].concat(FIELDS.map(f=>f.l), extraKeys, ["נקלט/ה", "עודכן/ה", "איתור אקטיבי", "לאן הגעתי"]);
+  const body = db.people.filter(p=>!p.hold).map(p=>[p.filledAt||""].concat(FIELDS.map(f=>disp(p[f.k])), extraKeys.map(k=>(p.extra||{})[k]||""),
+    [p.created||"", p.updated||"", p.active ? ("מאז " + p.active.since + (p.active.next ? " · " + p.active.next : "")) : "", p.mark ? (p.mark.note || (p.mark.field ? "עד " + fieldLabel(p.mark.field) : "")) : ""]));
+  return [head].concat(body).map(r=>r.map(c=>c==null ? "" : String(c)));
+}
+async function sheetsApiW(url, token, method, body){
+  const res = await fetch(url, {method, headers:{Authorization:"Bearer "+token, "Content-Type":"application/json"}, body: body ? JSON.stringify(body) : undefined});
+  if(res.ok) return res.json();
+  const t = await res.text().catch(()=>"");
+  if(res.status===403 && /insufficient|scope|PERMISSION_DENIED/i.test(t)){ DRIVE.token = null; DRIVE.tc = null; throw new Error("חסרה הרשאת כתיבה לגיליון — לחצו ״עדכון הלשונית עכשיו״ ואשרו את ההרשאה"); }
+  throw new Error("גוגל החזיר " + res.status + (t ? " · " + t.slice(0,120) : ""));
+}
+function sheetWriteStatus(txt, color){ const el = $("#sheetWStatus"); if(el) el.innerHTML = `<span style="color:${color||"var(--ink-soft)"}">${esc(txt)}</span>`; }
+function sheetSchedule(){
+  const c = formCfg(); if(!c.sheetWrite || !c.sheetId) return;
+  SHEETW.pending = true; clearTimeout(SHEETW.timer);
+  SHEETW.timer = setTimeout(()=>sheetPush(true), 20000);   /* מחכים שהעריכה תיגמר — ואז כותבים פעם אחת */
+}
+async function sheetPush(silent){
+  const c = formCfg();
+  if(!c.sheetWrite || !c.sheetId || CRY.locked) return false;
+  if(SHEETW.busy){ SHEETW.pending = true; return false; }
+  SHEETW.busy = true; SHEETW.pending = false; clearTimeout(SHEETW.timer);
+  sheetWriteStatus("מעדכן את הלשונית בגיליון…");
+  try{
+    const token = await driveToken(silent);
+    if(CRY.locked) return false;
+    const base = `https://sheets.googleapis.com/v4/spreadsheets/${c.sheetId}`;
+    const meta = await sheetsApi(`${base}?fields=sheets.properties(title,sheetId)`, token);
+    let tab = (meta.sheets||[]).map(x=>x.properties).find(t=>t.title===SHEET_TAB);
+    if(!tab){
+      const made = await sheetsApiW(`${base}:batchUpdate`, token, "POST", {requests:[{addSheet:{properties:{title:SHEET_TAB, gridProperties:{frozenRowCount:1}}}}]});
+      tab = made.replies[0].addSheet.properties;
+    }
+    const rows = peopleAoa();
+    const rng = encodeURIComponent("'" + SHEET_TAB + "'");
+    await sheetsApiW(`${base}/values/${rng}:clear`, token, "POST", {});
+    await sheetsApiW(`${base}/values/${rng}!A1?valueInputOption=RAW`, token, "PUT", {range: SHEET_TAB + "!A1", majorDimension:"ROWS", values: rows});
+    const c2 = formCfg(); c2.wLast = new Date().toISOString(); c2.wMsg = `${rows.length-1} כרטיסים`; formSave(c2);
+    sheetWriteStatus(`✓ הלשונית "${SHEET_TAB}" עודכנה: ${rows.length-1} כרטיסים · ${fmtWhen(c2.wLast)}`, "var(--teal)");
+    if(!silent) toast(`הגיליון עודכן — לשונית "${SHEET_TAB}" (${rows.length-1} כרטיסים)`);
+    return true;
+  }catch(err){
+    sheetWriteStatus("העדכון לגיליון לא הצליח: " + err.message, "var(--rose)");
+    if(!silent) toast(err.message);
+    return false;
+  }finally{
+    SHEETW.busy = false;
+    if(SHEETW.pending) sheetSchedule();
+  }
+}
+async function sheetWriteToggle(on){
+  const c = formCfg(); c.sheetWrite = !!on; formSave(c);
+  DRIVE.tc = null; DRIVE.token = null;   /* ההרשאה משתנה (קריאה בלבד ↔ כתיבה) — מבקשים מחדש */
+  renderForm();
+  if(on){ toast("מבקש הרשאת כתיבה לגיליון…"); await sheetPush(false); }
+  else sheetWriteStatus("הכתיבה לגיליון כבויה. הלשונית שכבר נוצרה נשארת בגיליון כמו שהיא.");
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden && SHEETW.pending && !CRY.locked) sheetPush(true); });
+
 function formAuto(){
   const c = formCfg();
   if(c.auto && c.sheetId && driveCfg().clientId) syncForm(false);
@@ -6549,6 +6790,15 @@ function renderForm(){
       <div class="field wide">
         <label class="todo"><input type="checkbox" id="formAuto" ${c.auto?"checked":""}>
           <span>בכל כניסה לכלי — לבדוק אוטומטית תשובות חדשות <b>ושינויים שנעשו בגיליון בדרייב</b></span></label>
+      </div>
+      <div class="field wide">
+        <label class="todo"><input type="checkbox" id="formWrite" ${c.sheetWrite?"checked":""} ${c.sheetId?"":"disabled"}>
+          <span><b>סנכרון לדרייב:</b> לעדכן בגיליון לשונית בשם "${SHEET_TAB}" עם כל הכרטיסים כפי שהם בכלי — אחרי כל שינוי
+            <span style="color:var(--ink-faint)">(לשונית התשובות של הטופס לא משתנה. דורש אישור הרשאה נוספת פעם אחת)</span></span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
+          ${c.sheetWrite?`<button class="btn sm" id="btnSheetNow">עדכון הלשונית עכשיו</button>`:""}
+          <span id="sheetWStatus" style="font-size:13px">${c.sheetWrite && c.wLast ? `<span style="color:var(--ink-soft)">עודכן לאחרונה ${esc(fmtWhen(c.wLast))} · ${esc(c.wMsg||"")}</span>` : ""}</span>
+        </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -6587,6 +6837,8 @@ function renderForm(){
     if(res && res.fresh) formStatus(`החיבור תקין ✓ — בגיליון ${res.total} תשובות, מתוכן ${res.fresh} חדשות. לחצו ״בדיקת תשובות חדשות עכשיו״ כדי להכניס אותן.`, "var(--teal)");
   });
   $("#formAuto").addEventListener("change", e=>{ const c2 = formCfg(); c2.auto = e.target.checked; formSave(c2); toast("עודכן"); });
+  const fw = $("#formWrite"); if(fw) fw.addEventListener("change", e=>sheetWriteToggle(e.target.checked));
+  const sn = $("#btnSheetNow"); if(sn) sn.addEventListener("click", ()=>sheetPush(false));
   const now = $("#btnFormNow"); if(now) now.addEventListener("click", ()=>syncForm(true));
   const off = $("#btnFormOff"); if(off) off.addEventListener("click", ()=>{
     if(!confirm("לנתק את הטופס? הכרטיסים שכבר נכנסו נשארים בכרטסייה.")) return;
@@ -6806,7 +7058,7 @@ function driveTokenReq(silent){
     if(!DRIVE.tc){
       DRIVE.tc = google.accounts.oauth2.initTokenClient({
         client_id: cfg.clientId,
-        scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly",
+        scope: "https://www.googleapis.com/auth/drive.file " + (formCfg().sheetWrite ? "https://www.googleapis.com/auth/spreadsheets" : "https://www.googleapis.com/auth/spreadsheets.readonly"),
         callback: resp=>{
           if(resp.error){ DRIVE._rej && DRIVE._rej(new Error("ההרשאה נדחתה: " + resp.error)); return; }
           DRIVE.token = resp.access_token;
@@ -7179,6 +7431,9 @@ function renderFollowup(){
   const engagedThisMonth = DB.matches.filter(m=>m.status==="התארסו" &&
     (m.updated||"").slice(0,7)===today().slice(0,7)).length;
   const activeProps = DB.matches.filter(m=>["הוצע","בבירור","נפגשו"].includes(m.status)).length;
+  const actList = DB.people.filter(p=>p.active).sort((a,b)=>activeDays(b)-activeDays(a));
+  const actLate = actList.filter(activeLate);
+  const openDebt = (DB.payments||[]).filter(x=>!x.paid).reduce((s,x)=>s+(+x.amount||0),0);
 
   host.innerHTML = `
     <div class="dash-stats">
@@ -7187,7 +7442,17 @@ function renderFollowup(){
       <div class="dash-stat"><b>${tasks.length}</b><span>משימות פתוחות</span></div>
       <div class="dash-stat"><b>${activeProps}</b><span>הצעות פעילות</span></div>
       <div class="dash-stat"><b>${engagedThisMonth}</b><span>התארסו החודש</span></div>
+      <div class="dash-stat ${actLate.length?"warn":""}"><b>${actList.length}</b><span>באיתור אקטיבי${actLate.length?` · ${actLate.length} לטיפול`:""}</span></div>
+      ${openDebt?`<div class="dash-stat warn" style="cursor:pointer" onclick="setView('finance')"><b>₪${openDebt.toLocaleString("he-IL")}</b><span>תשלומים פתוחים</span></div>`:""}
     </div>
+
+    ${actList.length?`<div class="sect" style="color:${actLate.length?"#9c3a33":"inherit"}">🔎 איתור אקטיבי (${actList.length})${actLate.length?` — ${actLate.length} ממתינים לטיפול`:""}</div>
+      ${actList.map(p=>{ const d = activeDays(p), late = activeLate(p);
+        return `<div class="mrow" style="cursor:default;${late?"background:#fdebea;":""}">
+          <button class="mrow" style="flex:1;padding:0;border:0;background:transparent" onclick="openPerson('${p.id}')">${avatar(p,32)}
+            <span class="names" style="font-size:15px">${esc(p.fullName)}<div style="font-family:var(--body);font-size:13px;color:var(--ink-soft)">${p.active.next ? "הצעד הבא: " + esc(p.active.next) : "לא הוגדר צעד הבא"}</div></span></button>
+          <span style="font-size:12px;color:${late?"#9c3a33":"var(--ink-faint)"};white-space:nowrap">${late?"⚠ ":""}${d===0?"טופל היום":"לפני "+d+" ימים"}</span>
+          <button class="btn sm ${late?"pri":"ghost"}" onclick="activeTouch('${p.id}')">✓ טופל</button></div>`; }).join("")}`:""}
 
     ${todayMeet.length?`<div class="sect">היום</div>${todayMeet.map(s=>line(s.pid, s.type, "היום")).join("")}`:""}
     ${overdue.length?`<div class="sect" style="color:var(--brass)">כדאי לחזור אליהם (${overdue.length})</div>${
@@ -7412,6 +7677,9 @@ $$("[data-status]").forEach(b=>b.addEventListener("click",()=>{
   $$("[data-status]").forEach(x=>x.classList.toggle("on",x===b));
   renderCards();
 }));
+$$("[data-active]").forEach(b=>b.addEventListener("click",()=>{
+  ui.active = !ui.active; b.classList.toggle("on", ui.active); renderCards();
+}));
 $$("[data-mark]").forEach(b=>b.addEventListener("click",()=>{
   ui.mark = !ui.mark; b.classList.toggle("on", ui.mark); renderCards();
 }));
@@ -7429,7 +7697,7 @@ $("#fOpen").addEventListener("change", e=>{ ui.openTo=e.target.value; renderCard
 $("#fAgeMin").addEventListener("input", e=>{ ui.ageMin=parseFloat(e.target.value)||null; renderCards(); });
 $("#fAgeMax").addEventListener("input", e=>{ ui.ageMax=parseFloat(e.target.value)||null; renderCards(); });
 $("#btnClearFilters").addEventListener("click",()=>{
-  ui.sector=ui.openTo=""; ui.ageMin=ui.ageMax=null; ui.gender=ui.status=""; ui.mark=false; $$("[data-mark]").forEach(x=>x.classList.remove("on"));
+  ui.sector=ui.openTo=""; ui.ageMin=ui.ageMax=null; ui.gender=ui.status=""; ui.mark=false; ui.active=false; $$("[data-mark],[data-active]").forEach(x=>x.classList.remove("on"));
   $("#fSector").value=""; $("#fOpen").value=""; $("#fAgeMin").value=""; $("#fAgeMax").value="";
   $$("[data-gender]").forEach(x=>x.classList.toggle("on", x.dataset.gender===""));
   $$("[data-status]").forEach(x=>x.classList.toggle("on", x.dataset.status===""));
