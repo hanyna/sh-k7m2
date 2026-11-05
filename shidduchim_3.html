@@ -230,6 +230,18 @@ input.age{width:58px;border:1px solid var(--line);border-radius:8px;padding:5px 
 .fieldrow.fmark dt::before,.field.fmark label::before{content:"📍 הגעתי עד כאן · ";color:var(--mkc,#e07b39);font-weight:700}
 @keyframes fflash{0%,60%{background:color-mix(in srgb,var(--mkc,#e07b39) 40%,transparent)}}
 .fflash{animation:fflash 1.6s ease-out}
+.resgrp{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--ink-faint);margin:18px 0 8px}
+.resitem{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.resitem>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
+.resitem>summary::-webkit-details-marker{display:none}
+.resitem>summary::before{content:"◂";color:var(--ink-faint);transition:.15s}
+.resitem[open]>summary::before{transform:rotate(-90deg)}
+.resitem>summary .rs{font-weight:400;font-size:12.5px;color:var(--ink-faint);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.resbody{padding:0 14px 12px}
+.restext{white-space:pre-wrap;line-height:1.65;font-size:14.5px;background:var(--soft);border-radius:9px;padding:12px 14px;max-height:460px;overflow:auto;word-break:break-word}
+.restext a{color:var(--teal)}
+.resbody textarea{width:100%;min-height:220px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:14.5px;line-height:1.6}
+.resbody .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
 .mkpick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .mkdot{width:30px;height:30px;border-radius:50%;border:3px solid transparent;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .mkdot.on{border-color:var(--ink);transform:scale(1.12)}
@@ -711,6 +723,7 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
       <button data-view="cards" class="on"><span class="ic">▤</span> כרטסייה</button>
       <button data-view="matches"><span class="ic">◇</span> שידוכים</button>
       <button data-view="followup"><span class="ic">◷</span> מעקב ולוח בקרה</button>
+      <button data-view="resources"><span class="ic">❐</span> חומרים והודעות</button>
       <button data-view="intake"><span class="ic">⚑</span> קליטה וניהול <b class="nav-badge hidden" id="intakeBadge"></b></button>
       <button data-view="import"><span class="ic">↧</span> ייבוא קובץ</button>
       <button data-view="backup"><span class="ic">⛭</span> גיבוי וניהול</button>
@@ -821,6 +834,18 @@ pre.rules{background:#16212e;color:#cdd6de;padding:12px 14px;border-radius:9px;f
     </section>
 
     <!-- ===== IMPORT ===== -->
+    <section class="page hidden" id="view-resources">
+      <h2>חומרים והודעות</h2>
+      <div class="sub">ההודעות הקבועות, התסריטים, ההסכמים ורשימות אנשי הקשר — במקום אחד, מוכנים להעתקה. נשמר מוצפן כמו שאר הכרטסייה, ולא קשור לכרטיסי המועמדים.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 14px">
+        <div class="search" style="max-width:340px"><span class="mag">⌕</span><input id="resQ" type="search" placeholder="חיפוש בחומרים…"></div>
+        <button class="btn pri" id="btnResNew">+ פריט חדש</button>
+        <button class="btn" id="btnResImport" title="קובץ וורד: כל כותרת עם קו תחתון = פריט נפרד. קובץ אקסל: כל לשונית (חוץ מתשובות הטופס) = פריט.">ייבוא מקובץ וורד / אקסל</button>
+        <input type="file" id="resFile" accept=".docx,.xlsx,.xls" class="hidden">
+      </div>
+      <div id="resHost"></div>
+    </section>
+
     <section class="page hidden" id="view-import">
       <h2>ייבוא קובץ</h2>
       <div class="sub">אקסל, CSV, וורד (docx), קובץ גיבוי JSON או גיבוי מוצפן (shbk). בטבלה — השורה הראשונה היא הכותרות. <b>קובץ תשובות מטופס הגוגל של כרטיס השידוכים מזוהה אוטומטית</b> — כל שאלה ממופה לשדה המתאים. במסמך וורד של מועמד בודד — המערכת קוראת את השורות ובונה כרטיס.</div>
@@ -1202,6 +1227,130 @@ function editMark(id){
 }
 function clearMark(id){ const p = personById(id); if(!p) return; delete p.mark; save(); render(); if(ui.openPerson===id) openPerson(id); toast("הסימון הוסר"); }
 
+/* ============ חומרים והודעות ============ */
+const RES_GROUPS = ["הודעות", "תסריטים והסכמים", "אנשי קשר ושדכניות", "כללי"];
+function resGuessGroup(title, text){
+  const t = title + " " + String(text||"").slice(0,200);
+  if(/תסריט|הסכם|שיחת מכירה/.test(t)) return "תסריטים והסכמים";
+  if(/שדכנ|אנשי קשר|קבוצת/.test(t)) return "אנשי קשר ושדכניות";
+  return "הודעות";
+}
+function linkify(s){ return esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+let resEditing = null, resOpen = new Set();
+function renderResources(){
+  const host = $("#resHost"); if(!host) return;
+  const list = DB.resources || [];
+  const q = ($("#resQ") && $("#resQ").value || "").trim();
+  const shown = q ? list.filter(r=>(r.title + " " + r.text).includes(q)) : list;
+  if(!list.length){
+    host.innerHTML = `<div class="empty"><h3>עדיין אין חומרים</h3><p>אפשר להוסיף פריט חדש, או לייבא בלחיצה אחת את קובץ הוורד של ההודעות הקבועות (כל כותרת עם קו תחתון הופכת לפריט נפרד) ואת לשוניות האקסל של התסריטים ואנשי הקשר.</p></div>`;
+    return;
+  }
+  if(!shown.length){ host.innerHTML = `<div class="empty"><h3>לא נמצא</h3><p>נסו מילה אחרת.</p></div>`; return; }
+  const groups = RES_GROUPS.concat([...new Set(shown.map(r=>r.group).filter(g=>!RES_GROUPS.includes(g)))]);
+  host.innerHTML = groups.map(g=>{
+    const items = shown.filter(r=>(r.group||"כללי")===g); if(!items.length) return "";
+    return `<div class="resgrp">${esc(g)} · ${items.length}</div>` + items.map(r=>{
+      const open = resOpen.has(r.id) || resEditing===r.id || (q && shown.length<=3);
+      const first = String(r.text||"").split("\n").find(x=>x.trim()) || "";
+      const body = resEditing===r.id
+        ? `<input id="resT_${r.id}" value="${esc(r.title)}" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-weight:600;margin-bottom:6px">
+           <textarea id="resX_${r.id}">${esc(r.text)}</textarea>
+           <div class="row"><label style="font-size:13px;color:var(--ink-soft)">קבוצה: <select class="mini" id="resG_${r.id}">${groups.concat(RES_GROUPS).filter((x,i,a)=>a.indexOf(x)===i).map(x=>`<option ${x===(r.group||"כללי")?"selected":""}>${esc(x)}</option>`).join("")}</select></label>
+             <button class="btn sm pri" onclick="resSave('${r.id}')">שמירה</button><button class="btn sm ghost" onclick="resEditing=null;renderResources()">ביטול</button></div>`
+        : `<div class="restext">${linkify(r.text||"")}</div>
+           <div class="row"><button class="btn sm pri" onclick="resCopy('${r.id}')">📋 העתקה</button>
+             <button class="btn sm" onclick="resEditing='${r.id}';resOpen.add('${r.id}');renderResources()">✏️ עריכה</button>
+             <button class="btn sm ghost" onclick="resDel('${r.id}')">מחיקה</button>
+             <span style="margin-inline-start:auto;font-size:11.5px;color:var(--ink-faint)">${r.updated ? "עודכן " + esc(fmtWhen(r.updated)) : ""}${r.src ? " · מקור: " + esc(r.src) : ""}</span></div>`;
+      return `<details class="resitem" data-id="${r.id}" ${open?"open":""}><summary>${esc(r.title||"ללא כותרת")}<span class="rs">${esc(first.slice(0,90))}</span></summary><div class="resbody">${body}</div></details>`;
+    }).join("");
+  }).join("");
+  host.querySelectorAll("details.resitem").forEach(d=>d.addEventListener("toggle", ()=>{ d.open ? resOpen.add(d.dataset.id) : resOpen.delete(d.dataset.id); }));
+}
+function resById(id){ return (DB.resources||[]).find(r=>r.id===id); }
+function resCopy(id){
+  const r = resById(id); if(!r) return;
+  const done = ()=>toast("הועתק — אפשר להדביק בווטסאפ או במייל");
+  try{ navigator.clipboard.writeText(r.text).then(done, ()=>{ fallbackCopy(r.text); done(); }); }catch(e){ fallbackCopy(r.text); done(); }
+}
+function fallbackCopy(t){ const ta = document.createElement("textarea"); ta.value = t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); }catch(e){} ta.remove(); }
+function resSave(id){
+  const r = resById(id); if(!r) return;
+  r.title = ($("#resT_"+id).value||"").trim() || "ללא כותרת";
+  r.text = $("#resX_"+id).value;
+  r.group = $("#resG_"+id).value || "כללי";
+  r.updated = new Date().toISOString();
+  resEditing = null; save(); renderResources(); toast("נשמר");
+}
+function resDel(id){
+  const i = (DB.resources||[]).findIndex(r=>r.id===id); if(i<0) return;
+  const [gone] = DB.resources.splice(i,1); save(); renderResources();
+  toastUndo(`"${gone.title}" נמחק`, ()=>{ DB.resources.splice(i,0,gone); save(); renderResources(); });
+}
+function resNew(){
+  DB.resources = DB.resources || [];
+  const r = {id:uid(), title:"פריט חדש", text:"", group:"הודעות", updated:new Date().toISOString()};
+  DB.resources.unshift(r); resEditing = r.id; resOpen.add(r.id); save(); renderResources();
+  setTimeout(()=>{ const t = $("#resT_"+r.id); if(t){ t.select(); t.focus(); } }, 50);
+}
+/* ייבוא: מוסיף פריטים חדשים, ומעדכן פריט קיים עם אותה כותרת מאותו קובץ — בלי כפילויות */
+function resMerge(items, srcName){
+  DB.resources = DB.resources || [];
+  let add = 0, upd = 0;
+  items.forEach(it=>{
+    if(!it.title || !String(it.text||"").trim()) return;
+    const ex = DB.resources.find(r=>r.title===it.title && r.src===srcName);
+    if(ex){ if(ex.text !== it.text){ ex.text = it.text; ex.updated = new Date().toISOString(); upd++; } return; }
+    DB.resources.push({id:uid(), title:it.title, text:it.text, group: it.group || resGuessGroup(it.title, it.text), src: srcName, updated:new Date().toISOString()});
+    add++;
+  });
+  save(); renderResources();
+  toast(add || upd ? `נוספו ${add} פריטים${upd?` · עודכנו ${upd}`:""} מהקובץ "${srcName}"` : "לא נמצא בקובץ תוכן חדש");
+}
+function resImportFile(f){
+  const name = f.name || "קובץ";
+  const fr = new FileReader();
+  if(/\.docx$/i.test(name)){
+    if(typeof mammoth === "undefined"){ toast("קורא הוורד לא נטען — בדקו חיבור לאינטרנט"); return; }
+    fr.onload = e=>mammoth.convertToHtml({arrayBuffer:e.target.result}, {styleMap:["u => u"]}).then(res=>{
+      const doc = new DOMParser().parseFromString("<div>" + res.value + "</div>", "text/html");
+      const items = []; let cur = null;
+      [...doc.body.firstChild.children].forEach(el=>{
+        const txt = (el.innerText || el.textContent || "").replace(/\u00a0/g," ");
+        const isTitle = el.tagName==="P" && txt.trim() && txt.trim().length < 90 &&
+          [...el.childNodes].every(n=>n.nodeType===3 ? !n.textContent.trim() : (n.tagName==="U" || (n.querySelector && n.querySelector("u") && n.textContent.trim()===n.querySelector("u").textContent.trim())));
+        if(isTitle){ cur = {title: txt.trim().replace(/[:：]\s*$/,""), lines: []}; items.push(cur); return; }
+        if(!cur){ return; }   /* מה שלפני הכותרת הראשונה (למשל בס"ד) */
+        if(el.tagName==="OL" || el.tagName==="UL") [...el.children].forEach((li,i)=>cur.lines.push((el.tagName==="OL"?(i+1)+". ":"• ") + li.textContent.trim()));
+        else if(el.tagName==="TABLE") [...el.querySelectorAll("tr")].forEach(tr=>cur.lines.push([...tr.children].map(c=>c.textContent.trim()).join(" | ")));
+        else cur.lines.push(txt.replace(/\s+$/,""));
+      });
+      resMerge(items.map(it=>({title: it.title, text: it.lines.join("\n").replace(/\n{3,}/g,"\n\n").trim()})), name);
+    }).catch(err=>toast("לא הצלחתי לקרוא את הוורד: " + err.message));
+    fr.readAsArrayBuffer(f);
+  }else if(/\.xlsx?$/i.test(name)){
+    if(typeof XLSX === "undefined"){ toast("ספריית האקסל לא נטענה"); return; }
+    fr.onload = e=>{
+      try{
+        const wb = XLSX.read(e.target.result, {type:"array"});
+        const items = [];
+        wb.SheetNames.forEach(sn=>{
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:false, defval:""});
+          const hdr = (rows[0]||[]).map(x=>String(x||""));
+          if(hdr.some(h=>/חותמת זמן|timestamp/i.test(h)) && hdr.some(h=>guessField(h)==="fullName")) return;   /* תשובות הטופס — נכנסות לכרטסייה דרך החיבור, לא לכאן */
+          const W = Math.max(0, ...rows.map(r=>r.length)); const blocks = [];
+          for(let c=0;c<W;c++){ const col = rows.map(r=>String(r[c]==null?"":r[c]).trim()).filter(Boolean); if(col.length) blocks.push(col.join("\n")); }
+          const text = blocks.join("\n\n").trim();
+          if(text) items.push({title: sn.trim(), text});
+        });
+        resMerge(items, name);
+      }catch(err){ toast("לא הצלחתי לקרוא את האקסל: " + err.message); }
+    };
+    fr.readAsArrayBuffer(f);
+  }else toast("אפשר לייבא קובץ וורד (docx) או אקסל (xlsx)");
+}
+
 function renderOrderSetting(){
   const host = $("#orderHost"); if(!host) return;
   const m = fieldOrderMode(), has = !!(DB.fieldOrder && DB.fieldOrder.length);
@@ -1471,7 +1620,9 @@ async function openVault(raw, secret){
 function adoptDB(d){
   (d.people||[]).forEach(p=>{ if(p && p.gender){ const g = normGender(p.gender); if(g !== p.gender) p.gender = g; } });
   DB = {people:d.people||[], matches:d.matches||[], sessions:d.sessions||[], seq:d.seq||1,
-        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || [], extraFields: d.extraFields || []};
+        form: d.form || {seen:[], pending:[]}, importReport: d.importReport || null, trash: d.trash || [], extraFields: d.extraFields || [],
+        fieldOrder: d.fieldOrder || null, fieldOrderSrc: d.fieldOrderSrc || "", fieldOrderManual: !!d.fieldOrderManual,
+        resources: Array.isArray(d.resources) ? d.resources : []};
 }
 
 /* שמירה מושהית — ההצפנה אסינכרונית, הקריאות לא */
@@ -2210,7 +2361,7 @@ function openMatchesOf(id){
 function setView(v){
   ui.view = v;
   $$(".nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v));
-  ["cards","matches","followup","intake","import","backup"].forEach(x=>{
+  ["cards","matches","followup","resources","intake","import","backup"].forEach(x=>{
     $("#view-"+x).classList.toggle("hidden", x!==v);
   });
   render();
@@ -2227,6 +2378,7 @@ function render(){
   renderStats();
   renderStatusBar();
   if(ui.view==="backup"){ renderRP(); renderOrderSetting(); }
+  if(ui.view==="resources") renderResources();
   if(ui.view==="cards") renderCards();
   if(ui.view==="matches") renderMatches();
   if(ui.view==="followup") renderFollowup();
@@ -7221,6 +7373,10 @@ $("#btnClearFilters").addEventListener("click",()=>{
   renderCards();
 });
 $("#btnNew").addEventListener("click",()=>editPerson(""));
+$("#btnResNew").addEventListener("click", resNew);
+$("#btnResImport").addEventListener("click", ()=>$("#resFile").click());
+$("#resFile").addEventListener("change", e=>{ const f = e.target.files[0]; if(f) resImportFile(f); e.target.value = ""; });
+$("#resQ").addEventListener("input", ()=>renderResources());
 $("#btnSmart").addEventListener("click", smartSearch);
 $("#btnInstall").addEventListener("click", installApp);
 $("#btnFormSync").addEventListener("click", ()=>syncForm(true));
@@ -7323,7 +7479,9 @@ $("#btnWipe").addEventListener("click", async ()=>{
      !confirm("במכשיר הזה לא ניתן לשמור נקודת שחזור, ולכן המחיקה תהיה סופית. למחוק בכל זאת?")) return;
   if(CRY.locked){ toast("הכלי ננעל באמצע — הפעולה בוטלה, שום דבר לא השתנה"); return; }
   /* איפוס מלא — גם זיכרון הטופס: בחיבור הבא כל התשובות שבגיליון ייכנסו מחדש */
-  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null, trash:[]};
+  /* החומרים וההודעות וסדר השדות אינם נתוני מועמדים — נשארים */
+  DB = {people:[], matches:[], sessions:[], seq:1, form:{seen:[], pending:[], ignored:[], baselined:false}, importReport:null, trash:[],
+        resources: DB.resources || [], fieldOrder: DB.fieldOrder || null, fieldOrderSrc: DB.fieldOrderSrc || "", fieldOrderManual: !!DB.fieldOrderManual};
   try{ const c = formCfg(); c.last = ""; c.total = 0; c.lastMsg = ""; formSave(c); }catch(e){}
   save(); setView("cards"); toast("כל הנתונים נמחקו. בחיבור הבא לטופס — כל התשובות ייכנסו מחדש");
 });
